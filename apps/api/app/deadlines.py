@@ -1,9 +1,10 @@
 """Standard dates only. Never assert that an obligation exists unless explicitly configured."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
 
 def obligation(kind: str, label: str, due: date, entity: str, basis: str, notes: str) -> dict:
-    today = date.today()
+    today = datetime.now(ZoneInfo('Europe/London')).date()
     if due < today:
         status = "date_passed_status_unknown"
     elif due <= today + timedelta(days=30):
