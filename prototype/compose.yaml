@@ -1,0 +1,18 @@
+name: omnixat-prototype
+services:
+  demo:
+    build: .
+    ports:
+      - '127.0.0.1:8765:8765'
+    volumes:
+      - demo_db:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    shm_size: '512mb'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  demo_db:
