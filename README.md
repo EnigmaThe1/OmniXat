@@ -23,19 +23,12 @@
 git clone https://github.com/EnigmaThe1/OmniXat.git
 cd OmniXat
 git switch feat/personal-foundation
-cp .env.example .env
-chmod 600 .env
-# Edit .env and set three DIFFERENT random values:
-openssl rand -hex 32
-openssl rand -hex 32
-openssl rand -hex 32
-# Put those in POSTGRES_PASSWORD, OMNIXAT_OWNER_PASSWORD, OMNIXAT_SESSION_SECRET.
-# Optional: obtain a free Companies House developer API key and set COMPANIES_HOUSE_API_KEY.
-docker compose up --build -d
-docker compose ps
+bash scripts/first-run.sh
 ```
 
-Then open **http://127.0.0.1:3000** and sign in using the password you configured.
+This creates an **ignored, local** `.env` (unless it already exists), generates random independent credentials, builds and launches the containers. It preserves an existing `.env` and never prints your password. Retrieve `OMNIXAT_OWNER_PASSWORD` privately from your local `.env` to sign in.
+
+Open **http://127.0.0.1:3000** after the containers become healthy.
 
 This alpha binds the browser UI to **127.0.0.1 only**. Do not expose port 3000 through a reverse proxy or the internet; remote access, TLS, MFA and hardening are future milestones.
 
