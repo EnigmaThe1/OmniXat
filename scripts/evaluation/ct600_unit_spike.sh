@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Pinned, isolated CT600 unit-test evaluation. Never supply HMRC credentials or real tax data.
 set -euo pipefail
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+(cd "$repo_root/scripts/evaluation" && python3 -m unittest -q test_taxonomy_gate.py)
 UPSTREAM_URL='https://github.com/benhuckvale/ct600-filing.git'
 UPSTREAM_SHA='896794599c6cdb213a1122eeaa94b071d777229b'
 for command in git docker; do
@@ -16,6 +18,7 @@ if [[ "$actual_sha" != "$UPSTREAM_SHA" ]]; then
   echo "Upstream SHA mismatch: $actual_sha" >&2; exit 1
 fi
 rm -rf "$workdir/src/.git"
+cp "$repo_root/scripts/evaluation/test_ct600_contract.py" "$workdir/src/tests/test_omnixat_contract.py"
 cat > "$workdir/Dockerfile" <<'DOCKERFILE'
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
@@ -23,7 +26,7 @@ WORKDIR /src
 COPY src/ /src/
 RUN python -m pip install --no-cache-dir -e . 'pytest>=8,<10' 'pytest-mock>=3,<4'
 USER 65534:65534
-CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_build.py", "tests/test_irmark.py", "tests/test_ixbrl.py"]
+CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_build.py", "tests/test_irmark.py", "tests/test_ixbrl.py", "tests/test_omnixat_contract.py"]
 DOCKERFILE
 image_tag="omnixat-spike-ct600:${UPSTREAM_SHA:0:12}"
 # Only upstream download/package installation need network. Use a disposable dev machine.
