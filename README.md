@@ -1,6 +1,6 @@
 # OmniXat — personal-first UK tax control centre
 
-**Status: working milestone 0.1 (development branch).** Private, self-hosted single-owner application. This is **not** yet accounting software, a tax calculator, or a filing service. It cannot submit returns, pay HMRC, or determine whether you are legally required to file.
+**Status: milestone 0.1 code on a development branch; full builds and integration tests are pending.** Private, self-hosted single-owner application. This is **not** yet accounting software, a tax calculator, or a filing service. It cannot submit returns, pay HMRC, or determine whether you are legally required to file.
 
 ## What works in 0.1
 
