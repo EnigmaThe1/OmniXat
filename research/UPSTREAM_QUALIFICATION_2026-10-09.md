@@ -57,3 +57,26 @@ The script has been syntax-reviewed, but **was not executed** here: this evaluat
 - [GnuCash Python bindings & single-writer warning](https://code.gnucash.org/docs/STABLE/python_bindings_page.html)
 
 **Do not merge or enable third-party filing integration until the above is independently tested.** Keep this research PR separate from the unverified personal-foundation PR.
+
+## Continuation: executable qualification checks (9 October 2026)
+
+**Completed locally in the evaluation authoring environment:**
+- 9/9 taxonomy acceptance-window tests, using HMRC's 17 April 2026 published limits.
+- 8/8 isolated `Decimal` monetary-format tests, including explicit float rejection and rounding policy comparisons.
+- 4/4 IRmark tests from the inspected upstream module and test fixture, reconstructed in isolation. This verifies only the hash helper, **not** the entire upstream package.
+
+**Source-level failures/gates discovered:**
+- The selected `benhuckvale/ct600-filing` commit hard-codes CT computational taxonomy 2024, which HMRC lists as expiring at **31 March 2026** for accounting period end dates. See [blocker report](CT600_TAXONOMY_BLOCKER_2026-10-09.md).
+- Its renderer turns money into `float` before `:.2f`; test inputs `1.005` and `2.675` expose rounding differences from exact Decimal. No universal rounding rule has been assumed.
+- The renderer accepts user-supplied tax totals and does not determine whether they are correct. Synthetic diagnostic tests have been added to `test_ct600_contract.py` to document this, but have **not yet been executed against the full upstream clone**.
+- Arelle offers an `--hmrc` disclosure-system validation switch, not only generic XBRL validation. A pinned container CLI smoke script is included; **not executed**.
+- GnuCash official Python-binding documentation warns about concurrent access/data corruption. This strengthens the case for a transactional PostgreSQL canonical ledger, with GnuCash evaluated primarily for interoperability rather than uncontrolled concurrent writes.
+
+**Still outstanding:** pinned third-party Docker builds, CT600 full upstream/contract suite, official taxonomy packages, Arelle validation, HMRC Local Test Service, Test-in-Live (subject to authorisation), and Bookcomet benchmarking.
+
+Additional tasks: [#6 CT600 qualification](https://github.com/EnigmaThe1/OmniXat/issues/6), [#7 Arelle](https://github.com/EnigmaThe1/OmniXat/issues/7), [#8 Ledger](https://github.com/EnigmaThe1/OmniXat/issues/8), [#9 Document extraction](https://github.com/EnigmaThe1/OmniXat/issues/9).
+
+Sources:
+- [HMRC taxonomies accepted, updated 17 April 2026](https://www.gov.uk/government/publications/taxonomies-accepted-by-hm-revenue-and-customs/taxonomies-accepted-by-hmrc)
+- [Arelle documented `--hmrc`, `--validate`, `--validationExitCode`](https://arelle.readthedocs.io/en/latest/command_line.html)
+- [GnuCash Python-bindings concurrency warning](https://code.gnucash.org/docs/STABLE/python_bindings_page.html)
