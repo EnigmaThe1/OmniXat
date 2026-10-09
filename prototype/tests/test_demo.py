@@ -29,7 +29,7 @@ class DemoTests(unittest.TestCase):
         self.assertTrue(s['demo'])
         self.assertFalse(s['filing_enabled'])
         self.assertEqual(s['metrics']['companies'],1)
-        self.assertEqual(s['metrics']['unanswered'],4)
+        self.assertEqual(s['metrics']['unanswered'],12)
         self.assertEqual(s['companies'][0]['origin'],'fictional_demo')
 
     def test_complete_questionnaire(self):
@@ -37,7 +37,7 @@ class DemoTests(unittest.TestCase):
             for k in ('income','equipment','dividends','records'):
                 app.mutate('/api/questions/'+k+'/answer',{'answer':'unsure'},c)
             s=app.state(c)
-        self.assertEqual(s['metrics']['unanswered'],0)
+        self.assertEqual(s['metrics']['unanswered'],8)
 
     def test_company_and_duplicate_rejected(self):
         with app.connect() as c:
@@ -54,7 +54,7 @@ class DemoTests(unittest.TestCase):
 
     def test_tax_deadline_and_period(self):
         with app.connect() as c:
-            app.mutate('/api/years',{'start_year':2026,'required':True,'second_payment':False},c)
+            app.mutate('/api/years',{'person_id':'demo-person-a','start_year':2026,'required':True,'second_payment':False},c)
             app.mutate('/api/periods',{'company_id':'demo-co','period_end':'2027-03-31','required':True},c)
             s=app.state(c)
         d={(x['kind'],x['date']) for x in s['deadlines']}
@@ -65,7 +65,7 @@ class DemoTests(unittest.TestCase):
     def test_second_payment_requires_assessment(self):
         with app.connect() as c:
             with self.assertRaises(ValueError):
-                app.mutate('/api/years',{'start_year':2026,'required':False,'second_payment':True},c)
+                app.mutate('/api/years',{'person_id':'demo-person-a','start_year':2026,'required':False,'second_payment':True},c)
 
     def test_task_toggle_and_reset(self):
         with app.connect() as c:
@@ -74,7 +74,7 @@ class DemoTests(unittest.TestCase):
             app.mutate('/api/reset',{},c)
             s=app.state(c)
         self.assertEqual(s['metrics']['companies'],1)
-        self.assertEqual(s['metrics']['unanswered'],4)
+        self.assertEqual(s['metrics']['unanswered'],12)
         self.assertTrue(all(not t['completed'] for t in s['tasks']))
 
     def test_ics_valid_structure(self):
@@ -104,7 +104,7 @@ class DemoTests(unittest.TestCase):
             data=json.dumps({'title':'Demo test task','due':'2027-01-12'}).encode()
             req=urllib.request.Request(base+'/api/tasks',data=data,headers={'Content-Type':'application/json','X-OmniXat-Demo':'1'},method='POST')
             with urllib.request.urlopen(req) as res:
-                self.assertEqual(json.load(res)['metrics']['open_tasks'],3)
+                self.assertEqual(json.load(res)['metrics']['open_tasks'],4)
             req=urllib.request.Request(base+'/api/tasks',data=data,headers={'Content-Type':'application/json'},method='POST')
             with self.assertRaises(urllib.error.HTTPError) as e:urllib.request.urlopen(req)
             self.assertEqual(e.exception.code,403)

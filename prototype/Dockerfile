@@ -4,7 +4,7 @@ FROM mcr.microsoft.com/playwright/python:v1.57.0-noble
 WORKDIR /app
 RUN python -m pip install --no-cache-dir 'playwright==1.57.0' \
  && useradd -m -u 65532 -s /usr/sbin/nologin demo
-COPY app.py browser_lab.py ./
+COPY app.py browser_lab.py household.py ./
 COPY static ./static
 RUN mkdir -p /app/data && chown 65532:65532 /app/data
 USER 65532:65532

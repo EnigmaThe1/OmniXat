@@ -1,67 +1,64 @@
-# OmniXat — Interactive Prototype v0.3
+# OmniXat — Interactive Prototype v0.4 (Fictional Family Workspace)
 
-A **working, deliberately fictional** personal-first UK tax/compliance GUI. Version 0.3 adds the Playwright **Browser Lab**: launch a browser workflow, read a practice portal, fill fields, inspect a review screen, require explicit owner approval, and click a **local demo-only submit** button to obtain a fictional receipt.
+This is a **working, local, deliberately fictional** UK tax and compliance prototype. The interface supports **unlimited manually created people, companies and self-employment activities**, with independently recorded Self Assessment years, company tax periods, company-person roles, subject-scoped questions/tasks, due-date views and a **self-reported filing-status register**. The Playwright Browser Lab from v0.3 is retained.
 
-This is a **prototype, not a tax filing tool**. It has **no authentication** and is **not safe for real financial information or exposure beyond your own computer**.
+**Not a tax-filing product. No authentication, individual logins, permission controls, encryption of family financial data, official filing-status checks, HMRC filing, tax calculations or remote access. Do not enter real names, tax IDs, accounts, credentials, financial data or personal documents.** The selector is **filtering only**, not authorisation. Run on your own local machine with **fictional information**.
 
-## Option 1: Docker Compose (recommended on Ubuntu)
+## Start on Ubuntu
+
+Use the Docker Compose service (includes Chromium for Browser Lab):
 
 ```bash
 docker compose up --build -d
-# Open http://127.0.0.1:8765
-docker compose logs -f demo
+# open http://127.0.0.1:8765
+docker compose ps
 ```
 
-Docker downloads the official Playwright browser image (size is relatively large, typically over 1 GB). No API keys or external accounts needed. Only localhost port 8765 is published.
+The browser image is large. The app uses a Docker-managed SQLite database volume which survives container restart. Port `8765` is bound to localhost only.
 
-## Option 2: Python (smallest install)
-
-Requires Python 3.11+; the original dashboard works without additional packages.
+Alternatively, use Python 3.11+ (no dependencies except for optional Browser Lab):
 
 ```bash
-python3 -m pip install 'playwright==1.57.0'  # use a venv on Ubuntu if needed
-python3 -m playwright install chromium
 python3 app.py
-# Open http://127.0.0.1:8765
+# open http://127.0.0.1:8765
+# Optional for Browser Lab:
+python3 -m pip install 'playwright==1.57.0'
+python3 -m playwright install chromium
 ```
 
-If your system already has Chromium, the driver will detect its path, or you can set `OMNIXAT_CHROMIUM_PATH`. Without Playwright installed the other screens still work; **Browser Lab** shows the install instructions instead of a fake success.
+Do not publish this service to the internet or a home-network interface. If you switch from v0.3, back up the old demo SQLite database before upgrading.
 
-## Test the interface
+## Interactive tour
 
-- **Overview** shows obligations and preparation readiness.
-- **Companies** can add *fictional* records.
-- **Tax profiles** configures demo Self Assessment and Corporation Tax periods.
-- **Questions** saves guided sample answers.
-- **Tasks** adds/completes preparation work.
-- **Tax calendar** groups dates and exports a `.ics` file.
-- **Browser Lab** opens the bundled practice website, fills three fields, reads the review page, captures a real browser screenshot and waits for explicit approval. The final click submits only to a local simulation endpoint and returns a `DEMO-...` receipt. You can click **Open practice website** to inspect the form manually.
-- **Reset demo** restores the initial fictional dataset, including browser run history.
+1. **People & businesses:** Add fictional people, register their self-employed activities, and link one or more people to companies as directors, shareholders, etc. One company can be linked to several people.
+2. **Viewing selector (top bar):** Choose *Entire workspace*, one person, a company, or an individual self-employment activity. The dashboard, calendar, questions, tasks, activity and filing records change to match that subject.
+3. **Tax profiles:** Each person's Self Assessment year is stored independently; two people may both have year 2025–26. Corporation Tax periods belong to companies.
+4. **Return statuses:** Enter a fictional status and evidence note against a person or company and a specified return period. The statuses `Submitted`, `Accepted` and `Rejected` are **self-reported demo labels only**—they are not checked or acknowledged by a government service. Tracked filing dates appear separately as **not independently checked**, not automatically overdue/unfiled.
+5. **Questions and tasks:** New subject profiles get their own questions. Tasks created under a selected person/company/activity attach to that subject; shared workspace tasks appear when viewing all.
+6. **Calendar:** Dates filter by the selected subject; exporting `.ics` only exports the visible subject's dates.
+7. **Browser Lab:** Retains v0.3's **fictional localhost-only Playwright workflow**, including a review screen, separate approval and demo receipt. Real government site automation is not enabled.
+8. **Reset demo:** Deletes the demo changes and restores the fictional example dataset. It is destructive; the UI requests confirmation.
 
-The database uses SQLite in a local file and persists changes between restarts. Docker stores it in a named volume. This is intentionally separate from OmniXat's authenticated PostgreSQL application foundation and is not a final architecture choice.
+## Migration from v0.3
 
-## Development validation
+Opening an existing v0.3 SQLite file upgrades the schema in place **without deleting existing company profiles, questions, tasks, browser runs, or historic shared Self Assessment-year settings**. The old `years` records were not associated with people and are deliberately **preserved as unassigned legacy data**. A warning appears when viewing the entire workspace's tax profiles. Add the relevant fictional person and re-enter each tax-year obligation under them after reviewing it; the app never silently assumes which family member a legacy record belonged to.
+
+When starting with a new database, the demo seeds two explicitly fictional people, two self-employed activities, two roles linked to one company and one company Corporation Tax period. These are examples, not hard-coded restrictions. Later people and companies receive UUID identifiers. A user/person distinction and role-based access control **are not implemented yet**.
+
+## Test the prototype
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3 -m unittest discover -s tests -p 'test*.py' -v
 python3 tests/browser_smoke.py
+python3 tests/browser_household_ui.py
 python3 tests/browser_lab_ui_smoke.py
-node --check static/app.js  # optional: Node.js only for a syntax check
+node --check static/app.js
 ```
 
-The last two scripts require `playwright` and local Chromium, and the current GUI smoke scripts expect `/usr/bin/chromium`. The server/API tests run the real local HTTP service. In environments that disallow Chromium navigation to localhost, Browser Lab loads the same practice page HTML/CSS/JS *inside a real Chromium tab* and bridges only the local demo receipt; this mode is recorded in the action log.
+The GUI tests use the actual HTML/CSS/JS in Chromium with a local API bridge if the hosted environment does not permit browser navigation to loopback. The API and Browser Lab real-HTTP paths have separate integration tests. The scripts currently expect `/usr/bin/chromium` for the GUI tests; the Browser Lab itself can use Playwright-managed Chromium.
 
-## Browser access roadmap and restrictions
+## Architecture / future milestone
 
-The general future design is **official API → authorised browser workflow → manual hand-off**. This release accepts **no arbitrary website URLs**, no agent-generated JavaScript and no stored login credentials. Its Playwright driver is allowlisted to the local practice website, blocks other page requests and uses a fresh isolated browser context for every run.
+`household.py` contains the fictional multi-subject schema, subject-aware state queries and mutations. `app.py` remains the v0.3 demo server. It uses SQLite now solely for ease of local testing, not as a decision to abandon the **authenticated PostgreSQL foundation** in [draft PR #1](https://github.com/EnigmaThe1/OmniXat/pull/1).
 
-Browser interaction **must not bypass** restrictions, access controls, captchas or MFA. HMRC's published May 2026 policy says tools must **not** simulate human interaction with Government Gateway; use official APIs or a user-controlled manual hand-off for HMRC. Site-specific legal and technical approval is needed before enabling third-party automation.
-
-**Never enter real UK tax identifiers, bank information, personal data, passwords or live accounts in this alpha.** No actual tax calculations or submissions are implemented. No AI agent/model is connected.
-
-## Next production steps
-
-1. Port the tested GUI to the authenticated FastAPI/PostgreSQL application (draft PR #1), with migrations and a secure data model.
-2. Introduce an integration registry recording allowed methods, host allowlists, identity and permission rules, risk/approval policy, and evidence provenance for each service.
-3. Add opt-in, restricted-site browser drivers where permitted, with durable browser jobs, an interactive user hand-off, screenshots/traces protected as personal data, and correct timeout/retry semantics.
-4. Add the ledger, document processing, deterministic tax rules and audited HMRC/Companies House API adapters.
+Before any genuine family records: build authenticated accounts separate from taxpayer identities, per-subject access rights, migrations, encrypted documents/credentials, tested backups, audits, safe deletion/retention and data provenance. All tax calculations must remain deterministic and versioned, and official HMRC submissions require supported API workflows and explicit approvals. Public SaaS billing/multi-tenancy are still deferred.

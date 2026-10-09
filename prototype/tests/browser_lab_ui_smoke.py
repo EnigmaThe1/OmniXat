@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory() as tmp:
             except Exception:time.sleep(.1)
         else: raise RuntimeError('server startup failed')
         def bridge(_,path,data):
-            if path=='/api/state':
+            if path.startswith('/api/state'):
                 with urlopen(base+path,timeout=30) as resp:return json.load(resp)
             req=Request(base+path,method='POST',data=json.dumps(data).encode(),headers={
                 'Content-Type':'application/json','X-OmniXat-Demo':'1'})

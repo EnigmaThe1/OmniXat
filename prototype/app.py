@@ -4,7 +4,9 @@ Start: python app.py (Python 3.11+). No external packages needed.
 Never expose this demo HTTP server to a public network or enter real tax data.
 """
 import argparse
+from contextlib import contextmanager
 import browser_lab
+import household
 import json
 import os
 import re
@@ -14,7 +16,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parent
@@ -32,15 +34,21 @@ QUESTIONS = [
 def now_uk():
     return datetime.now(ZoneInfo('Europe/London'))
 
+@contextmanager
 def connect():
     DB.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(DB, timeout=8)
     c.row_factory = sqlite3.Row
     c.execute('PRAGMA foreign_keys=ON')
-    return c
+    try:
+        with c:
+            yield c
+    finally:
+        c.close()
 
-def log(c, event):
-    c.execute('INSERT INTO activity (event,created_at) VALUES (?,?)', (event, now_uk().isoformat(timespec='seconds')))
+def log(c, event, subject_type='workspace', subject_id=None):
+    c.execute('INSERT INTO activity (event,created_at,subject_type,subject_id) VALUES (?,?,?,?)',
+              (event, now_uk().isoformat(timespec='seconds'),subject_type,subject_id))
 
 def init():
     with LOCK, connect() as c:
@@ -55,17 +63,18 @@ def init():
         CREATE TABLE IF NOT EXISTS portal_submissions (run_id TEXT PRIMARY KEY REFERENCES browser_runs(id), receipt TEXT NOT NULL, created_at TEXT NOT NULL);
         
         ''')
+        household.ensure_schema(c)
         if not c.execute('SELECT count(*) FROM companies').fetchone()[0] and not c.execute('SELECT count(*) FROM activity').fetchone()[0]:
             seed(c)
 
 def seed(c):
     c.execute('INSERT INTO companies VALUES (?,?,?,?,?,?)', ('demo-co', 'DEMO0001', 'Northstar Studio Ltd (DEMO)', 'fictional_demo', '2027-09-30', '2027-04-12'))
-    c.execute('INSERT INTO years VALUES (?,?,?)', (2025, 1, 1))
     c.execute('INSERT INTO periods VALUES (?,?,?,?)', ('demo-ct', 'demo-co', '2026-12-31', 1))
     for key, topic, q, help_text in QUESTIONS:
         c.execute('INSERT INTO questions (key,topic,question,help) VALUES (?,?,?,?)', (key, topic, q, help_text))
-    c.execute('INSERT INTO tasks VALUES (?,?,?,?)', ('demo-task-1', 'Review the four guided questions', '2026-11-01', 0))
-    c.execute('INSERT INTO tasks VALUES (?,?,?,?)', ('demo-task-2', 'Check fictional company records', '2026-11-15', 0))
+    c.execute('INSERT INTO tasks (id,title,due,completed) VALUES (?,?,?,?)', ('demo-task-1', 'Review the four guided questions', '2026-11-01', 0))
+    c.execute('INSERT INTO tasks (id,title,due,completed) VALUES (?,?,?,?)', ('demo-task-2', 'Check fictional company records', '2026-11-15', 0))
+    household.seed(c, log)
     log(c, 'Sample workspace created with fictional information')
 
 def parse_date(s):
@@ -92,38 +101,8 @@ def deadline(kind, title, raw_date, entity, source, note):
     status = 'past-unverified' if d < today else 'soon' if d <= today + timedelta(days=30) else 'scheduled'
     return {'kind':kind,'title':title,'date':raw_date,'entity':entity,'source':source,'note':note,'status':status}
 
-def state(c):
-    co = [dict(x) for x in c.execute('SELECT * FROM companies ORDER BY name')]
-    yrs = [dict(x) for x in c.execute('SELECT * FROM years ORDER BY start_year DESC')]
-    periods = [dict(x) for x in c.execute('SELECT * FROM periods ORDER BY period_end DESC')]
-    qs = [dict(x) for x in c.execute('SELECT * FROM questions ORDER BY rowid')]
-    tasks = [dict(x) for x in c.execute('SELECT * FROM tasks ORDER BY completed, due')]
-    history = [dict(x) for x in c.execute('SELECT * FROM activity ORDER BY id DESC LIMIT 9')]
-    by_id = {x['id']:x for x in co}
-    dates=[]
-    for item in co:
-        if item['accounts_due']:
-            dates.append(deadline('accounts','Annual accounts',item['accounts_due'],item['name'],'fictional demonstration date' if item['origin']=='fictional_demo' else 'manually entered unverified date','Not obtained from Companies House; confirm official dates.'))
-        if item['confirmation_due']:
-            dates.append(deadline('confirmation','Confirmation statement',item['confirmation_due'],item['name'],'fictional demonstration date' if item['origin']=='fictional_demo' else 'manually entered unverified date','Not obtained from Companies House; confirm official dates.'))
-    for y in yrs:
-        if y['required']:
-            dates.append(deadline('self_assessment',f"Self Assessment {y['start_year']}–{str(y['start_year']+1)[-2:]}", f"{y['start_year']+2}-01-31",'Personal','user-declared standard rule','May differ if HMRC issued a different deadline; check MTD obligations.'))
-            if y['second_payment']:
-                dates.append(deadline('payment', 'Second payment on account', f"{y['start_year']+2}-07-31",'Personal','user-declared standard rule','Verify amount and applicability with HMRC.'))
-    for period in periods:
-        if not period['required']:
-            continue
-        comp=by_id.get(period['company_id'])
-        if not comp:
-            continue
-        end=date.fromisoformat(period['period_end'])
-        dates.append(deadline('corporation_payment','Corporation Tax payment', (add_months(end,9)+timedelta(days=1)).isoformat(),comp['name'],'user-declared standard rule','Standard small-company rule, not appropriate for every company.'))
-        dates.append(deadline('ct600','CT600 return', add_months(end,12).isoformat(),comp['name'],'user-declared standard rule','Check the actual HMRC accounting period and HMRC notices.'))
-    dates.sort(key=lambda x:(x['date'],x['title']))
-    return {'companies':co,'years':yrs,'periods':periods,'questions':qs,'tasks':tasks,'activity':history,'deadlines':dates,
-            'today':now_uk().date().isoformat(), 'demo':True,'filing_enabled':False,
-            'browser': browser_state(c), 'metrics':{'companies':len(co),'deadlines':len(dates),'unanswered':sum(q['answer'] is None for q in qs),'open_tasks':sum(not t['completed'] for t in tasks)}}
+def state(c, scope='all'):
+    return household.build_state(c, scope, (deadline, add_months, now_uk, browser_state))
 
 def browser_state(c):
     row = c.execute('SELECT id,payload,status,steps,receipt,created_at FROM browser_runs ORDER BY created_at DESC LIMIT 1').fetchone()
@@ -217,23 +196,16 @@ def validate_bool(v,field):
     return int(v)
 
 def mutate(path, data, c):
+    if household.mutate(c,path,data,log,parse_date):
+        return
     if path == '/api/companies':
         name=require_text(data.get('name'),'Company name')
         number=require_text(data.get('number'),'Company number',8).upper()
         if not re.fullmatch('[A-Z0-9]{8}',number):
             raise ValueError('Company number must contain eight letters or digits.')
         c.execute('INSERT INTO companies VALUES (?,?,?,?,?,?)',(str(uuid.uuid4()),number,name,'manual_unverified',None,None))
-        log(c,f'Added unverified company {name}')
-    elif path == '/api/years':
-        y=data.get('start_year')
-        if type(y) is not int or not 2020 <= y <= 2098:
-            raise ValueError('Enter a valid tax-year starting year.')
-        required=validate_bool(data.get('required'),'Self Assessment required')
-        second=validate_bool(data.get('second_payment'),'Second payment')
-        if second and not required:
-            raise ValueError('Second payment requires Self Assessment applicability.')
-        c.execute('INSERT INTO years VALUES (?,?,?) ON CONFLICT(start_year) DO UPDATE SET required=excluded.required,second_payment=excluded.second_payment',(y,required,second))
-        log(c,f'Updated Self Assessment period {y}–{y+1}')
+        household.add_questions(c,'company',c.execute('SELECT id FROM companies WHERE number=?',(number,)).fetchone()['id'])
+        log(c,f'Added unverified company {name}','company',c.execute('SELECT id FROM companies WHERE number=?',(number,)).fetchone()['id'])
     elif path == '/api/periods':
         company_id=require_text(data.get('company_id'),'Company ID')
         if not c.execute('SELECT 1 FROM companies WHERE id=?',(company_id,)).fetchone():
@@ -241,18 +213,26 @@ def mutate(path, data, c):
         end=parse_date(data.get('period_end'))
         required=validate_bool(data.get('required'),'CT600 required')
         c.execute('INSERT INTO periods VALUES (?,?,?,?)',(str(uuid.uuid4()),company_id,end.isoformat(),required))
-        log(c,f'Added corporation tax accounting period ending {end.isoformat()}')
+        log(c,f'Added corporation tax accounting period ending {end.isoformat()}','company',company_id)
     elif path == '/api/tasks':
         title=require_text(data.get('title'),'Task title')
         due=parse_date(data.get('due')).isoformat()
-        c.execute('INSERT INTO tasks VALUES (?,?,?,0)',(str(uuid.uuid4()),title,due))
-        log(c,f'Created task: {title}')
+        subject_type=data.get('subject_type','workspace')
+        subject_id=data.get('subject_id')
+        if subject_type!='workspace':
+            household.existing(c,subject_type,subject_id)
+        else:
+            subject_id=None
+        c.execute('INSERT INTO tasks (id,title,due,completed,subject_type,subject_id) VALUES (?,?,?,0,?,?)',
+                  (str(uuid.uuid4()),title,due,subject_type,subject_id))
+        log(c,f'Created task: {title}',subject_type,subject_id)
     elif path.startswith('/api/tasks/') and path.endswith('/toggle'):
         ident=path.removeprefix('/api/tasks/').removesuffix('/toggle')
         if not c.execute('SELECT 1 FROM tasks WHERE id=?',(ident,)).fetchone():
             raise ValueError('Task not found.')
+        row=c.execute('SELECT subject_type,subject_id FROM tasks WHERE id=?',(ident,)).fetchone()
         c.execute('UPDATE tasks SET completed = 1 - completed WHERE id=?',(ident,))
-        log(c,'Changed demo task completion')
+        log(c,'Changed demo task completion',row['subject_type'],row['subject_id'])
     elif path.startswith('/api/questions/') and path.endswith('/answer'):
         key=path.removeprefix('/api/questions/').removesuffix('/answer')
         val=data.get('answer')
@@ -261,9 +241,10 @@ def mutate(path, data, c):
         res=c.execute('UPDATE questions SET answer=?, updated_at=? WHERE key=?',(val,now_uk().isoformat(timespec='seconds'),key))
         if res.rowcount != 1:
             raise ValueError('Question not found.')
-        log(c,f'Answered guided question: {key}')
+        q=c.execute('SELECT subject_type,subject_id FROM questions WHERE key=?',(key,)).fetchone()
+        log(c,f'Answered guided question: {key.split(":")[-1]}',q['subject_type'],q['subject_id'])
     elif path == '/api/reset':
-        for table in ('portal_submissions','browser_runs','periods','years','companies','questions','tasks','activity'):
+        for table in ('portal_submissions','browser_runs','filings','company_roles','personal_years','activities','people','periods','years','companies','questions','tasks','activity'):
             c.execute(f'DELETE FROM {table}')
         seed(c)
         (DB.parent / PREVIEW_NAME).unlink(missing_ok=True)
@@ -282,7 +263,7 @@ def calendar_ics(items):
     return ('\r\n'.join(lines)+'\r\n').encode()
 
 class Handler(BaseHTTPRequestHandler):
-    server_version='OmniXatDemo/0.3'
+    server_version='OmniXatDemo/0.4'
     def log_message(self,fmt,*args):
         pass
     def send_bytes(self,status,content,mime):
@@ -321,7 +302,8 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/health':
                 return self.json(200,{'status':'ok','demo':True})
             with LOCK,connect() as c:
-                s=state(c)
+                try: s=state(c,parse_qs(urlparse(self.path).query).get('scope',['all'])[0])
+                except ValueError as exc: return self.json(400,{'error':str(exc)})
             if path=='/api/calendar.ics':
                 return self.send_bytes(200,calendar_ics(s['deadlines']),'text/calendar; charset=utf-8')
             return self.json(200,s)
@@ -342,8 +324,10 @@ class Handler(BaseHTTPRequestHandler):
             if path in ('/api/browser/run','/api/browser/approve','/api/demo-portal/submissions'):
                 return self.json(200,browser_action(path,data,self.server.server_address[1]))
             with LOCK,connect() as c:
+                scope=parse_qs(urlparse(self.path).query).get('scope',['all'])[0]
+                household.split_scope(c,scope)
                 mutate(path,data,c)
-                result=state(c)
+                result=state(c,scope if path!='/api/reset' else 'all')
             return self.json(200,result)
         except RuntimeError as exc:
             return self.json(503,{'error':str(exc)})
