@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OmniXat — Personal Control Centre</title>
+  <meta name="description" content="OmniXat interactive private demo">
+  <link rel="stylesheet" href="/static/styles.css"><script src="/static/app.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="side">
+    <div class="brand"><span class="brandmark"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 27V13h5l8 10 8-10h5v14h-5v-7l-8 9-8-9v7z" fill="currentColor"/></svg></span><span><strong>OmniXat</strong><small>PERSONAL EDITION</small></span></div>
+    <div class="side-caption">WORKSPACE</div>
+    <nav id="navigation" aria-label="Main navigation">
+      <button class="nav-item" data-page="people"><span class="ico">♧</span> People & businesses</button>
+      <button class="nav-item active" data-page="overview"><span class="ico">◫</span> Overview</button>
+      <button class="nav-item" data-page="calendar"><span class="ico">▦</span> Tax calendar</button>
+      <button class="nav-item" data-page="companies"><span class="ico">▥</span> Companies</button>
+      <button class="nav-item" data-page="tax"><span class="ico">◈</span> Tax profiles</button>
+      <button class="nav-item" data-page="filings"><span class="ico">⇪</span> Return statuses</button>
+      <button class="nav-item" data-page="questions"><span class="ico">◇</span> Questions <span id="question-count" class="count">4</span></button>
+      <button class="nav-item" data-page="tasks"><span class="ico">☑</span> Tasks</button>
+      <button class="nav-item" data-page="browser"><span class="ico">⌘</span> Browser Lab</button>
+    </nav>
+    <div class="side-footer"><span class="dot"></span> Local demo · no live connections<br><small>All records are fictional or unverified.</small></div>
+  </aside>
+  <div class="content-area">
+    <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="crumb">Overview</strong></div><div class="top-right"><label for="scope-picker" class="scope-label">Viewing</label><select id="scope-picker" class="scope-select" aria-label="Select person, company or activity"><option value="all">Entire workspace</option></select><span class="live"><span class="dot"></span> Local prototype</span><span class="avatar" title="Demo workspace">OX</span></div></header>
+    <main class="main">
+      <div class="scope-bar">Current selection: <strong id="context-name">Entire workspace</strong> · This changes your dashboard, calendar, questions and tasks. It is not a login or permission control.</div>
+      <div class="demo-banner"><span class="banner-icon">ⓘ</span><div><strong>Interactive demonstration</strong> — fictional data only. No HMRC logins, official filing, payments, bank access or AI model are connected. The Browser Lab uses a fictional website only. Multiple people are demonstration profiles; there are no separate user logins or private access restrictions. Do not enter real financial information.</div><button class="banner-reset" id="reset-demo">Reset demo</button></div>
+      <section class="page-head"><div><p class="kicker" id="section-label">YOUR FINANCIAL WORKSPACE</p><h1 id="page-title">Welcome back.</h1><p id="page-subtitle" class="subheading">Here's an overview of what needs your attention.</p></div><div class="head-actions" id="head-actions"><button class="btn btn-primary" data-modal="company">＋ Add a company</button></div></section>
+      <section id="page-view" aria-live="polite"><div class="loading">Loading your local workspace…</div></section>
+      <footer class="footer"><span>OmniXat · Interactive prototype v0.4</span><span>UK financial compliance · Demo mode</span></footer>
+    </main>
+  </div>
+</div>
+<div id="modal-overlay" class="overlay" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-heading"><h2 id="modal-title">Add a record</h2><button id="modal-close" class="icon-btn" aria-label="Close dialog">✕</button></div><div id="modal-body"></div></div></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

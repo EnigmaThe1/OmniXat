@@ -1,0 +1,9 @@
+.git
+*.sqlite3
+*.png
+*.zip
+__pycache__
+.pytest_cache
+.env
+.env.*
+tests

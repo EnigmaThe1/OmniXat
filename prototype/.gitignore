@@ -1,0 +1,8 @@
+*.sqlite3
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+.env.*
+demo-browser-preview.png
+.cache/
