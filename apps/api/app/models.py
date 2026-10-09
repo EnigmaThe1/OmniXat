@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from .database import Base
@@ -17,9 +17,9 @@ class Company(Base):
     company_name: Mapped[str] = mapped_column(String(200), nullable=False)
     company_status: Mapped[str | None] = mapped_column(String(50))
     source: Mapped[str] = mapped_column(String(30), nullable=False)
-    accounts_due: Mapped[datetime.date | None] = mapped_column(Date)
-    confirmation_due: Mapped[datetime.date | None] = mapped_column(Date)
-    accounts_period_end: Mapped[datetime.date | None] = mapped_column(Date)
+    accounts_due: Mapped[date | None] = mapped_column(Date)
+    confirmation_due: Mapped[date | None] = mapped_column(Date)
+    accounts_period_end: Mapped[date | None] = mapped_column(Date)
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -36,7 +36,7 @@ class CorporationTaxPeriod(Base):
     __table_args__ = (UniqueConstraint("company_id", "period_end"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"), nullable=False)
-    period_end: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
     hmrc_return_required: Mapped[bool] = mapped_column(Boolean, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
