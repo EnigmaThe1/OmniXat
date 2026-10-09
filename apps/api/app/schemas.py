@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field, field_validator
 import re
 
 class LoginInput(BaseModel):
-    password: str
+    password: str = Field(min_length=1, max_length=1024)
 
 class CompanyInput(BaseModel):
     company_number: str = Field(min_length=8, max_length=8)
@@ -17,6 +17,14 @@ class CompanyInput(BaseModel):
 
 class ManualCompanyInput(CompanyInput):
     company_name: str = Field(min_length=1, max_length=200)
+
+    @field_validator('company_name')
+    @classmethod
+    def check_name(cls, v: str) -> str:
+        value = v.strip()
+        if not value:
+            raise ValueError('Company name cannot be blank')
+        return value
 
 class PersonalYearInput(BaseModel):
     self_assessment_required: bool
