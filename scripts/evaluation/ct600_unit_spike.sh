@@ -2,7 +2,7 @@
 # Pinned, isolated CT600 unit-test evaluation. Never supply HMRC credentials or real tax data.
 set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-(cd "$repo_root/scripts/evaluation" && python3 -m unittest -q test_taxonomy_gate.py)
+(cd "$repo_root/scripts/evaluation" && python3 -m unittest -q test_taxonomy_gate.py test_money_precision.py)
 UPSTREAM_URL='https://github.com/benhuckvale/ct600-filing.git'
 UPSTREAM_SHA='896794599c6cdb213a1122eeaa94b071d777229b'
 for command in git docker; do
