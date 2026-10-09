@@ -50,3 +50,14 @@ def test_upstream_uses_fixed_2024_computation_taxonomy():
     from ct600.accounts import FRC_VERSION
     assert CT_YEAR == "2024"
     assert FRC_VERSION == "2024-01-01"
+
+def test_renderer_uses_float_and_can_misround_subpenny_values():
+    """Demonstrate renderer behaviour; this MUST NOT become tax calculation logic."""
+    from decimal import Decimal, ROUND_HALF_UP
+    data = copy.deepcopy(SAMPLE)
+    data["calculation"]["tax_payable"] = "1.005"
+    root = etree.fromstring(build_xml(data))
+    upstream_amount = root.findtext(f".//{C}TaxPayable")
+    expected_exact = format(Decimal("1.005").quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), ".2f")
+    assert upstream_amount == "1.00"
+    assert expected_exact == "1.01"
