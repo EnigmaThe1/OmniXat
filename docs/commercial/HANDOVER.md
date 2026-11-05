@@ -125,3 +125,12 @@ Next: persistent creation idempotency/result reconciliation and minimal audit be
 autonomous retries. Do not duplicate these routes or expose trusted Principal input.
 Maintained-provider login, quotas and deployment remain unqualified; no approval,
 filing, billing or bank route exists in the new transport.
+
+## Latest creation receipt checkpoint
+
+C2 retry protection is complete for organisation/note creates: migration 0003,
+tenant/actor/operation-scoped keys, same-transaction receipts and replays, conflict
+and revoked-access checks. **32 core, 9 token and 68 PostgreSQL/HTTP tests pass**.
+Read the latest status and HTTP_API.md. Next: persistent versioned plans/prices and
+owner audit for a billing sandbox, without payment activation. The demo Chromium
+prerequisite remains missing; no live provider or statutory integration exists.

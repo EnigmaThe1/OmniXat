@@ -19,6 +19,7 @@ from starlette.routing import Route
 
 from .identity import AuthenticationError
 from .identity_postgres import authenticated_records
+from .postgres import CreationConflict, validate_creation_key
 
 MAX_BODY_BYTES = 32768
 BODY_TIMEOUT_SECONDS = 5
@@ -129,22 +130,24 @@ def create_app(*, verifier, connection_factory, allowed_hosts):
     if not callable(connection_factory):
         raise ValueError('Server-owned connection factory required')
 
-    def operate(token, tenant, action, object_id, value):
+    def operate(token, tenant, action, object_id, value, key):
         try:
             with connection_factory() as connection:
                 with authenticated_records(connection, verifier, token, tenant,
                                            write=action.startswith('create')) as records:
                     if action == 'create_organisation':
-                        return records.create_organisation(value)
+                        return records.create_organisation(value, idempotency_key=key)
                     if action == 'get_organisation':
                         return records.get_organisation(object_id)
                     if action == 'create_note':
-                        return records.create_note(object_id, value)
+                        return records.create_note(object_id, value, idempotency_key=key)
                     return records.get_note(object_id)
         except AuthenticationError:
             raise ApiError(403, 'access_denied') from None
         except PermissionError:
             raise ApiError(403, 'access_denied') from None
+        except CreationConflict:
+            raise ApiError(409, 'idempotency_conflict') from None
         except KeyError:
             raise ApiError(404, 'not_found') from None
         except (psycopg.OperationalError, TimeoutError):
@@ -163,7 +166,7 @@ def create_app(*, verifier, connection_factory, allowed_hosts):
                 verifier.verify(token)
             except AuthenticationError:
                 raise ApiError(401, 'invalid_token') from None
-            if request.query_params or 'idempotency-key' in request.headers:
+            if request.query_params:
                 raise ApiError(400, 'unsupported_parameter')
             try:
                 tenant = str(UUID(request.path_params['tenant']))
@@ -171,12 +174,21 @@ def create_app(*, verifier, connection_factory, allowed_hosts):
             except ValueError:
                 raise ApiError(400, 'invalid_identifier') from None
             action = request.scope['endpoint'].action
+            keys = request.headers.getlist('idempotency-key')
+            if keys and not action.startswith('create'):
+                raise ApiError(400, 'unsupported_parameter')
+            try:
+                if len(keys) > 1:
+                    raise ValueError("Duplicate creation key")
+                key = validate_creation_key(keys[0] if keys else None)
+            except ValueError:
+                raise ApiError(400, 'invalid_idempotency_key') from None
             value = None
             if action == 'create_organisation':
                 value = await _payload(request, 'display_name', 200)
             elif action == 'create_note':
                 value = await _payload(request, 'body', 10000)
-            result = await run_in_threadpool(operate, token, tenant, action, object_id, value)
+            result = await run_in_threadpool(operate, token, tenant, action, object_id, value, key)
             data = {key: str(value) if isinstance(value, UUID) else value for key, value in result.items()}
             return JSONResponse({'data': data, 'request_id': request.scope['request_id']},
                                 status_code=201 if action.startswith('create') else 200)

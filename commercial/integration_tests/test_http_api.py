@@ -134,11 +134,11 @@ class HttpRecordsTests(MembershipFixture):
             self.assertEqual(self.post(path,json={}).status_code,404)
         self.assertEqual(self.connections,[])
 
-    def test_identifiers_query_tokens_and_unimplemented_idempotency_are_rejected(self):
+    def test_identifiers_query_tokens_and_read_keys_are_rejected(self):
         self.assertEqual(self.get('/v1/workspaces/not-a-uuid/notes/'+str(self.note)).status_code,400)
         self.assertEqual(self.get(self.base+'/notes/not-a-uuid').status_code,400)
         self.assertEqual(self.get(self.base+'/notes/'+str(self.note)+'?access_token=fictional',headers={}).status_code,401)
-        self.assertEqual(self.post(json={'display_name':'Fictional'},headers=self.auth()|{'Idempotency-Key':'unsupported'}).status_code,400)
+        self.assertEqual(self.get(headers=self.auth()|{'Idempotency-Key':'read-key'}).status_code,400)
         self.assertEqual(self.connections,[])
 
     def test_method_errors_are_json_and_do_not_open_database(self):
@@ -174,3 +174,31 @@ class HttpRecordsTests(MembershipFixture):
             self.assertEqual(result.exception.status,408)
         asyncio.run(check())
         self.assertEqual(self.connections,[])
+
+    def test_creation_replay_and_changed_input_conflict(self):
+        headers = self.auth() | {'Idempotency-Key': 'fictional-create-1'}
+        first = self.post(json={'display_name': 'Fictional keyed organisation'}, headers=headers)
+        again = self.post(json={'display_name': 'Fictional keyed organisation'}, headers=headers)
+        conflict = self.post(json={'display_name': 'Changed input'}, headers=headers)
+        self.assertEqual([first.status_code, again.status_code, conflict.status_code], [201, 201, 409])
+        self.assertEqual(first.json()['data'], again.json()['data'])
+        self.assertNotEqual(first.json()['request_id'], again.json()['request_id'])
+        self.assertEqual(conflict.json()['error']['code'], 'idempotency_conflict')
+        self.assertNotIn('fictional-create-1', conflict.text)
+
+    def test_replay_rechecks_revocation(self):
+        headers = self.auth() | {'Idempotency-Key': 'fictional-note-1'}
+        path = self.base + '/organisations/' + str(self.org) + '/notes'
+        self.assertEqual(self.post(path, json={'body': 'Fictional note'}, headers=headers).status_code, 201)
+        self.owner.execute("UPDATE omnixat.memberships SET revoked_at=now() WHERE user_id=%s", (self.user,))
+        self.assertEqual(self.post(path, json={'body': 'Fictional note'}, headers=headers).status_code, 403)
+
+    def test_rejects_duplicate_and_malformed_creation_keys_before_database(self):
+        for keys in ([('Idempotency-Key', 'x'), ('Idempotency-Key', 'x')],
+                     [('Idempotency-Key', 'x,y')], [('Idempotency-Key', 'x'*129)],
+                     [('Idempotency-Key', '')], [('Idempotency-Key', 'two words')]):
+            response = self.post(json={'display_name': 'Fictional'},
+                                 headers=list(self.auth().items()) + keys)
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()['error']['code'], 'invalid_idempotency_key')
+        self.assertEqual(self.connections, [])

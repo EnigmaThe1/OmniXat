@@ -40,7 +40,7 @@ class PostgresFixture(unittest.TestCase):
             sql.Identifier(cls.database), sql.Identifier(cls.role)))
         cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat TO {} ").format(sql.Identifier(cls.role)))
         cls.owner.execute(sql.SQL("GRANT SELECT ON omnixat.tenants TO {} ").format(sql.Identifier(cls.role)))
-        cls.owner.execute(sql.SQL("GRANT SELECT, INSERT ON omnixat.organisations, omnixat.notes TO {} ").format(sql.Identifier(cls.role)))
+        cls.owner.execute(sql.SQL("GRANT SELECT, INSERT ON omnixat.organisations, omnixat.notes, omnixat.record_creations TO {} ").format(sql.Identifier(cls.role)))
         cls.owner.execute(sql.SQL("GRANT SELECT ON omnixat.identities, omnixat.memberships TO {} ").format(sql.Identifier(cls.role)))
         cls.runtime_dsn = make_conninfo(dsn, dbname=cls.database, user=cls.role, password=password)
         cls.runtime = psycopg.connect(cls.runtime_dsn, autocommit=True)
@@ -251,7 +251,7 @@ class PostgresRecordsTests(PostgresFixture):
                               (tenant,organisation))
                 migrate(owner)
                 self.assertEqual(owner.execute('SELECT id FROM omnixat.organisations').fetchall(),[(organisation,)])
-                self.assertEqual(owner.execute('SELECT count(*) FROM public.omnixat_schema_migrations').fetchone()[0],2)
+                self.assertEqual(owner.execute('SELECT count(*) FROM public.omnixat_schema_migrations').fetchone()[0],3)
         finally:
             self.admin.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(database)))
 

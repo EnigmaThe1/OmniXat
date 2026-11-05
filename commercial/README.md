@@ -53,7 +53,7 @@ onboarding or complete production identity qualification exists yet. See the dev
 
 The [development ASGI API](HTTP_API.md) now exposes versioned organisation/note
 create/read routes through the same bearer/membership services, with strict JSON,
-body/time controls and generic errors. Current checks: **32 core + 9 token + 58
-PostgreSQL/HTTP integration tests pass**. No server starts on import. Idempotent
-creation, audit, quotas, login, production hosting and all live integrations remain
-unfinished. No approval/submission route exists in this API.
+body/time controls and generic errors. Current checks: **32 core + 9 token + 68
+PostgreSQL/HTTP integration tests pass**. No server starts on import. Keyed creation retries now return the original record and successful creates
+record a minimal audit receipt. Audit access/retention, quotas, login, hosting and
+all live integrations remain unfinished. No approval/submission route exists in this API.

@@ -7,6 +7,8 @@ One exclusive, idle autocommit connection per unit of work; never share concurre
 """
 from contextlib import contextmanager
 from hashlib import sha256
+import json
+import re
 from pathlib import Path
 from time import monotonic
 from uuid import UUID, uuid4
@@ -17,6 +19,16 @@ from psycopg.rows import dict_row
 from .access import require_tenant
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
+
+
+class CreationConflict(Exception):
+    """A creation key was reused with different inputs."""
+
+
+def validate_creation_key(key):
+    if key is not None and (not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9._~-]{1,128}', key)):
+        raise ValueError("Invalid creation key")
+    return key
 
 
 def _idle(connection):
@@ -71,16 +83,18 @@ def tenant_records(connection, actor, tenant_id, *, write=False):
 def _tenant_transaction(connection, tenant, *, write=False, identity_tables=False):
     """Internal exclusive transaction; caller must establish authorisation."""
     _idle(connection)
-    tables_required = ('tenants', 'organisations', 'notes')
+    tables_required = ('tenants', 'organisations', 'notes', 'record_creations')
     if identity_tables:
         tables_required += ('identities', 'memberships')
     started = monotonic()
     with connection.transaction():
+        # A new snapshot for each statement is required after a competing insert.
+        connection.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        if not write:
+            connection.execute("SET TRANSACTION READ ONLY")
         connection.execute("""SELECT set_config('statement_timeout', '5000', true),
                                      set_config('lock_timeout', '1000', true),
                                      set_config('idle_in_transaction_session_timeout', '5000', true)""")
-        if not write:
-            connection.execute("SET TRANSACTION READ ONLY")
         with connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
             role = cursor.fetchone()
@@ -119,26 +133,69 @@ class TenantRecords:
                 raise KeyError("Record not found")
             return row
 
-    def create_organisation(self, display_name):
+    def _reserve_creation(self, operation, key, value, parent=None):
+        key = validate_creation_key(key)
+        key_digest = sha256(key.encode('ascii')).digest() if key is not None else None
+        payload_digest = (sha256(json.dumps([1, str(parent) if parent else None, value],
+                                           separators=(',', ':')).encode('ascii')).digest()
+                          if key is not None else None)
+        result_id = uuid4()
+        actor = self._actor.user_id
+        with self._connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute("SELECT set_config('omnixat.record_actor', %s, true)", (actor,))
+            cursor.execute("""INSERT INTO omnixat.record_creations
+                (tenant_id, actor_id, operation, key_digest, payload_digest, organisation_id, note_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (tenant_id, actor_id, operation, key_digest) DO NOTHING
+                RETURNING 1""",
+                (self._tenant, actor, operation, key_digest, payload_digest,
+                 result_id if parent is None else None, result_id if parent is not None else None))
+            if cursor.fetchone() is not None:
+                return result_id, False
+            # A separate READ COMMITTED statement can see a just-committed winner.
+            cursor.execute("""SELECT payload_digest, COALESCE(organisation_id, note_id) AS result_id
+                FROM omnixat.record_creations
+                WHERE tenant_id=%s AND actor_id=%s AND operation=%s AND key_digest=%s""",
+                (self._tenant, actor, operation, key_digest))
+            existing = cursor.fetchone()
+            if existing is None:
+                raise RuntimeError("Creation receipt unavailable")
+            if existing['payload_digest'] != payload_digest:
+                raise CreationConflict("Creation key does not match these inputs")
+            return existing['result_id'], True
+
+    def create_organisation(self, display_name, *, idempotency_key=None):
         self._check(write=True)
+        result_id, replay = self._reserve_creation('organisation.create', idempotency_key, display_name)
+        if replay:
+            return self._organisation(result_id)
         return self._one("""INSERT INTO omnixat.organisations
             (tenant_id, id, display_name, created_by) VALUES (%s,%s,%s,%s)
             RETURNING id, display_name, created_by""",
-            (self._tenant, uuid4(), display_name, self._actor.user_id))
+            (self._tenant, result_id, display_name, self._actor.user_id))
 
-    def get_organisation(self, organisation_id):
-        self._check()
+    def _organisation(self, organisation_id):
         return self._one("""SELECT id, display_name, created_by FROM omnixat.organisations
             WHERE tenant_id=%s AND id=%s""", (self._tenant, UUID(str(organisation_id))))
 
-    def create_note(self, organisation_id, body):
+    def get_organisation(self, organisation_id):
+        self._check()
+        return self._organisation(organisation_id)
+
+    def create_note(self, organisation_id, body, *, idempotency_key=None):
         self._check(write=True)
-        # Same not-found result for nonexistent and other-tenant organisation IDs.
-        self.get_organisation(organisation_id)
+        # Notes require read access to the parent on initial creation and replay.
+        require_tenant(self._actor, str(self._tenant), "records:read")
+        parent = UUID(str(organisation_id))
+        # Validate parent before reserving so a missing parent leaves no receipt.
+        self._organisation(parent)
+        result_id, replay = self._reserve_creation('note.create', idempotency_key, body, parent)
+        if replay:
+            return self.get_note(result_id)
         return self._one("""INSERT INTO omnixat.notes
             (tenant_id,id,organisation_id,body,created_by) VALUES (%s,%s,%s,%s,%s)
             RETURNING id, organisation_id, body, created_by""",
-            (self._tenant, uuid4(), UUID(str(organisation_id)), body, self._actor.user_id))
+            (self._tenant, result_id, parent, body, self._actor.user_id))
 
     def get_note(self, note_id):
         self._check()

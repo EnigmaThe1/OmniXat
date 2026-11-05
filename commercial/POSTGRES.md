@@ -104,4 +104,23 @@ Shared record units now use transaction-local statement (5s), lock (1s), idle (5
 timeouts and a ten-second pre-commit elapsed check. Timeout/overdue work rolls back;
 settings do not leak into reused connections. This is not an absolute wall-time
 cancellation guarantee. See [HTTP_API.md](HTTP_API.md) for acquisition/hosting limits
-and the latest 58-case integration result. Migrations are unchanged by this increment.
+and the latest 68-case integration result.
+
+
+## Creation receipts
+
+Apply additive migration 0003 using the migration owner. Grant the runtime
+SELECT and INSERT on `omnixat.record_creations`; do not grant UPDATE or DELETE.
+The repository checks this table's RLS alongside the record tables. Its policy
+requires both tenant and actor transaction context. Existing records are preserved
+without synthetic backfilled audit events.
+
+One unique reservation per tenant/actor/operation/key digest prevents duplicate
+results. A conflicting insert waits subject to the lock timeout. The repository
+uses READ COMMITTED and a separate lookup statement to see a committed winner.
+Deferred tenant-bound foreign keys prevent orphan receipts; rollback removes both
+receipt and result. No in-memory lock or reservation survives a rolled-back write.
+See [HTTP_API.md](HTTP_API.md) for the supported retry contract and its limits.
+
+Primary references: [PostgreSQL transaction isolation](https://www.postgresql.org/docs/16/transaction-iso.html)
+and [INSERT conflict handling](https://www.postgresql.org/docs/16/sql-insert.html).

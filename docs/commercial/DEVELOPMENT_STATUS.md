@@ -197,3 +197,37 @@ Next resumable increment: durable tenant/operation/payload-bound creation keys a
 result reconciliation with minimal audit events before autonomous write retries;
 maintained-provider browser login qualification remains separate unfinished work.
 Read `commercial/HTTP_API.md`. No active task remains in this increment.
+
+## C2 durable creation receipts — completed
+
+Recovered clean ddb78cd. Scope: append-only PostgreSQL creation receipts for
+organisation/note writes, optional request keys scoped to workspace, actor and
+operation, payload conflict detection and same-transaction replay. Test concurrency,
+rollback, replay authorization and HTTP validation. No external effects or deployment.
+
+Migration 0003 adds append-only creation receipts with tenant/actor row isolation,
+deferred tenant-bound result foreign keys and a unique scope for keyed creations.
+Shared organisation/note writes commit the receipt and result together. An optional
+Idempotency-Key yields the existing result on an exact replay, or 409 for changed
+valid inputs. Replay rechecks authority; an unkeyed POST remains a separate write.
+Only metadata and optional digests are retained in receipts. No historical backfill,
+automatic retry, expiry job, audit dashboard or external-effect guarantee.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **9 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **68 passed**, including two-connection
+  contention/replay, rollback, tenant/actor/operation isolation, changed parent/body,
+  audit grants, legacy migration, HTTP header validation and revoked replay.
+  Existing Starlette test-client deprecation warning remains.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**
+  at the unchanged browser lab test (Chromium unavailable). No test skipped.
+- `git diff --check`: passed. No production, billing, bank or filing action.
+
+Next: persist versioned plans/prices and authorised owner audit in a separate
+sandbox-ready billing increment, without activating payments. Maintained-provider
+login, entity grants, audit access/retention and API quotas remain open. The
+creation receipt is a PostgreSQL record-write contract, not a ledger effect or
+filing receipt. No active work remains in this increment.
