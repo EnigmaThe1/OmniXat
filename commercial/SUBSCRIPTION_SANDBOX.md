@@ -39,7 +39,8 @@ boundary. Creation and cancellation rows retain minimal actor/time provenance.
 
 Use an exclusive, idle autocommit psycopg connection with bounded acquisition.
 The same tenant transaction limits as the record service apply. No schema change
-is made to the price catalogue, and no provider event is accepted.
+is made to the price catalogue. A separate [local simulator receiver](SANDBOX_EVENTS.md)
+can record comparison receipts without changing these subscriptions.
 
 ## Verification and follow-up
 
@@ -48,9 +49,8 @@ disposable PostgreSQL 16.2. Eight new sandbox tests cover price pinning, trial
 boundaries, cancellation replay, permissions, separate grants and tenant-bound
 references. The original demo Chromium prerequisite is unchanged.
 
-Next: a separate, locally tested provider-event contract for authenticated,
-deduplicated sandbox events and reconciliation. Keep external connections,
-activation and paid contracts gated. No product or legal trial terms are implied.
+The local simulator contract is documented in [SANDBOX_EVENTS.md](SANDBOX_EVENTS.md).
+Keep external connections, activation and paid contracts gated. No product or legal trial terms are implied.
 
 Primary references: [PostgreSQL 16 views](https://www.postgresql.org/docs/16/sql-createview.html)
 and [row security](https://www.postgresql.org/docs/16/ddl-rowsecurity.html).

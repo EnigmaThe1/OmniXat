@@ -296,3 +296,34 @@ Next: define authenticated and deduplicated sandbox provider-event handling
 and reconciliation before connecting a provider. No real billing activation,
 payments, subscription contract, live entitlement or deployment. See
 commercial/SUBSCRIPTION_SANDBOX.md. No unfinished work in this increment.
+
+## C3 simulated billing event receipts — completed
+
+Recovered clean ca382d9. Scope: tenant-bound HMAC verification, short replay
+window, PostgreSQL event deduplication and read-only subscription reconciliation.
+No provider connection, transport, activation or payment state change.
+
+Migration 0006 adds forced tenant RLS, a tenant-bound subscription reference
+and unique event receipts. A tenant-configured simulator receiver verifies a
+timestamped HMAC envelope, records price/state comparison metadata, replays
+the original exact-body receipt and rejects changed-body reuse. The receiver
+login cannot insert subscriptions or cancellations. No raw payloads stored.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **9 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **91 passed**. Seven new
+  checks cover persisted replay, changed-body conflict, invalid signatures
+  and timestamps, price/state mismatches, cross-tenant rejection, scoped
+  receipts and separated database grants.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**
+  at the unchanged browser lab test because Chromium is unavailable.
+- `git diff --check`: passed.
+
+Next: build an internal owner-only aggregate sandbox metrics service (trial,
+pending, cancellation and event reconciliation counts). Do not include
+customer documents or present simulated counts as live revenue. Provider
+protocol, key rotation, webhook transport, live activation, quotas and
+deployment remain separate. See commercial/SANDBOX_EVENTS.md.

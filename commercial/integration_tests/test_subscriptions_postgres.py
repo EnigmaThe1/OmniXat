@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone
+import hmac
+import json
+from secrets import token_bytes
 from uuid import uuid4
 
 import psycopg
@@ -6,6 +9,7 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
 from omnixat_core.access import Principal
+from omnixat_core.sandbox_events import SandboxEventReceiver, SandboxEventConflict, SandboxEventRejected
 from omnixat_core.subscriptions_postgres import PostgresSubscriptionSandbox, SandboxSubscriptionConflict
 from test_postgres import PostgresFixture
 
@@ -14,6 +18,15 @@ class SubscriptionSandboxTests(PostgresFixture):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        cls.sandbox_dsn = cls.sandbox_login(receipts=False)
+        cls.sandbox = psycopg.connect(cls.sandbox_dsn, autocommit=True)
+        cls.addClassCleanup(cls.sandbox.close)
+        cls.event_dsn = cls.sandbox_login(receipts=True)
+        cls.events = psycopg.connect(cls.event_dsn, autocommit=True)
+        cls.addClassCleanup(cls.events.close)
+
+    @classmethod
+    def sandbox_login(cls, *, receipts):
         role_name = 'sandbox_test_' + uuid4().hex
         role = sql.Identifier(role_name)
         password = uuid4().hex
@@ -25,11 +38,11 @@ class SubscriptionSandboxTests(PostgresFixture):
 
         cls.addClassCleanup(cleanup)
         cls.owner.execute(sql.SQL('GRANT USAGE ON SCHEMA omnixat_sandbox TO {}').format(role))
-        cls.owner.execute(sql.SQL('GRANT SELECT ON omnixat_sandbox.price_terms TO {}').format(role))
-        cls.owner.execute(sql.SQL('GRANT SELECT, INSERT ON omnixat_sandbox.subscriptions, omnixat_sandbox.cancellations TO {}').format(role))
-        cls.sandbox_dsn = make_conninfo(cls.runtime_dsn, user=role_name, password=password)
-        cls.sandbox = psycopg.connect(cls.sandbox_dsn, autocommit=True)
-        cls.addClassCleanup(cls.sandbox.close)
+        cls.owner.execute(sql.SQL('GRANT SELECT ON omnixat_sandbox.price_terms, omnixat_sandbox.subscriptions, omnixat_sandbox.cancellations TO {}').format(role))
+        tables = ('omnixat_sandbox.event_receipts' if receipts else
+                  'omnixat_sandbox.subscriptions, omnixat_sandbox.cancellations')
+        cls.owner.execute(sql.SQL('GRANT SELECT, INSERT ON ' + tables + ' TO {}').format(role))
+        return make_conninfo(cls.runtime_dsn, user=role_name, password=password)
 
     def setUp(self):
         super().setUp()
@@ -149,3 +162,100 @@ class SubscriptionSandboxTests(PostgresFixture):
                 self.sandbox.execute("""INSERT INTO omnixat_sandbox.cancellations
                     VALUES (%s,%s,%s,%s)""", (self.b, sub.id, self.at, self.other_member.user_id))
         self.assertEqual(self.service.get(self.member, self.a).state, 'trialing')
+
+    def simulated_event(self, sub, **overrides):
+        fields = dict(tenant_id=str(sub.tenant_id), event_id=str(uuid4()),
+                      subscription_id=str(sub.id), price_version_id=str(sub.price_version_id),
+                      state=sub.state)
+        return json.dumps(fields | overrides).encode()
+
+    def signed(self, receiver, key, body, *, timestamp=None):
+        ts = int(self.at.timestamp()) if timestamp is None else timestamp
+        signature = hmac.digest(key, b"omnixat:sandbox:subscription-snapshot:v1:" +
+                                str(ts).encode("ascii") + b"." + body, "sha256").hex()
+        return receiver.accept(body, timestamp=ts, signature=signature)
+
+    def test_signed_event_persists_and_replays_original_reconciliation(self):
+        self.price()
+        sub = self.start()
+        key = token_bytes(32)
+        body = self.simulated_event(sub)
+        receiver = SandboxEventReceiver(self.events, tenant_id=self.a, signing_key=key, clock=lambda: self.at)
+        first = self.signed(receiver, key, body)
+        self.assertEqual((first.outcome, first.observed_state), ("matched", "trialing"))
+        self.at = sub.trial_ends_at
+        with psycopg.connect(self.event_dsn, autocommit=True) as connection:
+            fresh = SandboxEventReceiver(connection, tenant_id=self.a, signing_key=key, clock=lambda: self.at)
+            self.assertEqual(self.signed(fresh, key, body), first)
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat_sandbox.event_receipts WHERE tenant_id=%s",
+                                            (self.a,)).fetchone(), (1,))
+
+    def test_changed_body_with_same_event_id_conflicts(self):
+        self.price()
+        sub = self.start()
+        key = token_bytes(32)
+        receiver = SandboxEventReceiver(self.events, tenant_id=self.a, signing_key=key, clock=lambda: self.at)
+        event = str(uuid4())
+        first = self.simulated_event(sub, event_id=event)
+        self.signed(receiver, key, first)
+        with self.assertRaises(SandboxEventConflict):
+            self.signed(receiver, key, self.simulated_event(sub, event_id=event, state="active"))
+        self.assertEqual(self.signed(receiver, key, first).outcome, "matched")
+
+    def test_invalid_signature_stale_timestamp_and_ambiguous_json_fail_before_db(self):
+        key = token_bytes(32)
+        receiver = SandboxEventReceiver(None, tenant_id=self.a, signing_key=key, clock=lambda: self.at)
+        with self.assertRaises(SandboxEventRejected):
+            self.signed(receiver, token_bytes(32), b'{}')
+        for offset in (-301, 301, 10**1000):
+            with self.assertRaises(SandboxEventRejected):
+                self.signed(receiver, key, b'{}', timestamp=int(self.at.timestamp()) + offset)
+        for body in (b'{"state":"pending","state":"active"}', b'{'*2049, b'\xff', b'[]'):
+            with self.assertRaises(SandboxEventRejected):
+                self.signed(receiver, key, body)
+
+    def test_simulated_active_and_price_mismatch_do_not_modify_subscription(self):
+        self.price(days=0)
+        sub = self.start()
+        key = token_bytes(32)
+        receiver = SandboxEventReceiver(self.events, tenant_id=self.a, signing_key=key, clock=lambda: self.at)
+        state = self.signed(receiver, key, self.simulated_event(sub, state="active"))
+        price = self.signed(receiver, key, self.simulated_event(sub, price_version_id=str(uuid4())))
+        self.assertEqual((state.outcome, price.outcome), ("state_mismatch", "price_mismatch"))
+        self.assertEqual(self.service.get(self.member, self.a), sub)
+
+    def test_signed_event_cannot_cross_receiver_tenant_or_target_other_subscription(self):
+        self.price()
+        sub = self.start()
+        other = self.service.start(self.other_member, self.b, plan=self.plan, interval='month')
+        key = token_bytes(32)
+        receiver = SandboxEventReceiver(self.events, tenant_id=self.a, signing_key=key, clock=lambda: self.at)
+        for body in (self.simulated_event(other), self.simulated_event(sub, subscription_id=str(other.id))):
+            with self.assertRaises(SandboxEventRejected):
+                self.signed(receiver, key, body)
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat_sandbox.event_receipts WHERE tenant_id IN (%s,%s)",
+                                            (self.a, self.b)).fetchone(), (0,))
+
+    def test_event_receipt_is_tenant_scoped_and_append_only(self):
+        self.price()
+        sub = self.start()
+        key = token_bytes(32)
+        receiver = SandboxEventReceiver(self.events, tenant_id=self.a, signing_key=key, clock=lambda: self.at)
+        self.signed(receiver, key, self.simulated_event(sub))
+        self.assertEqual(self.events.execute('SELECT * FROM omnixat_sandbox.event_receipts').fetchall(), [])
+        with self.events.transaction():
+            self.events.execute("SELECT set_config('omnixat.tenant_id', %s, true)", (self.b,))
+            self.assertEqual(self.events.execute('SELECT * FROM omnixat_sandbox.event_receipts').fetchall(), [])
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.events.execute('DELETE FROM omnixat_sandbox.event_receipts')
+
+    def test_receiver_rejects_subscription_writer_database_role(self):
+        self.price()
+        sub = self.start()
+        key = token_bytes(32)
+        receiver = SandboxEventReceiver(self.sandbox, tenant_id=self.a, signing_key=key, clock=lambda: self.at)
+        with self.assertRaises(PermissionError):
+            self.signed(receiver, key, self.simulated_event(sub))
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.events.execute("INSERT INTO omnixat_sandbox.cancellations VALUES (%s,%s,%s,%s)",
+                                (self.a, sub.id, self.at, "fixture"))

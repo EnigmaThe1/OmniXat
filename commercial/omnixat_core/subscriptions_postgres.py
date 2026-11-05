@@ -31,6 +31,28 @@ class SandboxSubscription:
     state: str
 
 
+@contextmanager
+def _sandbox_transaction(connection, tenant, *, write=False, extra_tables=(), select_only=("price_terms",)):
+    with _tenant_transaction(connection, tenant, write=write, schema="omnixat_sandbox",
+                             tables_required=("subscriptions", "cancellations") + extra_tables):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute("""SELECT current_user <> session_user OR
+                has_schema_privilege('omnixat', 'USAGE') OR
+                has_schema_privilege('omnixat_billing', 'USAGE') OR
+                has_schema_privilege('omnixat_sandbox', 'CREATE') OR EXISTS (
+                    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                    WHERE n.nspname='omnixat_sandbox' AND c.relkind IN ('r','v') AND
+                        (pg_has_role(current_user, n.nspowner, 'MEMBER') OR
+                         pg_has_role(current_user, c.relowner, 'MEMBER') OR
+                         has_any_column_privilege(c.oid, 'UPDATE') OR
+                         has_table_privilege(c.oid, 'DELETE, TRUNCATE') OR
+                         (c.relname=ANY(%s) AND has_any_column_privilege(c.oid, 'INSERT')))
+                ) AS unsafe""", (list(select_only),))
+            if cursor.fetchone()["unsafe"]:
+                raise PermissionError("Dedicated append-only sandbox login required")
+            yield cursor
+
+
 class PostgresSubscriptionSandbox:
     def __init__(self, connection, *, clock=lambda: datetime.now(timezone.utc)):
         self._connection = connection
@@ -50,24 +72,8 @@ class PostgresSubscriptionSandbox:
         if not isinstance(actor.user_id, str) or not 1 <= len(actor.user_id) <= 200 or "\x00" in actor.user_id:
             raise ValueError("Invalid tenant actor")
         tenant = UUID(tenant_id)
-        with _tenant_transaction(self._connection, tenant, write=write, schema="omnixat_sandbox",
-                                 tables_required=("subscriptions", "cancellations")):
-            with self._connection.cursor(row_factory=dict_row) as cursor:
-                cursor.execute("""SELECT current_user <> session_user OR
-                    has_schema_privilege('omnixat', 'USAGE') OR
-                    has_schema_privilege('omnixat_billing', 'USAGE') OR
-                    has_schema_privilege('omnixat_sandbox', 'CREATE') OR EXISTS (
-                        SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-                        WHERE n.nspname='omnixat_sandbox' AND c.relkind IN ('r','v') AND
-                            (pg_has_role(current_user, n.nspowner, 'MEMBER') OR
-                             pg_has_role(current_user, c.relowner, 'MEMBER') OR
-                             has_any_column_privilege(c.oid, 'UPDATE') OR
-                             has_table_privilege(c.oid, 'DELETE, TRUNCATE') OR
-                             (c.relname='price_terms' AND has_any_column_privilege(c.oid, 'INSERT')))
-                    ) AS unsafe""")
-                if cursor.fetchone()["unsafe"]:
-                    raise PermissionError("Dedicated append-only sandbox login required")
-                yield cursor, tenant
+        with _sandbox_transaction(self._connection, tenant, write=write) as cursor:
+            yield cursor, tenant
 
     @staticmethod
     def _read(cursor, tenant, at):

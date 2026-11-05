@@ -53,7 +53,7 @@ onboarding or complete production identity qualification exists yet. See the dev
 
 The [development ASGI API](HTTP_API.md) now exposes versioned organisation/note
 create/read routes through the same bearer/membership services, with strict JSON,
-body/time controls and generic errors. Current checks: **32 core + 9 token + 84
+body/time controls and generic errors. Current checks: **32 core + 9 token + 91
 PostgreSQL/HTTP integration tests pass**. No server starts on import. Keyed creation retries now return the original record and successful creates
 record a minimal audit receipt. Audit access/retention, quotas, login, hosting and
 all live integrations remain unfinished. No approval/submission route exists in this API.
@@ -69,3 +69,6 @@ IDs and has no payment connection.
 The [internal subscription sandbox](SUBSCRIPTION_SANDBOX.md) pins price versions
 and validates trial, pending, expired and cancelled states in tenant-isolated
 PostgreSQL storage. It exposes no HTTP route and cannot activate billing.
+
+[Local simulator receipts](SANDBOX_EVENTS.md) verify and deduplicate signed
+snapshots and record mismatches without applying a billing state change.

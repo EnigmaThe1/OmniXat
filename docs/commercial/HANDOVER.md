@@ -152,3 +152,12 @@ commercial/SUBSCRIPTION_SANDBOX.md. **32 core, 9 token and 84 PostgreSQL/HTTP te
 pass**; the unchanged demo browser test requires Chromium. Next: authenticated,
 deduplicated sandbox event handling and reconciliation. No payment provider,
 customer route or live entitlement is enabled.
+
+## Latest simulator event checkpoint
+
+Migration 0006 adds HMAC-verified, tenant-scoped local event receipts and
+price/state reconciliation without subscription mutation. See
+commercial/SANDBOX_EVENTS.md. **32 core, 9 token and 91 PostgreSQL/HTTP tests
+pass**; the unchanged demo browser test requires Chromium. Next: an owner-only
+aggregate sandbox metrics service, with no live revenue claims or customer
+record access. No provider, payment or deployment enabled.
