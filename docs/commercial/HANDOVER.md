@@ -219,3 +219,12 @@ pass**. Keycloak archive download timed out and the unchanged demo Chromium case
 still fails on a socket restriction. Next: run the fictional-account browser
 matrix against an isolated realm with working Chromium, then wire staff browser
 controls. No realm or route was deployed.
+
+## Latest staff expiry cleanup checkpoint
+
+Migration 0011 adds an operator-only function to remove expired staff attempts
+and sessions in bounded batches. It skips locked rows and returns counts only.
+See commercial/STAFF_AUTH_CLEANUP.md. **32 core, 21 identity and 124 PostgreSQL/HTTP
+tests pass**. The unchanged demo Chromium case still fails on a socket
+restriction. Next: isolated Keycloak browser qualification, staff browser
+controls and wiring a bounded cleanup runner. No job, realm or route was deployed.

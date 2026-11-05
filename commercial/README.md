@@ -92,3 +92,6 @@ pinned code exchange tested with a fictional provider. No realm or route is live
 
 The same [Keycloak guide](KEYCLOAK_STAFF.md#offline-realm-preflight) describes a
 credential-free check of saved discovery metadata and approved signing keys.
+
+[Staff authentication cleanup](STAFF_AUTH_CLEANUP.md) removes expired login
+attempts and sessions in bounded operator batches.
