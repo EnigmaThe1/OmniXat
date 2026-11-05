@@ -101,3 +101,6 @@ explicitly for isolated testing. It is not mounted by the customer API.
 
 The [staff browser admission hook](STAFF_BROWSER.md#shared-qualification-limits)
 shares qualification rate limits across workers through PostgreSQL.
+
+The [evidence registry](EVIDENCE.md) records document fingerprints and minimal
+metadata with organisation-scoped duplicate detection. File intake is not wired.

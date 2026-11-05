@@ -7,9 +7,9 @@ from dataclasses import dataclass
 
 
 TENANT_PERMISSIONS = {
-    "owner": frozenset({"records:read", "records:write", "filings:approve", "billing:manage", "members:manage"}),
-    "editor": frozenset({"records:read", "records:write"}),
-    "viewer": frozenset({"records:read"}),
+    "owner": frozenset({"records:read", "records:write", "evidence:read", "evidence:register", "filings:approve", "billing:manage", "members:manage"}),
+    "editor": frozenset({"records:read", "records:write", "evidence:read", "evidence:register"}),
+    "viewer": frozenset({"records:read", "evidence:read"}),
 }
 STAFF_PERMISSIONS = {
     "platform_owner": frozenset({"metrics:read", "sandbox-metrics:read", "prices:write", "prices:read", "prices:audit", "support:manage"}),
@@ -41,7 +41,7 @@ def require_tenant(principal: Principal, tenant_id: str, permission: str):
         raise PermissionError("Access denied")
     if principal.api_scopes is not None and permission not in principal.api_scopes:
         raise PermissionError("Access denied")
-    if principal.actor_kind == "agent" and permission in {"filings:approve", "billing:manage", "members:manage"}:
+    if principal.actor_kind == "agent" and permission in {"filings:approve", "billing:manage", "members:manage", "evidence:register"}:
         raise PermissionError("Human decision required")
     if permission == "filings:approve" and not principal.mfa_verified:
         raise PermissionError("Step-up authentication required")

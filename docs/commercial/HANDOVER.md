@@ -271,3 +271,12 @@ See commercial/STAFF_BROWSER.md. **32 core, 21 identity and 146 PostgreSQL/HTTP
 tests pass**. The unchanged Chromium demo case still fails on a socket
 restriction. Next: isolated Keycloak/browser qualification, ingress deadline
 and log checks, and maintenance rehearsal. No deployment.
+
+## Latest evidence intake checkpoint
+
+Migration 0013 adds tenant/organisation-scoped evidence fingerprints and
+concurrent duplicate registration. See commercial/EVIDENCE.md. **32 core,
+21 identity and 152 PostgreSQL/HTTP tests pass**. The unchanged demo Chromium
+case still fails on a socket restriction. Next: private staged object intake
+and quarantine; isolated Keycloak/browser qualification remains a separate
+gate before owner routes. No live data or deployment.
