@@ -40,3 +40,44 @@ tests use an in-process ASGI client and simulated provider responses, not a
 browser against a real realm.
 
 Reference: [OAuth Security BCP, credential leakage via referrers](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.2).
+
+## Shared qualification limits
+
+Migration 0012 adds an optional PostgreSQL implementation of the admission
+hook. Pass `PostgresStaffAdmission(admission_connections, key=admission_key)`
+as `admit`. Use a fourth, separate idle-autocommit connection factory with
+bounded acquisition, and load a dedicated 32-byte random key from trusted
+configuration. All workers serving this app must share the same key and
+database. Provision only CONNECT and these object grants:
+
+```sql
+GRANT USAGE ON SCHEMA omnixat_staff_admission TO staff_admission;
+GRANT EXECUTE ON FUNCTION omnixat_staff_admission.admit(text,text) TO staff_admission;
+```
+
+These qualification defaults are per fixed database minute:
+
+| Action | Per source | Total |
+| --- | ---: | ---: |
+| Login | 5 | 60 |
+| Callback | 10 | 120 |
+| Session check | 60 | 300 |
+| Logout | 10 | 60 |
+
+Source is the trusted ASGI client IP (IPv4 or IPv6 /64, with IPv4-mapped IPv6
+normalized to IPv4). The hook does not parse forwarding headers. Configure any
+proxy that sets the ASGI client address to trust only known ingress peers;
+otherwise addresses may collapse to one proxy source or be spoofed upstream.
+Missing or invalid addresses are denied. Only keyed source fingerprints and
+counts are stored, with one bounded row per action. The next admitted request
+in a new minute replaces the previous counters; an idle action retains its
+last bucket, so treat the table as restricted operational data. Denied source
+requests do not spend the shared allowance.
+
+The database serializes admission per action across workers. Exhaustion returns
+429 before authentication or provider work, and database errors fail closed
+with 503. Fixed minutes can allow a burst across a boundary. This is a
+qualification safeguard, not edge denial-of-service protection; verify limits,
+proxy trust, connection budgets and ingress controls in the target environment.
+
+Technical reference: [ASGI client address](https://asgi.readthedocs.io/en/latest/specs/www.html#http-connection-scope).

@@ -584,3 +584,34 @@ Next: run the browser MFA/recovery matrix against an isolated Keycloak realm,
 including real cookie behavior; verify shared admission limits, access-log
 redaction, request deadlines and the expiry runner before exposing owner
 routes. See commercial/STAFF_BROWSER.md. No realm, listener or deployment.
+
+## C2 shared staff browser admission limits — completed
+
+Recovered clean 0c9ef73 with no unfinished increment or open branch PR.
+Implement a shared PostgreSQL admission hook for the isolated browser app:
+separate fixed-minute budgets by action and source, bounded state and a
+dedicated execute-only role. Verify concurrent enforcement and no trust in
+request forwarding headers. No listener, provider qualification or owner routes.
+
+Migration 0012 and the optional admission hook enforce per-source and shared
+budgets before staff authentication work. The database stores bounded keyed
+counters, not raw IP addresses, and the admission role can only execute the
+decision function. The hook ignores request forwarding headers and uses the
+server-provided ASGI client address. No app is mounted automatically.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **136 passed**. Six new cases cover
+  concurrent admissions, independent budgets, expiry and clock rollback, source
+  normalization, grants and HTTP 429 before provider work.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged Chromium case returned 503; direct launch confirmed the socket
+  permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: qualify the isolated Keycloak realm in a working browser and validate
+trusted proxy addresses, log redaction, request deadlines and the expiry runner
+before exposing owner routes. See commercial/STAFF_BROWSER.md. No deployment.

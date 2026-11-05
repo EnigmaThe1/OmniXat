@@ -98,3 +98,6 @@ attempts and sessions in bounded operator batches.
 
 The [staff browser qualification app](STAFF_BROWSER.md) can be constructed
 explicitly for isolated testing. It is not mounted by the customer API.
+
+The [staff browser admission hook](STAFF_BROWSER.md#shared-qualification-limits)
+shares qualification rate limits across workers through PostgreSQL.

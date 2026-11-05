@@ -237,3 +237,11 @@ and logout with an exact origin and secure cookies. See commercial/STAFF_BROWSER
 provider responses. The unchanged demo Chromium case still fails on a socket
 restriction. Next: real isolated realm and Chromium qualification, shared rate
 limits, log redaction and expiry runner before owner routes. Nothing deployed.
+
+## Latest staff admission checkpoint
+
+Migration 0012 and an opt-in PostgreSQL hook add shared staff browser limits.
+See commercial/STAFF_BROWSER.md. **32 core, 21 identity and 136 PostgreSQL/HTTP
+tests pass**. The unchanged demo Chromium case still fails on a socket
+restriction. Next: isolated realm and browser qualification, trusted ingress
+address and log handling, request deadlines and expiry runner. No deployment.
