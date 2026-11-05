@@ -1,7 +1,12 @@
+from base64 import b64encode, urlsafe_b64encode
 from hashlib import sha256
+import json
 from secrets import token_urlsafe
+from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
+import httpx
 import jwt
 import psycopg
 from psycopg import sql
@@ -9,6 +14,7 @@ from psycopg.conninfo import make_conninfo
 
 from omnixat_core.access import require_staff, require_tenant
 from omnixat_core.identity import AuthenticationError
+from omnixat_core.keycloak_staff import KeycloakStaffLogin
 from omnixat_core.staff_sessions_postgres import issue_staff_session, resolve_staff_session, revoke_staff_session
 from test_staff_identity_postgres import StaffDirectoryFixture
 
@@ -134,3 +140,131 @@ class StaffSessionsTests(StaffDirectoryFixture):
         for bad in (None, sha256(token.encode("ascii")).hexdigest(), token_urlsafe(32)):
             with self.assertRaises(AuthenticationError):
                 resolve_staff_session(self.sessions, self.directory, bad)
+
+
+    def _keycloak_attempts(self):
+        name, password = "kc_attempt_test_" + uuid4().hex, token_urlsafe(32)
+        role = sql.Identifier(name)
+        self.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(role, sql.Literal(password)))
+
+        def cleanup():
+            self.owner.execute(sql.SQL("DROP OWNED BY {}").format(role))
+            self.admin.execute(sql.SQL("DROP ROLE {}").format(role))
+
+        self.addCleanup(cleanup)
+        for grant in ("USAGE ON SCHEMA omnixat_staff_login",
+                      "SELECT, DELETE ON omnixat_staff_login.transactions",
+                      "INSERT (state_key, browser_key) ON omnixat_staff_login.transactions"):
+            self.owner.execute(sql.SQL("GRANT " + grant + " TO {}").format(role))
+        db = psycopg.connect(make_conninfo(self.runtime_dsn, user=name, password=password), autocommit=True)
+        self.addCleanup(db.close)
+        return db
+
+    def _keycloak(self, handler):
+        self.issuer += "/realms/fictional"
+        self.claims["iss"] = self.issuer
+        self.redirect_uri = "https://app.example.invalid/staff/callback"
+        self.secret = token_urlsafe(32)
+        self.provision()
+        return KeycloakStaffLogin(
+            issuer=self.issuer, client_id="staff", redirect_uri=self.redirect_uri,
+            client_secret=self.secret, login_key=uuid4().bytes + uuid4().bytes,
+            public_keys={"test": self.key.public_key()}, mfa_acr="urn:example:mfa",
+            transport=httpx.MockTransport(handler))
+
+    @staticmethod
+    def _token_response(body, **headers):
+        return httpx.Response(200, headers={"content-type": "application/json", **headers},
+                              stream=httpx.ByteStream(body))
+
+    def test_keycloak_code_flow_links_pkce_nonce_and_session(self):
+        requests = []
+
+        def exchange(request):
+            requests.append(request)
+            self.assertEqual(str(request.url), self.issuer + "/protocol/openid-connect/token")
+            self.assertEqual(request.method, "POST")
+            self.assertEqual(request.headers["authorization"],
+                             "Basic " + b64encode(("staff:" + self.secret).encode()).decode())
+            form = parse_qs(request.content.decode())
+            verifier = form.pop("code_verifier")[0]
+            challenge = urlsafe_b64encode(sha256(verifier.encode()).digest()).decode().rstrip("=")
+            self.assertEqual(challenge, query["code_challenge"][0])
+            self.assertEqual(form, {"grant_type": ["authorization_code"], "code": ["fictional.code"],
+                                    "redirect_uri": [self.redirect_uri]})
+            token = jwt.encode(self.claims | {"nonce": query["nonce"][0]}, self.key,
+                               algorithm="RS256", headers={"kid": "test"})
+            return self._token_response(json.dumps({"id_token": token, "access_token": "unused"}).encode())
+
+        provider, attempts, binding = self._keycloak(exchange), self._keycloak_attempts(), token_urlsafe(32)
+        url = provider.begin(attempts, browser_binding=binding)
+        parsed = urlsplit(url)
+        self.assertEqual(url.split("?")[0], self.issuer + "/protocol/openid-connect/auth")
+        query = parse_qs(parsed.query)
+        self.assertEqual(query["code_challenge_method"], ["S256"])
+        self.assertEqual(query["redirect_uri"], [self.redirect_uri])
+        self.assertEqual(query["max_age"], ["0"])
+        self.assertEqual(query["acr_values"], ["urn:example:mfa"])
+        self.assertNotIn(self.secret, url)
+        callback = dict(state=query["state"][0], browser_binding=binding,
+                        response_issuer=self.issuer, code="fictional.code")
+        for change in ({"response_issuer": "https://wrong.example.invalid"}, {"response_issuer": None},
+                       {"browser_binding": token_urlsafe(32)}, {"code": "line\nbreak"}):
+            with self.subTest(change=list(change)), self.assertRaises(AuthenticationError):
+                provider.complete(attempts, self.sessions, self.directory, **(callback | change))
+        self.assertEqual(requests, [])
+        session = provider.complete(attempts, self.sessions, self.directory, **callback)
+        require_staff(resolve_staff_session(self.sessions, self.directory, session), "sandbox-metrics:read")
+        with self.assertRaises(AuthenticationError):
+            provider.complete(attempts, self.sessions, self.directory, **callback)
+        self.assertEqual(len(requests), 1)
+
+    def test_keycloak_exchange_fails_closed_and_cannot_retry_consumed_state(self):
+        responses = iter((
+            httpx.Response(307, headers={"location": "https://untrusted.example.invalid/token"}),
+            self._token_response(b'{"id_token":"a","id_token":"b"}'),
+            self._token_response(b"x" * 65537),
+            self._token_response(b'{"id_token":"a"}', **{"content-encoding": "gzip"}),
+            httpx.Response(400, json={"error": "fictional upstream error"}),
+            self._token_response(b'{"id_token":"not-a-signed-token"}'),
+            httpx.ReadTimeout("fictional private diagnostic"),
+        ))
+        requests = []
+
+        def exchange(request):
+            requests.append(str(request.url))
+            outcome = next(responses)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        provider, attempts, binding = self._keycloak(exchange), self._keycloak_attempts(), token_urlsafe(32)
+        for index in range(7):
+            with self.subTest(index=index):
+                query = parse_qs(urlsplit(provider.begin(attempts, browser_binding=binding)).query)
+                for _ in range(2):
+                    with self.assertRaises(AuthenticationError) as rejected:
+                        provider.complete(attempts, self.sessions, self.directory, state=query["state"][0],
+                                          browser_binding=binding, response_issuer=self.issuer, code="fictional")
+                    self.assertNotIn("private diagnostic", str(rejected.exception))
+        self.assertEqual(requests, [self.issuer + "/protocol/openid-connect/token"] * 7)
+        self.assertEqual(self.sessions.execute("""
+            SELECT count(*) FROM omnixat_staff_session.sessions WHERE membership_id=%s
+        """, (self.staff_id,)).fetchone(), (0,))
+
+    def test_keycloak_stops_dripping_response_at_deadline(self):
+        class Drip(httpx.SyncByteStream):
+            def __iter__(self):
+                yield b"{"
+                yield b'"'
+                raise AssertionError("Exchange must stop reading once its deadline passes")
+
+        def exchange(request):
+            return httpx.Response(200, headers={"content-type": "application/json"}, stream=Drip())
+
+        provider, attempts, binding = self._keycloak(exchange), self._keycloak_attempts(), token_urlsafe(32)
+        query = parse_qs(urlsplit(provider.begin(attempts, browser_binding=binding)).query)
+        with patch("omnixat_core.keycloak_staff.monotonic", side_effect=[0, 1, 6]):
+            with self.assertRaises(AuthenticationError):
+                provider.complete(attempts, self.sessions, self.directory, state=query["state"][0],
+                                  browser_binding=binding, response_issuer=self.issuer, code="fictional")

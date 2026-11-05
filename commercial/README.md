@@ -86,3 +86,6 @@ protection and browser-bound PKCE material for a future OIDC callback.
 
 [Revocable staff sessions](STAFF_SESSIONS.md) are short-lived PostgreSQL sessions
 with fresh role, MFA and revocation checks. The browser transport is unwired.
+
+The [Keycloak staff adapter](KEYCLOAK_STAFF.md) connects these services to a
+pinned code exchange tested with a fictional provider. No realm or route is live.

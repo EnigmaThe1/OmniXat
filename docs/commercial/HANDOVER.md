@@ -200,3 +200,12 @@ tests pass**. The unchanged demo Chromium test still fails on the environment's
 socket permission restriction. Next: qualify a specific identity provider and
 wire the browser flow with the listed controls before exposing owner routes.
 Nothing live was activated or deployed.
+
+## Latest Keycloak code-flow checkpoint
+
+The internal Keycloak adapter connects browser-bound state and PKCE to staff
+session issuance with a pinned token exchange. See commercial/KEYCLOAK_STAFF.md.
+**32 core, 15 identity and 120 PostgreSQL/HTTP tests pass** using fictional
+provider responses. The unchanged Chromium test still fails on the environment's
+socket restriction. Next: validate an isolated realm with fictional accounts,
+then add browser controls before exposing owner routes. No provider was deployed.

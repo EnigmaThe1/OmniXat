@@ -459,3 +459,36 @@ Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: qualify a specific identity provider with fictional accounts, then wire
 the callback, cookies, CSRF, rate limits and expiry pruning before exposing
 owner HTTP routes. See commercial/STAFF_SESSIONS.md. No deployment.
+
+## C2 Keycloak staff code-flow adapter — completed first slice
+
+Recovered clean c330b64 with no unfinished increment or open branch PR.
+Scope: compose existing login transactions, ID-token verification and sessions
+with a pinned Keycloak confidential-client code exchange. Verify issuer, PKCE,
+bounded response handling and no credential forwarding on redirects. Use a
+fictional HTTPS transport; do not provision a realm or expose staff routes.
+
+Implemented a pinned Keycloak confidential-client adapter. It generates the
+authorization URL and checks the callback issuer and browser binding before
+exchanging a consumed code with S256 PKCE. Exchange responses are bounded,
+redirects rejected, and only the ID token is passed to the existing MFA
+verifier and session issuer. No dependency version, schema or route changed.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **15 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **120 passed**. Three new cases
+  exercise the fictional exchange through real PostgreSQL, callback binding,
+  PKCE and nonce verification, replay, redirects, malformed and oversized
+  responses, upstream timeout and a streamed response that exceeds its deadline.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged Chromium case returned 503; direct launch confirmed a socket
+  permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: run the fictional-account test matrix against an isolated Keycloak realm.
+Then wire callback and cookies, CSRF, rate limits and expiry pruning before any
+owner route. See commercial/KEYCLOAK_STAFF.md for setup and limits. No real
+provider or deployment was enabled.
