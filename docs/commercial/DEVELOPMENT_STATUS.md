@@ -327,3 +327,40 @@ pending, cancellation and event reconciliation counts). Do not include
 customer documents or present simulated counts as live revenue. Provider
 protocol, key rotation, webhook transport, live activation, quotas and
 deployment remain separate. See commercial/SANDBOX_EVENTS.md.
+
+## C3 owner sandbox metrics — completed
+
+Recovered clean 39e57ea; no recorded unfinished increment, active writer, or
+open PR for this branch. Scope: a fixed, cross-tenant PostgreSQL aggregate for
+sandbox subscription states and simulator outcomes, exposed only to verified
+interactive platform owners through a separate read-only database login. Verify
+existing tenant isolation and that the metrics login cannot read source records.
+No HTTP route, revenue measures, provider integration or activation.
+
+Implemented migration 0007, a fixed aggregate view and a read-only internal
+service. The view counts current sandbox subscription states and unique stored
+receipt outcomes in one statement, with no tenant IDs or amounts. The separate
+metrics login has no source schema access; existing sandbox runtimes retain
+tenant isolation. The application additionally requires a separate interactive
+platform-owner principal with MFA.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **9 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **96 passed**. Five new cases
+  cover an empty snapshot, multi-tenant state and receipt counts, time cutoffs,
+  role denials and database grants under a non-superuser migration owner.
+  An initial assertion expected a permission error where PostgreSQL correctly
+  rejected DELETE because the view is non-updatable; the corrected full run passed.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged browser test received 503. Chromium is installed in this
+  environment, but its launch fails with a socket permission error; Playwright's
+  alternate browser download also failed. No demo test skipped or changed.
+- `git diff --check`: passed.
+
+Next: qualify a maintained interactive staff identity adapter with verified MFA,
+revocation and staff membership, before exposing owner functions over HTTP.
+Keep tenant bearer identities separate. See commercial/SANDBOX_METRICS.md.
+No provider, live billing, revenue reporting or deployment was enabled.

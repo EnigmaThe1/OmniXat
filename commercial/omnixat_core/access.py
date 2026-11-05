@@ -12,7 +12,7 @@ TENANT_PERMISSIONS = {
     "viewer": frozenset({"records:read"}),
 }
 STAFF_PERMISSIONS = {
-    "platform_owner": frozenset({"metrics:read", "prices:write", "prices:read", "prices:audit", "support:manage"}),
+    "platform_owner": frozenset({"metrics:read", "sandbox-metrics:read", "prices:write", "prices:read", "prices:audit", "support:manage"}),
     "supervisor": frozenset({"metrics:read", "support:manage"}),
     "billing_admin": frozenset({"metrics:read", "prices:write", "prices:read"}),
     "support": frozenset({"support:manage"}),

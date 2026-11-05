@@ -72,3 +72,7 @@ PostgreSQL storage. It exposes no HTTP route and cannot activate billing.
 
 [Local simulator receipts](SANDBOX_EVENTS.md) verify and deduplicate signed
 snapshots and record mismatches without applying a billing state change.
+
+[Owner sandbox metrics](SANDBOX_METRICS.md) provide an internal, read-only
+aggregate of sandbox subscriptions and simulator receipts. No customer data or
+live revenue appears in the snapshot.

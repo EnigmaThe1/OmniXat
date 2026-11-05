@@ -161,3 +161,12 @@ commercial/SANDBOX_EVENTS.md. **32 core, 9 token and 91 PostgreSQL/HTTP tests
 pass**; the unchanged demo browser test requires Chromium. Next: an owner-only
 aggregate sandbox metrics service, with no live revenue claims or customer
 record access. No provider, payment or deployment enabled.
+
+## Latest owner sandbox metrics checkpoint
+
+Migration 0007 and an internal service report current sandbox subscription states
+and stored reconciliation outcomes as counts. See commercial/SANDBOX_METRICS.md.
+**32 core, 9 token and 96 PostgreSQL/HTTP tests pass**. The unchanged demo browser
+case could not launch Chromium due to a runtime socket permission error. Next:
+qualify a maintained interactive staff identity adapter and revocation before
+adding any owner HTTP route. No live billing or deployment was enabled.
