@@ -1,0 +1,32 @@
+# Commercial foundation — development slice C0
+
+This is **working internal Python domain code**, not a deployable SaaS or filing service. It is separate from the fictional family demo. Python 3.11+; no third-party dependencies.
+
+```bash
+cd commercial
+python3 -m unittest discover -s tests -v
+python3 -m omnixat_core
+```
+
+Implemented:
+
+- Tenant permission and staff permission checks, with separate API scopes and MFA requirements.
+- Immutable, versioned in-memory price catalogue; new versions preserve old subscription references.
+- Artifact/destination/environment-bound approval integrity helpers.
+- Agent identities cannot approve filings; API keys cannot replace human review.
+- Durable, tenant-scoped agent-job checkpoints with idempotency and expiring worker
+  claims, using a SQLite development adapter. Production PostgreSQL remains to build.
+- Bounded ordinary private-company/SA deadlines, MTD threshold screening and cumulative standard update dates.
+- Historic/current nominal micro-threshold lookup and revised-replacement completeness checks.
+- Dated source catalogue with explicit research-only versus bounded-function support.
+
+**Important boundaries:** No login/session implementation, authenticated HTTP API, database tenant isolation, billing collection, persistent price administration, owner dashboard, filing submission, tax calculation or authoritative filing status is provided by this slice. `Principal` must come from a trusted identity adapter, never customer-supplied role headers. In-memory prices/audit are a contract spike, not durable production records. Approval helpers are not a complete approval service: entity/ruleset binding, persistence, expiry/revocation and live release qualification are still required.
+
+Rule functions are narrow helpers, not full applicability engines. Special deadlines, calendar MTD elections, two-year/group/transition eligibility, continuing mandation and authority overrides remain to implement. Recheck current rules before using these helpers in a released product. No real financial data or credentials are required to run the tests.
+
+See [commercial specification](../docs/commercial/COMMERCIAL_SPEC.md) and [research baseline](../docs/commercial/UK_COMPLIANCE_RESEARCH_2026-11-05.md).
+
+The [AI and banking specification](../docs/commercial/AI_AND_BANKING_SPEC.md)
+defines autonomous bookkeeping, evidence intake, clarification, reconciliation
+and business bank connectivity. These workflows are requirements, not implemented
+connectors. After adding human-only approval guards, the core suite passes 27 tests.

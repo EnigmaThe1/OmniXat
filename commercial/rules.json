@@ -1,0 +1,488 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-11-05",
+  "complete_legal_coverage": false,
+  "live_filing_enabled": false,
+  "rules": [
+    {
+      "id": "CH-ORDINARY",
+      "title": "Ordinary private-company accounts",
+      "status": "current",
+      "implementation": "bounded_function",
+      "sources": [
+        "https://www.gov.uk/prepare-file-annual-accounts-for-limited-company"
+      ],
+      "summary": "9 months after year end; excludes first and special periods",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CT-RETURN",
+      "title": "Corporation Tax return",
+      "status": "current",
+      "implementation": "bounded_function",
+      "sources": [
+        "https://www.gov.uk/prepare-file-annual-accounts-for-limited-company"
+      ],
+      "summary": "12 months after CT accounting-period end; applicability must be established",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CT-PAYMENT",
+      "title": "Corporation Tax payment",
+      "status": "current",
+      "implementation": "bounded_function",
+      "sources": [
+        "https://www.gov.uk/prepare-file-annual-accounts-for-limited-company"
+      ],
+      "summary": "9 months and 1 day; not the instalment regime",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "SA-DEADLINES",
+      "title": "Self Assessment ordinary filing dates",
+      "status": "current",
+      "implementation": "bounded_function",
+      "sources": [
+        "https://www.gov.uk/self-assessment-tax-returns/deadlines"
+      ],
+      "summary": "Tax-year-specific deadlines; notice-specific deadlines may override",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "MTD-ENTRY",
+      "title": "MTD Income Tax rollout",
+      "status": "current_and_future",
+      "implementation": "bounded_function",
+      "sources": [
+        "https://www.gov.uk/guidance/find-out-if-and-when-you-need-to-use-making-tax-digital-for-income-tax"
+      ],
+      "summary": "2026: over 50000 using 2024\u201325 income; 2027: over 30000 using 2025\u201326; 2028: over 20000 using 2026\u201327; exemptions and existing mandation require review",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "MTD-QUARTERS",
+      "title": "MTD cumulative standard updates",
+      "status": "current",
+      "implementation": "bounded_function",
+      "sources": [
+        "https://www.gov.uk/guidance/use-making-tax-digital-for-income-tax/send-quarterly-updates"
+      ],
+      "summary": "Cumulative updates due 7 August, November, February and May; calendar elections not implemented",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CH-MICRO",
+      "title": "Micro nominal annual size thresholds",
+      "status": "current",
+      "implementation": "bounded_function",
+      "sources": [
+        "https://www.legislation.gov.uk/uksi/2024/1303/contents"
+      ],
+      "summary": "Threshold lookup only; exclusions, two-year rules, transition and prorating not implemented",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CH-REVISED",
+      "title": "Replacement revised accounts completeness",
+      "status": "current",
+      "implementation": "bounded_function",
+      "sources": [
+        "https://www.legislation.gov.uk/uksi/2008/373/regulation/14"
+      ],
+      "summary": "Preserve period; approval dates and full replacement including P&L; not a complete legal or iXBRL validator",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CH-CONFIRMATION",
+      "title": "Confirmation statements",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/guidance/filing-your-companys-confirmation-statement"
+      ],
+      "summary": "Review period, filing deadline, director identity links and fees are separate fields",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CH-IDENTITY",
+      "title": "Director and PSC identity verification",
+      "status": "current_transition",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/guidance/when-you-need-to-verify-your-identity-for-companies-house"
+      ],
+      "summary": "Role-specific dates and personal codes; not company authentication codes",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CH-2028",
+      "title": "Mandatory software accounts filing",
+      "status": "announced_future",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/government/news/companies-house-update-to-accounts-filing-from-april-2028"
+      ],
+      "summary": "April 2028 software filing announced; general P&L publication reform paused",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "FRS-2026",
+      "title": "FRS 102 and FRS 105 periodic review",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.frc.org.uk/library/standards-codes-policy/accounting-and-reporting/uk-accounting-standards/frs-102/"
+      ],
+      "summary": "Principal effective date periods beginning 1 January 2026; framework-specific transition",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CT-RATES",
+      "title": "Corporation Tax rates and marginal relief",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/government/publications/rates-and-allowances-corporation-tax/rates-and-allowances-corporation-tax"
+      ],
+      "summary": "Rate and threshold conditions, associated companies, augmented profits, exclusions and period apportionment",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "VAT-REG",
+      "title": "VAT registration",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/register-for-vat"
+      ],
+      "summary": "Rolling taxable turnover and forward test; non-established rules differ",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "VAT-MTD",
+      "title": "VAT digital records and returns",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/government/publications/vat-notice-70022-making-tax-digital-for-vat"
+      ],
+      "summary": "All VAT-registered businesses unless exempt; digital links required where applicable",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "PAYE",
+      "title": "Payroll RTI",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/running-payroll/reporting-to-hmrc"
+      ],
+      "summary": "FPS normally on or before payday; EPS and payment deadlines separately determined",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CIS",
+      "title": "Construction Industry Scheme",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/what-you-must-do-as-a-cis-contractor/file-your-monthly-returns"
+      ],
+      "summary": "Monthly return, verification, status declaration and deductions; due 19th following tax month",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "LLP",
+      "title": "LLP accounts and tax",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/government/publications/limited-liability-partnership-accounts-guidance/llp-accounts"
+      ],
+      "summary": "Company-style accounts obligations and partnership/member tax workflows",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "PARTNERSHIP",
+      "title": "Partnership returns",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/set-up-business-partnership"
+      ],
+      "summary": "Nominated partner and partner allocations; partnership MTD commencement not announced",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CIC",
+      "title": "CIC annual report",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/government/publications/community-interest-companies-how-to-form-a-cic/community-interest-companies-guidance-chapters"
+      ],
+      "summary": "CIC34 with accounts; dedicated package and revision routes",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CHARITY-EW",
+      "title": "England and Wales charities",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/guidance/prepare-a-charity-annual-return"
+      ],
+      "summary": "Legal form, income, accounts basis, scrutiny and charity regulator reporting",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CHARITY-SCOTLAND",
+      "title": "Scottish charities",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.oscr.org.uk/managing-a-charity/charity-accounting/"
+      ],
+      "summary": "OSCR annual reporting normally within 9 months; charity company may have dual obligations",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CHARITY-NI",
+      "title": "Northern Ireland charities",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.charitycommissionni.org.uk/running-a-charity/annual-reporting/"
+      ],
+      "summary": "Annual monitoring return within 10 months for relevant year",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "SOCIETY",
+      "title": "Registered societies",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.fca.org.uk/firms/annual-returns-accounts-mutual-societies"
+      ],
+      "summary": "AR30 and accounts within 7 months; society category and jurisdiction matter",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "TRUST",
+      "title": "Trust and estate returns",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/government/publications/self-assessment-trust-and-estate-tax-return-sa900"
+      ],
+      "summary": "SA900 and relevant supplementary pages; TRS separate",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "ASSOCIATION",
+      "title": "Unincorporated associations",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/guidance/register-an-unincorporated-association-for-corporation-tax"
+      ],
+      "summary": "Corporation Tax may apply without Companies House registration",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "PROPERTY-CGT",
+      "title": "UK property disposals",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/capital-gains-tax/reporting-and-paying-capital-gains-tax"
+      ],
+      "summary": "Separate 60-day reporting/payment triggers and non-resident reporting",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "ATED",
+      "title": "Annual Tax on Enveloped Dwellings",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/guidance/annual-tax-on-enveloped-dwellings-returns"
+      ],
+      "summary": "Separate annual/event deadlines and relief declaration returns",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "PROVIDER-AGENT",
+      "title": "Software provider versus paid tax adviser",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/guidance/check-if-and-when-you-need-to-register-as-a-tax-adviser-with-hmrc"
+      ],
+      "summary": "Software provision exemption does not establish exemption for managed agent services",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "PROVIDER-AML",
+      "title": "AML service classification",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/guidance/money-laundering-regulations-accountancy-service-provider-registration"
+      ],
+      "summary": "Automated accountancy/tax services can still be in scope",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "PROVIDER-ACSP",
+      "title": "Companies House authorised agents",
+      "status": "current_transition",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/guidance/being-an-authorised-corporate-service-provider"
+      ],
+      "summary": "Identity verification and filing-as-agent rules differ; confirm commencement at launch",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "PROVIDER-MTD",
+      "title": "HMRC production qualification",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://developer.service.hmrc.gov.uk/guides/income-tax-mtd-end-to-end-service-guide/documentation/how-to-integrate.html"
+      ],
+      "summary": "API testing, headers, terms and production access are separate release gates",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "TAXONOMY",
+      "title": "HMRC taxonomy acceptance windows",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/government/publications/taxonomies-accepted-by-hm-revenue-and-customs/taxonomies-accepted-by-hmrc"
+      ],
+      "summary": "Separate accounts and computational taxonomy versions; acceptance is not correctness",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "SUBSCRIPTIONS",
+      "title": "Consumer subscription reform",
+      "status": "draft_future",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/government/publications/subscription-contracts"
+      ],
+      "summary": "October linked guidance is explicitly draft; do not treat proposed dates as commenced law",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "PRIVACY",
+      "title": "Privacy by design",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/accountability-and-governance/guide-to-accountability-and-governance/data-protection-by-design-and-by-default"
+      ],
+      "summary": "UK GDPR, DPA 2018 and commenced DUAA changes; distinguish controller/processor roles",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CT-PERIOD",
+      "title": "Corporation Tax accounting-period length",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/corporation-tax-accounting-period"
+      ],
+      "summary": "No more than twelve months; longer accounts can require two returns",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CT-AMEND",
+      "title": "Corporation Tax amendments",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/company-tax-returns/making-changes"
+      ],
+      "summary": "Usually within twelve months of the filing deadline; later routes differ",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CAPITAL-ALLOWANCES",
+      "title": "Annual investment allowance",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/capital-allowances/annual-investment-allowance"
+      ],
+      "summary": "Nominal AIA 1 million; period adjustment, restrictions and other allowances require separate calculations",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CHARITY-THRESHOLDS",
+      "title": "England/Wales charity September 2026 threshold changes",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.gov.uk/guidance/changes-to-charity-accounting-and-reporting"
+      ],
+      "summary": "Apply by year END on/after 30 September 2026 and legal form; do not reuse older thresholds or apply to all UK charities",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    },
+    {
+      "id": "CHARITY-SORP",
+      "title": "Charities SORP 2026",
+      "status": "current",
+      "implementation": "research_only",
+      "sources": [
+        "https://www.charitysorp.org/download-a-full-sorp"
+      ],
+      "summary": "Reporting periods starting on/after 1 January 2026; jurisdictional enabling regulations and sector SORPs matter",
+      "checked_on": "2026-11-05",
+      "live_filing_enabled": false
+    }
+  ]
+}
