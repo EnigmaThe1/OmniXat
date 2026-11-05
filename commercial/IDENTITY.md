@@ -77,8 +77,8 @@ rotation, OIDC authorisation-code/PKCE login, CSRF/session/logout/recovery contr
 MFA step-up and production qualification remain unfinished. No provider was selected
 or advertised as integrated based solely on synthetic token tests.
 
-Next: shared authenticated customer/API transport with bounded transactions and
-error handling, plus a separately qualified maintained-provider browser login flow.
+The first [authenticated record transport](HTTP_API.md) now uses this adapter.
+Next: durable creation idempotency/audit and a separately qualified maintained-provider browser login flow.
 Preserve the bearer/human-approval separation.
 
 ## Verification

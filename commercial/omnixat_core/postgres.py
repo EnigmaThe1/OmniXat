@@ -8,6 +8,7 @@ One exclusive, idle autocommit connection per unit of work; never share concurre
 from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
+from time import monotonic
 from uuid import UUID, uuid4
 
 from psycopg.pq import TransactionStatus
@@ -73,7 +74,11 @@ def _tenant_transaction(connection, tenant, *, write=False, identity_tables=Fals
     tables_required = ('tenants', 'organisations', 'notes')
     if identity_tables:
         tables_required += ('identities', 'memberships')
+    started = monotonic()
     with connection.transaction():
+        connection.execute("""SELECT set_config('statement_timeout', '5000', true),
+                                     set_config('lock_timeout', '1000', true),
+                                     set_config('idle_in_transaction_session_timeout', '5000', true)""")
         if not write:
             connection.execute("SET TRANSACTION READ ONLY")
         with connection.cursor(row_factory=dict_row) as cursor:
@@ -90,6 +95,8 @@ def _tenant_transaction(connection, tenant, *, write=False, identity_tables=Fals
                 raise PermissionError("Non-owner runtime and active row security required")
             cursor.execute("SELECT set_config('omnixat.tenant_id', %s, true)", (str(tenant),))
         yield
+        if monotonic() - started > 10:
+            raise TimeoutError("Record transaction exceeded commit deadline")
 
 
 class TenantRecords:

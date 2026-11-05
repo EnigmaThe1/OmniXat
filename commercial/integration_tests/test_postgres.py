@@ -254,3 +254,30 @@ class PostgresRecordsTests(PostgresFixture):
                 self.assertEqual(owner.execute('SELECT count(*) FROM public.omnixat_schema_migrations').fetchone()[0],2)
         finally:
             self.admin.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(database)))
+
+    def test_record_transaction_timeouts_are_local(self):
+        before = self.runtime.execute("SELECT current_setting('statement_timeout'),current_setting('lock_timeout')").fetchone()
+        with tenant_records(self.runtime,self.actor,self.a):
+            values = self.runtime.execute("SELECT current_setting('statement_timeout'),current_setting('lock_timeout'),current_setting('idle_in_transaction_session_timeout')").fetchone()
+            self.assertEqual(values,('5s','1s','5s'))
+        self.assertEqual(self.runtime.execute("SELECT current_setting('statement_timeout'),current_setting('lock_timeout')").fetchone(),before)
+
+    def test_query_timeout_rolls_back_and_allows_connection_reuse(self):
+        with self.assertRaises(psycopg.errors.QueryCanceled):
+            with tenant_records(self.runtime,self.actor,self.a,write=True) as records:
+                org=records.create_organisation('Must roll back')['id']
+                self.runtime.execute("SET LOCAL statement_timeout='10ms'")
+                self.runtime.execute('SELECT pg_sleep(0.1)')
+        with tenant_records(self.runtime,self.actor,self.a) as records:
+            with self.assertRaises(KeyError):
+                records.get_organisation(org)
+
+    def test_elapsed_deadline_refuses_commit_and_rolls_back(self):
+        from unittest.mock import patch
+        with patch('omnixat_core.postgres.monotonic',side_effect=[0,11]):
+            with self.assertRaises(TimeoutError):
+                with tenant_records(self.runtime,self.actor,self.a,write=True) as records:
+                    org=records.create_organisation('Commit deadline rollback')['id']
+        with tenant_records(self.runtime,self.actor,self.a) as records:
+            with self.assertRaises(KeyError):
+                records.get_organisation(org)

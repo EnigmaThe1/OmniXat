@@ -11,7 +11,7 @@ from omnixat_core.identity import AccessTokenVerifier, AuthenticationError
 from omnixat_core.identity_postgres import authenticated_records
 
 
-class MembershipRecordsTests(PostgresFixture):
+class MembershipFixture(PostgresFixture):
     def setUp(self):
         super().setUp()
         self.user = uuid4()
@@ -33,6 +33,8 @@ class MembershipRecordsTests(PostgresFixture):
     def records(self, *, tenant=None, write=False, token=None, connection=None):
         return authenticated_records(connection or self.runtime,self.verifier,token or self.token(),tenant or self.a,write=write)
 
+
+class MembershipRecordsTests(MembershipFixture):
     def test_signed_identity_resolves_persisted_member_and_attributes_note(self):
         with self.records(write=True) as records:
             note = records.create_note(self.org,'Fictional authenticated note')

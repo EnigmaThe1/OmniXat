@@ -114,3 +114,14 @@ the latest status for exact boundaries. Next is shared authenticated HTTP/API se
 work and maintained-provider login qualification. Do not rebuild membership storage
 or mistake synthetic signed-token tests for a live OIDC login integration. Bearer
 principals have records-only scopes and no filing-approval or staff authority.
+
+## Latest HTTP checkpoint
+
+C2 first slice adds bearer-only ASGI organisation/note create/read routes using shared
+identity/membership/repository services. **32 core, 9 token and 58 database/HTTP tests
+pass**; the historical demo still has its known missing-Chromium failure. Read
+`commercial/HTTP_API.md` and the latest status. No listener starts automatically.
+Next: persistent creation idempotency/result reconciliation and minimal audit before
+autonomous retries. Do not duplicate these routes or expose trusted Principal input.
+Maintained-provider login, quotas and deployment remain unqualified; no approval,
+filing, billing or bank route exists in the new transport.

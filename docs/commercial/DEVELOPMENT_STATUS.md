@@ -148,3 +148,52 @@ statutory submission, bank connection or billing was enabled.
 Next resumable increment: shared authenticated customer/API transport with bounded
 transactions and controlled error responses, and qualify a maintained-provider login
 flow separately. See `commercial/IDENTITY.md`. No active task remains in this slice.
+
+## C2 authenticated records transport — completed first slice
+
+Recovered clean c95521a; no unfinished task or competing writer found. Scope:
+bearer-only versioned ASGI organisation/note endpoints calling shared authenticated
+record services; explicit hosts/HTTPS, bounded JSON intake, generic errors, scoped
+connections and database transaction time controls. Test signed fictional tokens
+through HTTP against real PostgreSQL. No login, billing, bank or filing route.
+
+Implemented `http_api.create_app`: development ASGI routes for creating/reading
+organisations and attributed notes through existing signed-token/membership services.
+No server/listener starts on import. Explicit host/HTTPS checks, bearer-only auth,
+strict single-field JSON, actual body-byte limit, five-second body deadline,
+generic error envelopes and generated request IDs. No token/SQL/payload diagnostics
+returned. Query tokens, role spoofing and unsupported idempotency headers cannot
+bypass authority. Runtime connections exit before success; no automatic retry.
+
+Shared record transactions now use local statement 5s, lock 1s and idle 5s limits,
+plus a monotonic ten-second pre-commit check. Exceeded work rolls back. This is not
+a hard wall-time cancellation guarantee; acquisition, concurrency and server/network
+limits still require hosting configuration. No database migration was modified.
+
+Verification on 5 November 2026:
+
+- `cd commercial && python3 -m unittest discover -s tests -v`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -v`: **9 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  `OMNIXAT_TEST_ADMIN_DSN` for temporary local PostgreSQL 16.2: **58 passed**.
+  Includes 18 HTTP tests using genuine signed fictional tokens/constrained DB
+  connections, three time-control tests and all previous 37 cases. Checks real
+  persistence, cross-tenant access/linking, membership revocation, roles/scopes,
+  strict/duplicate/streamed/slow/oversized body handling, errors, closure and rollback.
+- Exercised Starlette 1.6.0, httpx 0.28.1, psycopg 3.3.8, PyJWT 2.13.0, Python 3.12.
+  Starlette's httpx TestClient emits a deprecation warning recommending httpx2.
+  No warning suppressed. No network/TLS/browser hosting qualification completed.
+- `cd prototype && python3 -m unittest discover -s tests -v`: **19 passed, 1 failed**
+  at unchanged Chromium-unavailable browser test (503). Existing ResourceWarning
+  appeared. No demo code/test changed or skipped.
+- `git diff --check`: passed. Only intended code/tests/docs and optional requirements.
+
+Limits: no live identity provider/login, public deployment, quotas, owner UI,
+entity grants, complete audit, document extraction, bank, billing, filing or
+approval route. Creation remains non-idempotent; unsupported request keys are
+rejected explicitly. Unknown POST outcomes must be reconciled, not auto-retried.
+
+Next resumable increment: durable tenant/operation/payload-bound creation keys and
+result reconciliation with minimal audit events before autonomous write retries;
+maintained-provider browser login qualification remains separate unfinished work.
+Read `commercial/HTTP_API.md`. No active task remains in this increment.

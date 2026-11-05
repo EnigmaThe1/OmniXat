@@ -97,3 +97,11 @@ capability was added or changed in this increment.
 for the identity adapter also needs SELECT on `omnixat.identities` and
 `omnixat.memberships`; no write/DDL grant. Current integration suite has **37 tests**.
 See [IDENTITY.md](IDENTITY.md) for trust configuration and revocation semantics.
+
+## Record transaction time controls
+
+Shared record units now use transaction-local statement (5s), lock (1s), idle (5s)
+timeouts and a ten-second pre-commit elapsed check. Timeout/overdue work rolls back;
+settings do not leak into reused connections. This is not an absolute wall-time
+cancellation guarantee. See [HTTP_API.md](HTTP_API.md) for acquisition/hosting limits
+and the latest 58-case integration result. Migrations are unchanged by this increment.
