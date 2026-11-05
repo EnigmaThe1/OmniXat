@@ -245,3 +245,11 @@ See commercial/STAFF_BROWSER.md. **32 core, 21 identity and 136 PostgreSQL/HTTP
 tests pass**. The unchanged demo Chromium case still fails on a socket
 restriction. Next: isolated realm and browser qualification, trusted ingress
 address and log handling, request deadlines and expiry runner. No deployment.
+
+## Latest staff browser logging checkpoint
+
+The qualification app now emits action/status access events without callback
+or cookie credentials. See commercial/STAFF_BROWSER.md. **32 core, 21 identity
+and 139 PostgreSQL/HTTP tests pass**. The unchanged demo Chromium case still
+fails on a socket restriction. Next: isolated realm and browser qualification,
+external log redaction, request deadlines and expiry runner. No deployment.

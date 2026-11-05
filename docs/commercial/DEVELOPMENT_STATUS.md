@@ -615,3 +615,33 @@ Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: qualify the isolated Keycloak realm in a working browser and validate
 trusted proxy addresses, log redaction, request deadlines and the expiry runner
 before exposing owner routes. See commercial/STAFF_BROWSER.md. No deployment.
+
+## C2 privacy-safe staff browser access events — completed
+
+Recovered clean e4b3d76 with no unfinished increment or open branch PR.
+Add a staff qualification access event that records only a fixed action label
+and response status. Exercise success, denials and errors with fictional
+credentials in request and response fields. Do not claim proxy, server or
+identity-provider logs are covered, and do not deploy.
+
+The staff browser qualification app now emits allowlisted action/status access
+events. Unknown paths have a fixed label; request and response credentials,
+client addresses and exception text do not enter the records. External access
+logs are outside the app boundary and still need verification.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **139 passed**. Three new HTTP cases
+  cover credential exclusion, error/rate-limit events and log sink failure.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged Chromium case returned 503; direct launch confirmed a socket
+  permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: qualify the isolated Keycloak realm in a working browser and verify
+ingress, ASGI and tracing log redaction with fictional canaries. Complete
+request deadlines and the bounded expiry runner before any owner route.
+See commercial/STAFF_BROWSER.md. No deployment.

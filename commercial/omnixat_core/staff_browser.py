@@ -1,4 +1,5 @@
 """Opt-in staff login qualification app. No owner routes or public listener."""
+import logging
 import re
 from secrets import token_urlsafe
 from urllib.parse import parse_qsl, urlsplit
@@ -15,6 +16,7 @@ _BINDING = "__Host-omnixat-staff-binding"
 _SESSION = "__Host-omnixat-staff-session"
 _CALLBACK = "/staff/login/callback"
 _SESSION_PATH = "/staff/session"
+_ACCESS_LOG = logging.getLogger("omnixat.staff_browser.access")
 _SECURITY_HEADERS = {
     b"cache-control": b"no-store",
     b"referrer-policy": b"no-referrer",
@@ -136,12 +138,14 @@ def create_staff_browser_app(*, origin, provider, attempts, sessions, directory,
                 return _error(503)
         return Route(path, endpoint, methods=[method])
 
-    app = Starlette(debug=False, routes=[
-        route("/staff/login", "POST", "login", login),
-        route(_CALLBACK, "GET", "callback", callback),
-        route(_SESSION_PATH, "GET", "session", status),
-        route("/staff/logout", "POST", "logout", logout),
-    ])
+    endpoints = (
+        ("/staff/login", "POST", "login", login),
+        (_CALLBACK, "GET", "callback", callback),
+        (_SESSION_PATH, "GET", "session", status),
+        ("/staff/logout", "POST", "logout", logout),
+    )
+    actions = {path: action for path, _, action, _ in endpoints}
+    app = Starlette(debug=False, routes=[route(*endpoint) for endpoint in endpoints])
 
     app.router.redirect_slashes = False
 
@@ -154,6 +158,16 @@ def create_staff_browser_app(*, origin, provider, attempts, sessions, directory,
             if message["type"] == "http.response.start":
                 headers = [(key, val) for key, val in message.get("headers", []) if key not in _SECURITY_HEADERS]
                 message = {**message, "headers": headers + list(_SECURITY_HEADERS.items())}
+                await send(message)
+                # Unknown paths collapse to one label. Never pass the ASGI
+                # scope, request, response or exception to a logging handler.
+                action = actions.get(scope["path"], "unmatched")
+                try:
+                    _ACCESS_LOG.info("staff_browser action=%s status=%d", action, message["status"])
+                except Exception:
+                    # A failing log sink cannot change an authentication outcome.
+                    pass
+                return
             await send(message)
 
         hosts = [value for name, value in scope["headers"] if name.lower() == b"host"]

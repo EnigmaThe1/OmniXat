@@ -81,3 +81,23 @@ qualification safeguard, not edge denial-of-service protection; verify limits,
 proxy trust, connection budgets and ingress controls in the target environment.
 
 Technical reference: [ASGI client address](https://asgi.readthedocs.io/en/latest/specs/www.html#http-connection-scope).
+
+## Staff access events
+
+Enable INFO for `omnixat.staff_browser.access` and route it to a restricted,
+non-blocking handler. This app logger records a fixed action label and HTTP
+status after the response starts. Unknown paths collapse to `unmatched`.
+It never passes request URLs, queries, headers, client addresses, redirect
+locations, cookies, identities, or exception details to the logger. A failed
+sink does not change the response. Use a bounded sink and monitor its health
+separately; these access events are not a durable audit trail.
+
+In the isolated qualification environment, disable raw access logs on this
+virtual host or use a format that omits the request line, query string,
+headers, cookies and response Location. Check reverse-proxy, ASGI server,
+APM/tracing and provider logs separately; the app cannot redact them. Drive
+successful and rejected callbacks using fictional canary values and verify
+that each layer's exported logs omit the canaries. Retain only the pass/fail
+result, not callback URLs or the test credentials.
+
+Reference: [OAuth Security BCP, credential leakage via browser history](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.3).
