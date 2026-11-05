@@ -231,3 +231,36 @@ sandbox-ready billing increment, without activating payments. Maintained-provide
 login, entity grants, audit access/retention and API quotas remain open. The
 creation receipt is a PostgreSQL record-write contract, not a ledger effect or
 filing receipt. No active work remains in this increment.
+
+## C3 durable price catalogue — completed first slice
+
+Recovered clean d516198. Scope: separate PostgreSQL billing schema for plans and
+immutable scheduled GBP price versions, protected internal staff service and
+minimal owner audit. Verify restricted database grants, exact money, effective
+dates, preserved old IDs and transactional rollback. No payment integration.
+
+Implemented migration 0004 and the internal staff catalogue. Separate plans and
+append-only GBP versions use integer amounts, interval-specific effective instants,
+trial length and API allowance. Historical versions remain readable by ID. The
+catalogue stores verified actor attribution and projects minimal per-plan owner
+audit from committed records. Restricted runtime and application permissions keep
+customer/bearer/agent access separate. No pricing seed or billing route.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **9 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **76 passed**. Eight new pricing cases
+  cover effective-date boundaries and persistence, preserved old IDs, duplicate
+  rollback, audit permissions and attribution, separate database grants and rejected
+  privileged connections. Historical Starlette test-client warning remains.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**
+  because Chromium is unavailable for the unchanged browser lab test.
+- `git diff --check`: passed.
+
+Next: model tenant-scoped sandbox subscriptions that pin price versions and
+validate trial/state changes before adding a verified provider event adapter.
+Staff login, publication/retirement policy, retention, owner UI and entitlements
+remain open. No provider connected, payments activated or deployment performed.
+See `commercial/PRICING.md`. No active work remains in this increment.

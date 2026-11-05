@@ -20,7 +20,7 @@ Implemented:
 - Historic/current nominal micro-threshold lookup and revised-replacement completeness checks.
 - Dated source catalogue with explicit research-only versus bounded-function support.
 
-**Important boundaries:** No login/session implementation, production-qualified HTTP hosting, complete production tenant-isolation qualification, billing collection, persistent price administration, owner dashboard, filing submission, tax calculation or authoritative filing status is provided by this slice. `Principal` must come from a trusted identity adapter, never customer-supplied role headers. In-memory prices/audit are a contract spike, not durable production records. Approval helpers are not a complete approval service: entity/ruleset binding, persistence, expiry/revocation and live release qualification are still required.
+**Important boundaries:** No login/session implementation, production-qualified HTTP hosting, complete production tenant-isolation qualification, billing collection, owner dashboard, filing submission, tax calculation or authoritative filing status is provided by this slice. `Principal` must come from a trusted identity adapter, never customer-supplied role headers. The in-memory pricing spike remains for offline use; see the staff PostgreSQL catalogue below. Approval helpers are not a complete approval service: entity/ruleset binding, persistence, expiry/revocation and live release qualification are still required.
 
 Rule functions are narrow helpers, not full applicability engines. Special deadlines, calendar MTD elections, two-year/group/transition eligibility, continuing mandation and authority overrides remain to implement. Recheck current rules before using these helpers in a released product. No real financial data or credentials are required to run the tests.
 
@@ -53,7 +53,13 @@ onboarding or complete production identity qualification exists yet. See the dev
 
 The [development ASGI API](HTTP_API.md) now exposes versioned organisation/note
 create/read routes through the same bearer/membership services, with strict JSON,
-body/time controls and generic errors. Current checks: **32 core + 9 token + 68
+body/time controls and generic errors. Current checks: **32 core + 9 token + 76
 PostgreSQL/HTTP integration tests pass**. No server starts on import. Keyed creation retries now return the original record and successful creates
 record a minimal audit receipt. Audit access/retention, quotas, login, hosting and
 all live integrations remain unfinished. No approval/submission route exists in this API.
+
+## Persistent staff pricing
+
+The [PostgreSQL price catalogue](PRICING.md) adds plans, scheduled GBP versions
+and a bounded owner audit in a separate database schema. It preserves old version
+IDs and has no route, subscription state or payment connection.

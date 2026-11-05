@@ -134,3 +134,12 @@ and revoked-access checks. **32 core, 9 token and 68 PostgreSQL/HTTP tests pass*
 Read the latest status and HTTP_API.md. Next: persistent versioned plans/prices and
 owner audit for a billing sandbox, without payment activation. The demo Chromium
 prerequisite remains missing; no live provider or statutory integration exists.
+
+## Latest pricing checkpoint
+
+Migration 0004 and the internal staff catalogue persist plans, scheduled prices
+and owner audit using a dedicated database login. See commercial/PRICING.md for
+grants and limitations. **32 core, 9 token and 76 PostgreSQL/HTTP tests pass**;
+the unchanged demo browser test requires Chromium. Next: tenant-scoped sandbox
+subscriptions with pinned versions and state validation. No payment integration,
+staff HTTP route or live service is enabled.
