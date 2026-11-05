@@ -45,3 +45,35 @@ References reviewed 5 November 2026: [Keycloak OIDC endpoints](https://www.keycl
 [Keycloak server administration](https://www.keycloak.org/docs/latest/server_admin/index.html),
 [OAuth response issuer RFC 9207](https://www.rfc-editor.org/rfc/rfc9207.html)
 and [HTTPX timeouts](https://www.python-httpx.org/advanced/timeouts/).
+
+## Offline realm preflight
+
+Save the public discovery document from the known realm's
+`/.well-known/openid-configuration` and the public key set from its
+`/protocol/openid-connect/certs` endpoint. Fetch them over verified TLS
+from the independently configured realm, without following redirects. Get the
+approved signing public key or its SHA-256 fingerprint independently from the
+realm administrator; do not approve a pin by hashing a key from the same
+unverified JWKS under test.
+
+From `commercial/`, using the existing identity requirements:
+
+```bash
+python3 -m omnixat_core.keycloak_preflight \
+  --issuer https://id.example.invalid/realms/fictional \
+  --metadata metadata.json --jwks jwks.json \
+  --pin "approved-kid=${APPROVED_SPKI_SHA256}"
+```
+
+For an independently supplied PEM public key, the expected lowercase pin is
+the SHA-256 digest of its DER SubjectPublicKeyInfo:
+`openssl pkey -pubin -in approved-public.pem -outform DER | openssl dgst -sha256`.
+Repeat `--pin` to check explicitly approved overlapping rotation keys. Extra
+public keys in the input are never added to the application's runtime trust.
+The preflight takes no credentials, makes no network requests, and prints only
+a pass/fail verdict. It verifies the advertised profile and pinned keys, not
+per-client settings, MFA or recovery behavior; the fictional-account browser
+matrix above remains mandatory.
+
+Metadata references: [OpenID Connect Discovery](https://openid.net/specs/openid-connect-discovery-1_0.html)
+and [OAuth authorization server metadata RFC 8414](https://www.rfc-editor.org/rfc/rfc8414.html).

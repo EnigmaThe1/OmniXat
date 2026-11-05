@@ -89,3 +89,6 @@ with fresh role, MFA and revocation checks. The browser transport is unwired.
 
 The [Keycloak staff adapter](KEYCLOAK_STAFF.md) connects these services to a
 pinned code exchange tested with a fictional provider. No realm or route is live.
+
+The same [Keycloak guide](KEYCLOAK_STAFF.md#offline-realm-preflight) describes a
+credential-free check of saved discovery metadata and approved signing keys.

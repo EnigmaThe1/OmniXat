@@ -209,3 +209,13 @@ session issuance with a pinned token exchange. See commercial/KEYCLOAK_STAFF.md.
 provider responses. The unchanged Chromium test still fails on the environment's
 socket restriction. Next: validate an isolated realm with fictional accounts,
 then add browser controls before exposing owner routes. No provider was deployed.
+
+## Latest Keycloak preflight checkpoint
+
+The offline preflight checks an isolated realm's saved metadata and independently
+approved signing keys against the exact staff adapter profile. See
+commercial/KEYCLOAK_STAFF.md. **32 core, 21 identity and 120 PostgreSQL/HTTP tests
+pass**. Keycloak archive download timed out and the unchanged demo Chromium case
+still fails on a socket restriction. Next: run the fictional-account browser
+matrix against an isolated realm with working Chromium, then wire staff browser
+controls. No realm or route was deployed.

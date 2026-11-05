@@ -2,26 +2,18 @@
 import json
 import re
 from time import monotonic
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlencode
 
 import httpx
 
 from .identity import AuthenticationError
+from .keycloak_preflight import keycloak_endpoints, _unique_object
 from .staff_identity import StaffIDTokenVerifier
 from .staff_login_postgres import PostgresStaffLoginTransactions
 from .staff_sessions_postgres import issue_staff_session
 
 _MAX_RESPONSE_BYTES = 65536
 _MAX_EXCHANGE_SECONDS = 5
-
-
-def _unique_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate token response field")
-        result[key] = value
-    return result
 
 
 class KeycloakStaffLogin:
@@ -31,10 +23,7 @@ class KeycloakStaffLogin:
                  public_keys, mfa_acr, transport=None):
         self._attempts = PostgresStaffLoginTransactions(
             issuer=issuer, client_id=client_id, redirect_uri=redirect_uri, key=login_key)
-        if not re.fullmatch(r"/realms/[A-Za-z0-9._~-]{1,128}", urlsplit(issuer).path):
-            raise ValueError("Expected a Keycloak realm issuer at /realms/<realm>")
-        if urlsplit(issuer).path.rsplit("/", 1)[-1] in (".", ".."):
-            raise ValueError("Invalid Keycloak realm")
+        self._endpoints = keycloak_endpoints(issuer)
         if not isinstance(client_id, str) or not re.fullmatch(r"[A-Za-z0-9._~-]{1,255}", client_id):
             raise ValueError("Expected a URL-safe staff client ID")
         if not isinstance(client_secret, str) or not re.fullmatch(r"[A-Za-z0-9._~-]{16,512}", client_secret):
@@ -58,7 +47,7 @@ class KeycloakStaffLogin:
             "code_challenge": attempt.code_challenge, "code_challenge_method": "S256",
             "acr_values": self._mfa_acr, "max_age": "0",
         })
-        return self._issuer + "/protocol/openid-connect/auth?" + query
+        return self._endpoints["authorization_endpoint"] + "?" + query
 
     def complete(self, attempts, sessions, directory, *, state, browser_binding, response_issuer, code) -> str:
         """Consume before exchange. After any exchange failure, restart the login."""
@@ -76,7 +65,7 @@ class KeycloakStaffLogin:
             with httpx.Client(transport=self._transport, trust_env=False, follow_redirects=False,
                               timeout=httpx.Timeout(2.0)) as client:
                 with client.stream(
-                    "POST", self._issuer + "/protocol/openid-connect/token",
+                    "POST", self._endpoints["token_endpoint"],
                     auth=httpx.BasicAuth(self._client_id, self._client_secret),
                     data={"grant_type": "authorization_code", "code": code,
                           "redirect_uri": self._redirect_uri, "code_verifier": code_verifier},
