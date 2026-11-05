@@ -645,3 +645,34 @@ Next: qualify the isolated Keycloak realm in a working browser and verify
 ingress, ASGI and tracing log redaction with fictional canaries. Complete
 request deadlines and the bounded expiry runner before any owner route.
 See commercial/STAFF_BROWSER.md. No deployment.
+
+## C2 bounded staff expiry runner — completed
+
+Recovered clean b66db8f with no unfinished increment or open branch PR.
+Add a one-shot operator command for the existing restricted expiry function.
+Bound the number of independently committed batches and report counts only.
+Verify the command with a real disposable database and maintenance login.
+No scheduler, realm, staff route or deployment.
+
+Added a one-shot cleanup command with fixed work caps, a statement timeout,
+restricted-role checks and count-only JSON. It leaves active rows untouched
+and can be retried after partial progress. No migration or schedule changed.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **142 passed**. Three new cases
+  cover bounded batches, role isolation and real CLI output/error redaction.
+  An initial schema-privilege error in the role inspection was corrected
+  before the full suite passed.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged Chromium case returned 503; direct launch confirmed a socket
+  permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: qualify the isolated Keycloak realm in a working browser, check ingress
+log redaction and staff request deadlines, then configure and rehearse the
+cleanup command in the qualification environment before owner routes.
+See commercial/STAFF_AUTH_CLEANUP.md. No deployment or job activation.

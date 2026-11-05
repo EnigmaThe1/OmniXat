@@ -253,3 +253,12 @@ or cookie credentials. See commercial/STAFF_BROWSER.md. **32 core, 21 identity
 and 139 PostgreSQL/HTTP tests pass**. The unchanged demo Chromium case still
 fails on a socket restriction. Next: isolated realm and browser qualification,
 external log redaction, request deadlines and expiry runner. No deployment.
+
+## Latest staff expiry runner checkpoint
+
+The one-shot staff expiry command calls the restricted PostgreSQL function in
+bounded batches and emits counts only. See commercial/STAFF_AUTH_CLEANUP.md.
+**32 core, 21 identity and 142 PostgreSQL/HTTP tests pass**. The unchanged demo
+Chromium case still fails on a socket restriction. Next: isolated realm and
+browser qualification, ingress log redaction and request deadlines, then
+rehearse the operator runner before owner routes. No deployment or schedule.

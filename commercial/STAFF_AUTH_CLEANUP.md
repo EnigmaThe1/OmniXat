@@ -36,9 +36,30 @@ schema-qualified SQL and a restricted search path; execution is revoked from
 PUBLIC. Do not grant the maintenance login direct authentication table access
 or let the application login inherit the maintenance role.
 
-No job is scheduled by this migration. Before staff routes are exposed,
-configure a bounded periodic runner using this login, record counts only,
-and alert on repeated execution failures. Qualify the browser and MFA flow
+## One-shot operator command
+
+From `commercial/`, with the existing PostgreSQL requirements installed and
+`OMNIXAT_STAFF_MAINTENANCE_DSN` provided by your secret manager:
+
+```bash
+python3 -m omnixat_core.staff_auth_cleanup --batch-size 100 --max-batches 4
+```
+
+The runner rejects privileged or mixed application logins and uses the restricted
+function. Each batch is a separate transaction with a five-second statement
+timeout. Defaults are shown above; the limits are 1–500 rows per table per call
+and 1–10 calls per invocation. It stops early when both counts are below the
+batch size. A short batch can leave locked records behind for another pass.
+
+On success it prints JSON containing only the number of batches and deletion
+counts. Configuration errors exit 2; database or grant failures exit 1 and
+write a generic diagnostic to stderr. A later failure does not undo earlier
+committed batches. Re-run safely and alert on repeated failures. Use a trusted
+single-endpoint DSN and an external process deadline in the operator environment;
+the connection and database statement timeouts are not a wall-clock guarantee.
+
+No job is scheduled here. Before staff routes are exposed, configure the
+periodic invocation, validate its alerts and qualify the browser/MFA flow
 separately; see [Keycloak staff setup](KEYCLOAK_STAFF.md).
 
 PostgreSQL 16 references reviewed 5 November 2026:
