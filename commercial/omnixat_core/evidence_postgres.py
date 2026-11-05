@@ -7,10 +7,9 @@ from uuid import UUID, uuid4
 from psycopg.rows import dict_row
 
 from .access import require_tenant
+from .evidence_intake import EVIDENCE_MEDIA_TYPES, MAX_EVIDENCE_BYTES
 from .postgres import _tenant_transaction
 
-_MAX_BYTES = 20 * 1024 * 1024
-_MEDIA_TYPES = ("application/pdf", "image/jpeg", "image/png", "text/csv")
 _COLUMNS = "id, organisation_id, content_sha256, media_type, byte_size, registered_by, registered_at"
 _TABLES = ("organisations", "evidence_registrations")
 
@@ -49,9 +48,9 @@ def register_evidence(connection, actor, tenant_id, organisation_id, *, content_
     organisation = UUID(str(organisation_id))
     if not isinstance(content_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", content_sha256):
         raise ValueError("Expected a lowercase SHA-256 fingerprint")
-    if media_type not in _MEDIA_TYPES:
+    if media_type not in EVIDENCE_MEDIA_TYPES:
         raise ValueError("Unsupported evidence media type")
-    if type(byte_size) is not int or not 1 <= byte_size <= _MAX_BYTES:
+    if type(byte_size) is not int or not 1 <= byte_size <= MAX_EVIDENCE_BYTES:
         raise ValueError("Evidence size outside intake limit")
     if not isinstance(actor.user_id, str) or not actor.user_id.strip() or len(actor.user_id) > 200 or "\x00" in actor.user_id:
         raise ValueError("Invalid registrar identity")

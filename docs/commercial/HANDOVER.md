@@ -280,3 +280,13 @@ concurrent duplicate registration. See commercial/EVIDENCE.md. **32 core,
 case still fails on a socket restriction. Next: private staged object intake
 and quarantine; isolated Keycloak/browser qualification remains a separate
 gate before owner routes. No live data or deployment.
+
+## Latest local evidence staging checkpoint
+
+The POSIX spool bounds evidence streams and computes SHA-256 from original bytes.
+It keeps bytes in a private temporary file for trusted scanner integration and
+closes the handle on context exit. See commercial/EVIDENCE.md. **38 core,
+21 identity and 152 PostgreSQL/HTTP tests pass**. The unchanged demo Chromium
+case still fails on a socket restriction. Next: tenant-scoped durable
+quarantine, retry/orphan cleanup and scan decisions bound to exact stored bytes.
+No upload route, scan, extraction or deployment.

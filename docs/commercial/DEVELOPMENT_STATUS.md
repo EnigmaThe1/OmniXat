@@ -740,3 +740,36 @@ Next for evidence: private staged object intake with streamed fingerprint and
 size checks and a quarantine state before extraction. Staff owner routes still
 require an isolated Keycloak/browser qualification run. See commercial/EVIDENCE.md.
 No deployment, upload, model call, ledger effect or filing.
+
+## C4 local evidence staging — completed
+
+Recovered clean 055fe24 with no unfinished increment or open branch PR.
+Implement a bounded, private temporary quarantine for evidence streams, with
+computed SHA-256/size, cleanup on failure, and a scanner-facing byte reader.
+Use fictional fixtures only. No HTTP route, durable storage, database
+registration, scan result, extraction, ledger write or filing.
+
+The internal POSIX spool now validates a declared media type and optional
+length, enforces a 20 MiB ceiling, and hashes the original stream. A trusted
+scanner can read the unnamed temporary file only within the staging context.
+The file closes on all context exits. PostgreSQL metadata limits share the
+same Python constants; the registry and staging stay independent.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **38 passed**.
+  Six new tests cover short reads and exact bytes, size limits, malformed
+  streams, private-directory checks, and cleanup after read/consumer failure.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **152 passed**.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. The unchanged Chromium case
+  returned 503; a direct headless launch confirmed socket permission failure.
+  No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: implement tenant-scoped durable quarantine with immutable object identity,
+retry and orphan cleanup. Bind a verified scan decision to the stored bytes
+before extraction. Request deadlines, aggregate quotas and a qualified scanner
+are still required. No upload route, real data or deployment.

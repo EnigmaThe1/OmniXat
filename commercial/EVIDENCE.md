@@ -37,3 +37,27 @@ filing are outside this increment.
 
 References: [PostgreSQL 16 row security](https://www.postgresql.org/docs/16/ddl-rowsecurity.html)
 and [conflict handling](https://www.postgresql.org/docs/16/sql-insert.html).
+
+## Local quarantine staging
+
+`evidence_intake.stage_evidence` is an internal context manager for a blocking
+binary source. It validates the declared media type, reads no more than 64 KiB
+at a time, stops at the optional declared byte count (or the 20 MiB maximum)
+plus one byte, and rejects empty, short or oversized streams. It computes
+SHA-256 from the original bytes and rewinds the temporary file for a trusted
+scanner to read in bounded chunks. It accepts no client hash, filename or URL.
+
+On POSIX, the spool uses a [Python temporary file](https://docs.python.org/3.12/library/tempfile.html#tempfile.TemporaryFile)
+in a pre-provisioned directory owned by the service user with no group or
+other permissions (for example, mode 0700). Use a trusted path whose ancestors
+cannot be replaced by untrusted users, on a private volume outside any
+served path. There is no persistent filename or public URL. The handle closes
+on context exit, including read, write or scanner failures. The caller owns
+the input stream and must enforce request deadlines and aggregate quotas.
+
+The reader is for trusted scanner integration only. No scanner is wired,
+and a staged handle does not certify file format, malware status or durable
+storage. Do not register staging metadata alone as proof of a stored file.
+Next: add a private tenant-scoped durable quarantine adapter with immutable
+object identity, interrupted-write cleanup and tests for retries, then bind
+a verified scan decision to those exact stored bytes before extraction.

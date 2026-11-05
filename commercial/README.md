@@ -103,4 +103,6 @@ The [staff browser admission hook](STAFF_BROWSER.md#shared-qualification-limits)
 shares qualification rate limits across workers through PostgreSQL.
 
 The [evidence registry](EVIDENCE.md) records document fingerprints and minimal
-metadata with organisation-scoped duplicate detection. File intake is not wired.
+metadata with organisation-scoped duplicate detection. An internal local
+quarantine spool computes fingerprints from bounded streams; it is not wired
+to HTTP, durable storage, scanning or extraction.
