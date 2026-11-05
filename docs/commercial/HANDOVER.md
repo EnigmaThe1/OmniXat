@@ -290,3 +290,13 @@ closes the handle on context exit. See commercial/EVIDENCE.md. **38 core,
 case still fails on a socket restriction. Next: tenant-scoped durable
 quarantine, retry/orphan cleanup and scan decisions bound to exact stored bytes.
 No upload route, scan, extraction or deployment.
+
+## Latest durable evidence quarantine checkpoint
+
+Migration 0014 stores a verified original and receipt atomically in PostgreSQL,
+scoped to the tenant and bound to the registration fingerprint and byte count.
+Concurrent retries replay the original receipt; the write role cannot read the
+payload. See commercial/EVIDENCE.md. **38 core, 21 identity and 158 PostgreSQL/HTTP
+tests pass**. The unchanged demo Chromium case still fails on a socket restriction.
+Next: scanner-specific access and an exact-byte verdict before any extraction.
+No upload route, scanner, extraction, live records or deployment.

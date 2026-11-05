@@ -773,3 +773,39 @@ Next: implement tenant-scoped durable quarantine with immutable object identity,
 retry and orphan cleanup. Bind a verified scan decision to the stored bytes
 before extraction. Request deadlines, aggregate quotas and a qualified scanner
 are still required. No upload route, real data or deployment.
+
+## C4 durable PostgreSQL evidence quarantine — completed
+
+Recovered the clean branch at 526ebe0. Add an internal bounded PostgreSQL
+adapter that stores an original only against a matching tenant evidence
+registration, with immutable bytes, metadata-only receipts and safe retries.
+Keep bytes and receipt in one transaction so interrupted writes do not leave
+separate storage objects. No scanner verdict, extraction, upload route or
+deployment. Use fictional inputs only.
+
+Migration 0014 stores the original and its receipt in one tenant-scoped row.
+A composite foreign key binds PostgreSQL-computed digest and size to the
+evidence registration. The internal adapter verifies organisation, media type
+and original bytes, returns the existing receipt for matching concurrent
+retries, and uses a role that cannot read or mutate stored payloads. No
+external object is created, so interrupted writes leave no orphan blob.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **38 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **158 passed** after updating
+  the upgrade test's migration count. Six new cases cover persistence, retries,
+  tenant and organisation isolation, role grants, fingerprint enforcement and
+  interrupted input.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. The unchanged demo browser case
+  returned 503; direct Chromium launch confirmed socket permission failure.
+  No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: separate scanner role and a durable verdict tied to exact bytes and
+scanner policy, then gate extraction on the verified decision. The adapter
+buffers one bounded file; real use also needs capacity, retention, logging,
+encryption and restore qualification. No deployment or real evidence used.

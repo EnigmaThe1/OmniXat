@@ -28,9 +28,8 @@ boundary still applies; row security is not a defence against a compromised
 SQL runtime setting a different tenant context.
 
 The development metadata allowlist is PDF, JPEG, PNG and CSV, up to 20 MiB.
-This is an intake bound, not file-format validation. Next: stage original
-bytes through a private object-store adapter, verify the fingerprint while
-streaming, and keep unscanned objects quarantined. Model extraction should
+This is an intake bound, not file-format validation. Verify the fingerprint
+while streaming and keep unscanned objects quarantined. Model extraction should
 consume verified evidence references, not fetch arbitrary user-supplied URLs.
 Retention and correction workflows, source-page references, ledger writes and
 filing are outside this increment.
@@ -58,6 +57,35 @@ the input stream and must enforce request deadlines and aggregate quotas.
 The reader is for trusted scanner integration only. No scanner is wired,
 and a staged handle does not certify file format, malware status or durable
 storage. Do not register staging metadata alone as proof of a stored file.
-Next: add a private tenant-scoped durable quarantine adapter with immutable
-object identity, interrupted-write cleanup and tests for retries, then bind
-a verified scan decision to those exact stored bytes before extraction.
+
+## Durable PostgreSQL quarantine
+
+Migration 0014 adds a separate quarantine table. The internal
+`store_quarantined_evidence` operation accepts an unconsumed staged original
+and an existing evidence ID. It checks tenant, organisation and registration
+metadata before consuming bytes, and verifies the digest again. PostgreSQL
+computes the digest and size independently and requires an exact match to the
+registration through a composite foreign key. The immutable object identity
+is the tenant/evidence pair. A matching retry from a fresh staging context
+returns the original receipt, including under concurrent requests.
+
+Use a non-owner runtime that cannot bypass row security. Grant schema USAGE,
+SELECT on evidence registrations, and these column grants on quarantine:
+
+- INSERT on `tenant_id, evidence_id, original_bytes`.
+- SELECT on `tenant_id, evidence_id, stored_at`.
+
+The store rejects roles with SELECT on the payload or UPDATE, DELETE or
+TRUNCATE on quarantine. It returns only evidence ID and storage timestamp.
+Quarantine bytes and receipt are written atomically; a failed transaction
+leaves no standalone payload or object key to clean up. A metadata
+registration may still exist before storage and is never a storage receipt.
+This adapter buffers one verified original (at most 20 MiB) for a single
+binary SQL parameter. It is not a streaming external store and does not
+enforce aggregate storage or worker concurrency limits.
+
+There is no scan verdict, raw byte retrieval service or extraction authority.
+Before real use, qualify storage and backup encryption, payload-free database
+logging, capacity, retention and restore. Next: add a separate scanner role
+and verified decisions bound to the exact stored bytes, followed by an
+extraction gate. See [PostgreSQL binary functions](https://www.postgresql.org/docs/16/functions-binarystring.html).
