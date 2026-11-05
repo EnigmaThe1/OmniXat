@@ -170,3 +170,13 @@ and stored reconciliation outcomes as counts. See commercial/SANDBOX_METRICS.md.
 case could not launch Chromium due to a runtime socket permission error. Next:
 qualify a maintained interactive staff identity adapter and revocation before
 adding any owner HTTP route. No live billing or deployment was enabled.
+
+## Latest staff identity checkpoint
+
+Migration 0008 and the internal callback adapter verify a staff ID token
+and look up current membership, role and revocation separately from tenant
+bearer access. See commercial/STAFF_IDENTITY.md. **32 core, 15 identity and
+101 PostgreSQL/HTTP tests pass**. The unchanged demo Chromium test still
+fails on a launch socket permission error. Next: one-time login transaction
+storage, revocable staff sessions and specific provider qualification before
+any owner HTTP route. No real identity provider or deployment was enabled.

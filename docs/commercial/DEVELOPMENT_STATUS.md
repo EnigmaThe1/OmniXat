@@ -364,3 +364,37 @@ Next: qualify a maintained interactive staff identity adapter with verified MFA,
 revocation and staff membership, before exposing owner functions over HTTP.
 Keep tenant bearer identities separate. See commercial/SANDBOX_METRICS.md.
 No provider, live billing, revenue reporting or deployment was enabled.
+
+## C2 interactive staff identity boundary — completed first slice
+
+Recovered clean 75d3fba with no recorded unfinished task or open branch PR.
+Scope: verify a narrowly profiled staff OIDC callback ID token with PyJWT,
+require recent provider-attested MFA, then resolve a separate PostgreSQL
+staff membership with revocation. Exercise with fictional signed tokens and
+least-privilege database grants. Browser callback, provider selection and
+qualification, session issuance and owner HTTP routes remain outside this slice.
+
+Migration 0008 adds a separate staff directory keyed by issuer and subject.
+The PyJWT verifier checks the pinned staff client, signing key, login nonce
+and provider-specific MFA assurance class and age. The database supplies the
+role; revoked membership and authentications at or before its cutoff fail.
+The dedicated lookup login cannot write memberships or access tenant data.
+No new dependency version, provider connection or route was added.
+
+Verification on 5 November 2026 (Python 3.12, PyJWT 2.13.0, psycopg 3.3.8):
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **15 passed**.
+  Six new cases cover trusted signature/client/nonce, recent MFA and rejection
+  of tenant bearer tokens by the staff verifier and staff ID tokens by the bearer verifier.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable PostgreSQL 16.2 via OMNIXAT_TEST_ADMIN_DSN: **101 passed**. Five new
+  cases cover no self-enrolment, role changes, revocation, RLS and login grants.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged browser test returned 503; direct Chromium launch reproduced
+  an operating system socket permission failure. No test skipped.
+- `git diff --check`: passed.
+
+Next: one-time login transaction storage and a bounded revocable staff session,
+then maintained-provider qualification before adding any owner HTTP route.
+See commercial/STAFF_IDENTITY.md for the trust boundary and exact limits.

@@ -23,24 +23,28 @@ class VerifiedAccess:
     scopes: frozenset[str]
 
 
+def _pinned_rsa_keys(issuer, audience, public_keys):
+    if not isinstance(issuer, str) or not 1 <= len(issuer) <= 2048:
+        raise ValueError("Pinned HTTPS issuer required")
+    url = urlsplit(issuer)
+    if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment:
+        raise ValueError("Pinned HTTPS issuer required")
+    if not isinstance(audience, str) or not audience.strip():
+        raise ValueError("Pinned audience required")
+    keys = dict(public_keys)
+    if not keys or any(not isinstance(k, str) or not k or len(k) > 200 or
+                       not isinstance(v, RSAPublicKey) or v.key_size < 2048
+                       for k, v in keys.items()):
+        raise ValueError("Pinned RSA public keys of at least 2048 bits required")
+    return MappingProxyType(keys)
+
+
 class AccessTokenVerifier:
     def __init__(self, *, issuer, audience, public_keys, max_lifetime=900):
-        if not isinstance(issuer, str) or len(issuer) > 2048:
-            raise ValueError("Pinned HTTPS issuer required")
-        url = urlsplit(issuer)
-        if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment:
-            raise ValueError("Pinned HTTPS issuer required")
-        if not isinstance(audience, str) or not audience.strip():
-            raise ValueError("Pinned audience required")
         if type(max_lifetime) is not int or not 1 <= max_lifetime <= 3600:
             raise ValueError("Bounded token lifetime required")
-        keys = dict(public_keys)
-        if not keys or any(not isinstance(k, str) or not k or len(k) > 200 or
-                           not isinstance(v, RSAPublicKey) or v.key_size < 2048
-                           for k, v in keys.items()):
-            raise ValueError("Pinned RSA public keys of at least 2048 bits required")
+        self._keys = _pinned_rsa_keys(issuer, audience, public_keys)
         self.issuer, self.audience = issuer, audience
-        self._keys = MappingProxyType(keys)
         self._max_lifetime = max_lifetime
 
     def verify(self, token):

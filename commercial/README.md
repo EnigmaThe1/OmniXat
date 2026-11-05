@@ -76,3 +76,7 @@ snapshots and record mismatches without applying a billing state change.
 [Owner sandbox metrics](SANDBOX_METRICS.md) provide an internal, read-only
 aggregate of sandbox subscriptions and simulator receipts. No customer data or
 live revenue appears in the snapshot.
+
+The [staff identity boundary](STAFF_IDENTITY.md) verifies a profiled staff ID
+token and checks separate PostgreSQL membership and revocation. No browser
+callback, session or staff route is wired.
