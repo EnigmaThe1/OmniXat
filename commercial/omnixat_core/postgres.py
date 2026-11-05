@@ -80,10 +80,10 @@ def tenant_records(connection, actor, tenant_id, *, write=False):
 
 
 @contextmanager
-def _tenant_transaction(connection, tenant, *, write=False, identity_tables=False):
+def _tenant_transaction(connection, tenant, *, write=False, identity_tables=False,
+                        schema='omnixat', tables_required=('tenants', 'organisations', 'notes', 'record_creations')):
     """Internal exclusive transaction; caller must establish authorisation."""
     _idle(connection)
-    tables_required = ('tenants', 'organisations', 'notes', 'record_creations')
     if identity_tables:
         tables_required += ('identities', 'memberships')
     started = monotonic()
@@ -103,7 +103,7 @@ def _tenant_transaction(connection, tenant, *, write=False, identity_tables=Fals
             cursor.execute("""SELECT c.relname, pg_has_role(current_user, c.relowner, 'MEMBER') AS owned,
                                   row_security_active(c.oid) AS protected
                 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-                WHERE n.nspname = 'omnixat' AND c.relname = ANY(%s)""", (list(tables_required),))
+                WHERE n.nspname = %s AND c.relname = ANY(%s)""", (schema, list(tables_required)))
             tables = cursor.fetchall()
             if len(tables) != len(tables_required) or any(t["owned"] or not t["protected"] for t in tables):
                 raise PermissionError("Non-owner runtime and active row security required")

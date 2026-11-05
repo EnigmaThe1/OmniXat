@@ -143,3 +143,12 @@ grants and limitations. **32 core, 9 token and 76 PostgreSQL/HTTP tests pass**;
 the unchanged demo browser test requires Chromium. Next: tenant-scoped sandbox
 subscriptions with pinned versions and state validation. No payment integration,
 staff HTTP route or live service is enabled.
+
+## Latest subscription sandbox checkpoint
+
+Migration 0005 adds isolated sandbox subscriptions and cancellation records,
+with pinned prices, trial expiry and no paid activation. See
+commercial/SUBSCRIPTION_SANDBOX.md. **32 core, 9 token and 84 PostgreSQL/HTTP tests
+pass**; the unchanged demo browser test requires Chromium. Next: authenticated,
+deduplicated sandbox event handling and reconciliation. No payment provider,
+customer route or live entitlement is enabled.

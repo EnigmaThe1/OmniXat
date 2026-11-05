@@ -264,3 +264,35 @@ validate trial/state changes before adding a verified provider event adapter.
 Staff login, publication/retirement policy, retention, owner UI and entitlements
 remain open. No provider connected, payments activated or deployment performed.
 See `commercial/PRICING.md`. No active work remains in this increment.
+
+## C3 tenant subscription sandbox — completed first slice
+
+Recovered clean fb11bed. Scope: isolated PostgreSQL sandbox subscriptions with
+pinned effective prices, trial deadlines, pending state for non-trial prices
+and append-only cancellation. Verify tenant isolation and write permissions,
+version preservation, trial boundaries and cancellation replay. No provider,
+activation, customer billing route or live entitlement enforcement.
+
+Migration 0005 adds a separately granted sandbox schema, forced RLS and
+tenant-bound cancellations. An effective price is pinned at start, trial
+expiry is calculated from the stored deadline, and cancellation is append-only
+and repeatable. Pending and trial states cannot activate or charge a subscription.
+One sandbox record per tenant prevents trial reset in this development contract.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **9 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **84 passed**. Eight sandbox
+  cases cover pinned price/reconnect, exact expiry, cancellation replay,
+  denied principals, dedicated grants and tenant-bound foreign keys. The first
+  run had a test fixture Identifier attribute error; the corrected full run passed.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**
+  at the unchanged Chromium-dependent browser lab test. No test skipped.
+- `git diff --check`: passed.
+
+Next: define authenticated and deduplicated sandbox provider-event handling
+and reconciliation before connecting a provider. No real billing activation,
+payments, subscription contract, live entitlement or deployment. See
+commercial/SUBSCRIPTION_SANDBOX.md. No unfinished work in this increment.
