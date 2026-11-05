@@ -1,5 +1,7 @@
 """Opt-in staff login qualification app. No owner routes or public listener."""
+from contextlib import contextmanager
 import logging
+from math import isfinite
 import re
 from secrets import token_urlsafe
 from urllib.parse import parse_qsl, urlsplit
@@ -9,6 +11,7 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
 from .identity import AuthenticationError
+from .staff_deadline import staff_request_budget, staff_seconds_left
 from .staff_identity import STAFF_MFA_MAX_AGE_SECONDS
 from .staff_sessions_postgres import resolve_staff_session, revoke_staff_session
 
@@ -72,8 +75,20 @@ def _error(status):
                          else "staff authentication request rejected"}, status_code=status)
 
 
-def create_staff_browser_app(*, origin, provider, attempts, sessions, directory, admit):
+@contextmanager
+def _acquire(factory):
+    staff_seconds_left(30)
+    with factory() as connection:
+        staff_seconds_left(30)
+        yield connection
+
+
+def create_staff_browser_app(*, origin, provider, attempts, sessions, directory, admit,
+                             request_timeout_seconds=8):
     """Connection factories return context managers; admit(request, action) must fail closed."""
+    if (type(request_timeout_seconds) not in (int, float)
+            or not 0 < request_timeout_seconds <= 30 or not isfinite(request_timeout_seconds)):
+        raise ValueError("Staff request timeout must be positive and no more than 30 seconds")
     parsed = urlsplit(origin)
     if (not re.fullmatch(r"https://[A-Za-z0-9.-]+(?::[0-9]{1,5})?", origin)
             or not parsed.hostname or parsed.netloc != parsed.netloc.lower()
@@ -83,7 +98,7 @@ def create_staff_browser_app(*, origin, provider, attempts, sessions, directory,
 
     def login(request):
         binding = token_urlsafe(32)
-        with attempts() as connection:
+        with _acquire(attempts) as connection:
             location = provider.begin(connection, browser_binding=binding)
         response = RedirectResponse(location, status_code=303)
         _set_cookie(response, _BINDING, binding, 300)
@@ -94,7 +109,7 @@ def create_staff_browser_app(*, origin, provider, attempts, sessions, directory,
         binding = _cookie(request, _BINDING)
         if binding is None:
             return _error(400)
-        with attempts() as attempt_db, sessions() as session_db, directory() as directory_db:
+        with _acquire(attempts) as attempt_db, _acquire(sessions) as session_db, _acquire(directory) as directory_db:
             token = provider.complete(attempt_db, session_db, directory_db, state=args["state"],
                                       browser_binding=binding, response_issuer=args["iss"], code=args["code"])
         response = RedirectResponse(_SESSION_PATH, status_code=303)
@@ -106,14 +121,14 @@ def create_staff_browser_app(*, origin, provider, attempts, sessions, directory,
         token = _cookie(request, _SESSION)
         if token is None:
             return _error(401)
-        with sessions() as session_db, directory() as directory_db:
+        with _acquire(sessions) as session_db, _acquire(directory) as directory_db:
             resolve_staff_session(session_db, directory_db, token)
         return JSONResponse({"signed_in": True})
 
     def logout(request):
         token = _cookie(request, _SESSION)
         if token is not None:
-            with sessions() as connection:
+            with _acquire(sessions) as connection:
                 revoke_staff_session(connection, token)
         response = Response(status_code=204)
         _set_cookie(response, _BINDING, "", 0)
@@ -127,9 +142,14 @@ def create_staff_browser_app(*, origin, provider, attempts, sessions, directory,
             if method == "POST" and request.headers.getlist("origin") != [origin]:
                 return _error(403)
             try:
-                if admit(request, action) is not True:
+                staff_seconds_left(30)
+                admitted = admit(request, action)
+                staff_seconds_left(30)
+                if admitted is not True:
                     return _error(429)
-                return handler(request)
+                response = handler(request)
+                staff_seconds_left(30)
+                return response
             except AuthenticationError:
                 return _error(401 if action == "session" else 400)
             except Exception:
@@ -174,6 +194,7 @@ def create_staff_browser_app(*, origin, provider, attempts, sessions, directory,
         if scope["scheme"] != "https" or hosts != [parsed.netloc.encode("ascii")]:
             await _error(400)(scope, receive, secure_send)
             return
-        await app(scope, receive, secure_send)
+        with staff_request_budget(request_timeout_seconds):
+            await app(scope, receive, secure_send)
 
     return secure_app

@@ -676,3 +676,35 @@ Next: qualify the isolated Keycloak realm in a working browser, check ingress
 log redaction and staff request deadlines, then configure and rehearse the
 cleanup command in the qualification environment before owner routes.
 See commercial/STAFF_AUTH_CLEANUP.md. No deployment or job activation.
+
+## C2 staff request time budget — completed
+
+Recovered clean 55358bd with no unfinished increment or open branch PR.
+Add an isolated staff browser time budget across worker dispatch, admission,
+connection acquisition and provider exchange. Reject late responses without
+issuing browser credentials. Verify bounded-stage behavior with fictional
+provider responses. No server, realm or owner route deployment.
+
+The qualification app now shares a monotonic request budget with its
+worker thread and pinned provider exchange. It checks admission and
+connection acquisition, suppresses late success responses and limits
+provider phases and session issuance to the remaining budget. This is
+cooperative; synchronous calls already running are not cancelled.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **146 passed**. Four new cases
+  cover late admission, late connection release, suppressed late cookies
+  and no PostgreSQL session after a slow fictional exchange.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged Chromium case returned 503; direct launch confirmed a socket
+  permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: run the isolated Keycloak MFA/recovery matrix in a working browser
+and verify ingress deadlines, log redaction and maintenance cleanup in
+that environment before owner routes. See commercial/STAFF_BROWSER.md.
+No deployment.

@@ -132,3 +132,66 @@ class StaffBrowserBoundaryTests(TestCase):
             response = self.client.post("/staff/login", headers={"origin": self.origin})
         self.assertEqual(response.status_code, 303)
         self.assertIn("__Host-omnixat-staff-binding", self.client.cookies)
+
+    def test_expired_admission_never_starts_login_and_next_request_has_fresh_budget(self):
+        from unittest.mock import patch
+
+        elapsed = [0]
+
+        def slow_admission(*args):
+            elapsed[0] = 9
+            return True
+
+        with patch("omnixat_core.staff_deadline.monotonic", side_effect=lambda: elapsed[0]):
+            self.admit.side_effect = slow_admission
+            late = self.client.post("/staff/login", headers={"origin": self.origin})
+            self.assertEqual(late.status_code, 503)
+            self.assertNotIn("set-cookie", late.headers)
+            self.open_db.assert_not_called()
+            self.provider.begin.assert_not_called()
+
+            self.admit.side_effect = None
+            self.assertEqual(self.client.post("/staff/login", headers={"origin": self.origin}).status_code, 303)
+
+    def test_late_connection_is_released_without_starting_provider_work(self):
+        from contextlib import contextmanager
+        from unittest.mock import patch
+
+        elapsed, released = [0], []
+
+        @contextmanager
+        def slow_open():
+            elapsed[0] = 9
+            try:
+                yield object()
+            finally:
+                released.append(True)
+
+        self.open_db.side_effect = slow_open
+        with patch("omnixat_core.staff_deadline.monotonic", side_effect=lambda: elapsed[0]):
+            late = self.client.post("/staff/login", headers={"origin": self.origin})
+        self.assertEqual(late.status_code, 503)
+        self.assertNotIn("set-cookie", late.headers)
+        self.assertEqual(released, [True])
+        self.provider.begin.assert_not_called()
+
+    def test_late_callback_response_never_sets_session_cookie(self):
+        from unittest.mock import patch
+
+        elapsed = [0]
+
+        def slow_complete(*args, **kwargs):
+            elapsed[0] = 9
+            return token_urlsafe(32)
+
+        self.provider.complete.side_effect = slow_complete
+        with patch("omnixat_core.staff_deadline.monotonic", side_effect=lambda: elapsed[0]):
+            self.assertEqual(self.client.post("/staff/login", headers={"origin": self.origin}).status_code, 303)
+            late = self.client.get(self.callback, params={
+                "state": token_urlsafe(32), "code": "fictional-secret-code",
+                "iss": "https://fictional.example.invalid/realms/staff",
+            })
+        self.assertEqual(late.status_code, 503)
+        self.assertNotIn("set-cookie", late.headers)
+        self.assertNotIn("location", late.headers)
+        self.assertNotIn("__Host-omnixat-staff-session", self.client.cookies)

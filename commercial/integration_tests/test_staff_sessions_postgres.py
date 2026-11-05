@@ -307,3 +307,29 @@ class StaffSessionsTests(StaffDirectoryFixture):
             self.assertNotIn(cookie_name, client.cookies)
             with self.assertRaises(AuthenticationError):
                 resolve_staff_session(self.sessions, self.directory, token)
+
+    def test_staff_request_budget_blocks_session_creation_after_slow_exchange(self):
+        from omnixat_core.staff_deadline import staff_request_budget
+
+        elapsed = [0]
+
+        def exchange(request):
+            # The phase timeouts handed to HTTPX must fit the remaining request time.
+            self.assertTrue(all(0 < timeout <= 1 for timeout in request.extensions["timeout"].values()))
+            elapsed[0] = 2
+            token = jwt.encode(self.claims | {"nonce": query["nonce"][0]}, self.key,
+                               algorithm="RS256", headers={"kid": "test"})
+            return self._token_response(json.dumps({"id_token": token}).encode())
+
+        provider, attempts, binding = self._keycloak(exchange), self._keycloak_attempts(), token_urlsafe(32)
+        query = parse_qs(urlsplit(provider.begin(attempts, browser_binding=binding)).query)
+        args = dict(state=query["state"][0], browser_binding=binding,
+                    response_issuer=self.issuer, code="fictional")
+        with patch("omnixat_core.staff_deadline.monotonic", side_effect=lambda: elapsed[0]):
+            with staff_request_budget(1), self.assertRaises(TimeoutError):
+                provider.complete(attempts, self.sessions, self.directory, **args)
+        self.assertEqual(self.sessions.execute("""
+            SELECT count(*) FROM omnixat_staff_session.sessions WHERE membership_id=%s
+        """, (self.staff_id,)).fetchone(), (0,))
+        with self.assertRaises(AuthenticationError):
+            provider.complete(attempts, self.sessions, self.directory, **args)

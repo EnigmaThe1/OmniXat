@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 from .access import Principal
 from .identity import AuthenticationError
 from .postgres import _idle
+from .staff_deadline import staff_seconds_left
 from .staff_identity import STAFF_MFA_MAX_AGE_SECONDS, StaffIDTokenVerifier, VerifiedStaffLogin
 from .staff_identity_postgres import _current_staff
 
@@ -63,7 +64,9 @@ def _session_cursor(connection, *, read_only=False):
 def issue_staff_session(sessions, directory, verifier: StaffIDTokenVerifier, id_token, *, expected_nonce) -> str:
     """Issue only after the trusted callback consumes its login transaction and exchanges its code."""
     identity = verifier.verify(id_token, expected_nonce=expected_nonce)
+    staff_seconds_left(5)
     actor = _current_staff(directory, identity)
+    staff_seconds_left(5)
     token = token_urlsafe(32)
     with _session_cursor(sessions) as cursor:
         cursor.execute("""
@@ -76,6 +79,7 @@ def issue_staff_session(sessions, directory, verifier: StaffIDTokenVerifier, id_
               identity.authenticated_at, identity.authenticated_at, STAFF_MFA_MAX_AGE_SECONDS))
         if cursor.rowcount != 1:
             raise AuthenticationError("Staff session rejected")
+        staff_seconds_left(5)
     return token
 
 

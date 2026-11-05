@@ -262,3 +262,12 @@ bounded batches and emits counts only. See commercial/STAFF_AUTH_CLEANUP.md.
 Chromium case still fails on a socket restriction. Next: isolated realm and
 browser qualification, ingress log redaction and request deadlines, then
 rehearse the operator runner before owner routes. No deployment or schedule.
+
+## Latest staff request budget checkpoint
+
+The qualification app now checks a shared cooperative deadline through
+admission, connection acquisition, provider exchange and session issuance.
+See commercial/STAFF_BROWSER.md. **32 core, 21 identity and 146 PostgreSQL/HTTP
+tests pass**. The unchanged Chromium demo case still fails on a socket
+restriction. Next: isolated Keycloak/browser qualification, ingress deadline
+and log checks, and maintenance rehearsal. No deployment.

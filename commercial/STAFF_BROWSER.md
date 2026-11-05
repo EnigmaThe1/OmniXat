@@ -101,3 +101,24 @@ that each layer's exported logs omit the canaries. Retain only the pass/fail
 result, not callback URLs or the test credentials.
 
 Reference: [OAuth Security BCP, credential leakage via browser history](https://www.rfc-editor.org/rfc/rfc9700.html#section-4.3).
+
+## Request time budget
+
+The qualification factory has a cooperative monotonic request budget of eight
+seconds by default. Configure `request_timeout_seconds` up to 30 seconds.
+The budget starts before route dispatch and is checked before and after
+admission and connection acquisition. The provider exchange limits its
+phase timeouts and response deadline to the remaining budget. Session
+issuance checks before its database write and before the transaction exits.
+The app suppresses late successful responses and their cookies or redirects.
+
+A synchronous connection factory, database operation, HTTP phase, or logging
+handler already running cannot be interrupted by this budget. A consumed
+callback or other committed work is not reversed by a later timeout. Start
+a fresh login if a callback times out; unused attempts or unreachable sessions
+expire normally. Configure bounded connection acquisition, ingress and server
+deadlines separately, then verify them with the real realm and proxy before
+opening owner routes.
+
+References: [Python context variables](https://docs.python.org/3/library/contextvars.html)
+and [HTTPX phase timeouts](https://www.python-httpx.org/advanced/timeouts/).

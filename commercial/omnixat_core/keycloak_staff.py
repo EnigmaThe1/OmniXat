@@ -8,6 +8,7 @@ import httpx
 
 from .identity import AuthenticationError
 from .keycloak_preflight import keycloak_endpoints, _unique_object
+from .staff_deadline import staff_seconds_left
 from .staff_identity import StaffIDTokenVerifier
 from .staff_login_postgres import PostgresStaffLoginTransactions
 from .staff_sessions_postgres import issue_staff_session
@@ -61,13 +62,14 @@ class KeycloakStaffLogin:
             raise AuthenticationError("Staff login callback rejected")
         attempt = self._attempts.consume(attempts, state=state, browser_binding=browser_binding)
         token = self._exchange(code, attempt.code_verifier)
+        staff_seconds_left(5)
         return issue_staff_session(sessions, directory, self._verifier, token, expected_nonce=attempt.nonce)
 
     def _exchange(self, code, code_verifier):
-        deadline = monotonic() + _MAX_EXCHANGE_SECONDS
+        deadline = monotonic() + staff_seconds_left(_MAX_EXCHANGE_SECONDS)
         try:
             with httpx.Client(transport=self._transport, trust_env=False, follow_redirects=False,
-                              timeout=httpx.Timeout(2.0)) as client:
+                              timeout=httpx.Timeout(staff_seconds_left(2.0))) as client:
                 with client.stream(
                     "POST", self._endpoints["token_endpoint"],
                     auth=httpx.BasicAuth(self._client_id, self._client_secret),
@@ -92,6 +94,7 @@ class KeycloakStaffLogin:
             token = data.get("id_token")
             if not isinstance(token, str) or not 1 <= len(token) <= 16384:
                 raise ValueError
+            staff_seconds_left(5)
             return token
         except (httpx.HTTPError, ValueError, RecursionError):
             raise AuthenticationError("Staff provider exchange rejected") from None
