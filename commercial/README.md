@@ -80,3 +80,6 @@ live revenue appears in the snapshot.
 The [staff identity boundary](STAFF_IDENTITY.md) verifies a profiled staff ID
 token and checks separate PostgreSQL membership and revocation. No browser
 callback, session or staff route is wired.
+
+[One-time staff login transactions](STAFF_LOGIN.md) add PostgreSQL replay
+protection and browser-bound PKCE material for a future OIDC callback.

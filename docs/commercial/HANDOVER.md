@@ -180,3 +180,13 @@ bearer access. See commercial/STAFF_IDENTITY.md. **32 core, 15 identity and
 fails on a launch socket permission error. Next: one-time login transaction
 storage, revocable staff sessions and specific provider qualification before
 any owner HTTP route. No real identity provider or deployment was enabled.
+
+## Latest one-time staff login checkpoint
+
+Migration 0009 and the internal PostgreSQL store persist five-minute browser-
+and configuration-bound login transactions. Consumption commits once before
+releasing PKCE material. See commercial/STAFF_LOGIN.md. **32 core, 15 identity
+and 109 PostgreSQL/HTTP tests pass**. The unchanged demo Chromium test fails
+because this environment denies its launch socket. Next: bounded revocable
+staff sessions, then provider qualification and browser wiring. Nothing live
+was activated or deployed.

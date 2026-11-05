@@ -398,3 +398,34 @@ Verification on 5 November 2026 (Python 3.12, PyJWT 2.13.0, psycopg 3.3.8):
 Next: one-time login transaction storage and a bounded revocable staff session,
 then maintained-provider qualification before adding any owner HTTP route.
 See commercial/STAFF_IDENTITY.md for the trust boundary and exact limits.
+
+## C2 one-time staff login transactions — completed
+
+Recovered clean ac41562, with no unfinished task or open branch PR. Scope:
+short-lived PostgreSQL login transactions bound to the initiating browser and
+a fixed staff issuer/client/redirect URI. Generate nonce and S256 PKCE material
+without storing raw state, browser credentials or PKCE verifiers; verify atomic
+consumption under concurrent callbacks. No callback, session or provider wiring.
+
+Migration 0009 adds an isolated five-minute login transaction store. The
+database stores only derived keys and expiry. The service verifies the browser
+binding and exact server configuration; it atomically consumes matching state
+before returning the nonce and PKCE verifier to the trusted caller.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **15 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **109 passed**. Eight new cases
+  cover cross-connection recovery, wrong binding/configuration, stored fields,
+  expiry, concurrent callbacks, nested rollback, grants and insert failure.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged Chromium browser case returned 503; direct launch confirmed
+  the environment denies its socket. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: a bounded revocable staff session with fresh role and MFA checks, then
+qualify a specific provider's code flow with fictional accounts. Callback and
+cookie wiring, rate limits and expiry pruning must precede exposing owner
+HTTP routes. See commercial/STAFF_LOGIN.md.
