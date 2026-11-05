@@ -429,3 +429,33 @@ Next: a bounded revocable staff session with fresh role and MFA checks, then
 qualify a specific provider's code flow with fictional accounts. Callback and
 cookie wiring, rate limits and expiry pruning must precede exposing owner
 HTTP routes. See commercial/STAFF_LOGIN.md.
+
+## C2 revocable staff sessions — completed
+
+Recovered clean 7932d45 with no unfinished increment or open branch PR.
+Scope: a short-lived opaque PostgreSQL staff session issued after verified MFA,
+with no raw token or cached role in storage. Recheck current staff membership
+and MFA age on use and support explicit revocation. No web routes or provider.
+
+Migration 0010 adds opaque staff sessions that expire five minutes from the
+provider authentication time. The database stores a digest and identity
+binding but no raw token or role. Resolution rechecks the live staff directory;
+logout deletes one session. The directory and login-transaction database logins
+stay separate from the session writer.
+
+Verification on 5 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **15 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **117 passed**. Eight new cases cover
+  verified issuance, digest storage, isolation, fresh role and revocation,
+  cutoff, expiry, membership replacement and repeatable logout.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged Chromium case returned 503; direct launch confirmed the socket
+  permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: qualify a specific identity provider with fictional accounts, then wire
+the callback, cookies, CSRF, rate limits and expiry pruning before exposing
+owner HTTP routes. See commercial/STAFF_SESSIONS.md. No deployment.

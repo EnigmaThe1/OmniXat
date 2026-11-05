@@ -65,7 +65,8 @@ def _check_connection(connection):
             OR has_table_privilege(c.oid, 'TRUNCATE, TRIGGER')
             OR EXISTS (
                 SELECT FROM pg_namespace s
-                WHERE s.nspname IN ('omnixat', 'omnixat_staff', 'omnixat_billing', 'omnixat_sandbox', 'omnixat_metrics')
+                WHERE s.nspname IN ('omnixat', 'omnixat_staff', 'omnixat_billing', 'omnixat_sandbox', 'omnixat_metrics',
+                                      'omnixat_staff_session')
                   AND has_schema_privilege(s.oid, 'USAGE, CREATE')
             ) AS unsafe
         FROM pg_roles r CROSS JOIN pg_class c

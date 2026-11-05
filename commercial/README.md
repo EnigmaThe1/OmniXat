@@ -83,3 +83,6 @@ callback, session or staff route is wired.
 
 [One-time staff login transactions](STAFF_LOGIN.md) add PostgreSQL replay
 protection and browser-bound PKCE material for a future OIDC callback.
+
+[Revocable staff sessions](STAFF_SESSIONS.md) are short-lived PostgreSQL sessions
+with fresh role, MFA and revocation checks. The browser transport is unwired.

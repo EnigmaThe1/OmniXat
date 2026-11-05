@@ -190,3 +190,13 @@ and 109 PostgreSQL/HTTP tests pass**. The unchanged demo Chromium test fails
 because this environment denies its launch socket. Next: bounded revocable
 staff sessions, then provider qualification and browser wiring. Nothing live
 was activated or deployed.
+
+## Latest revocable staff session checkpoint
+
+Migration 0010 and the internal session store add opaque sessions with a fixed
+MFA deadline, current directory checks and logout revocation. See
+commercial/STAFF_SESSIONS.md. **32 core, 15 identity and 117 PostgreSQL/HTTP
+tests pass**. The unchanged demo Chromium test still fails on the environment's
+socket permission restriction. Next: qualify a specific identity provider and
+wire the browser flow with the listed controls before exposing owner routes.
+Nothing live was activated or deployed.

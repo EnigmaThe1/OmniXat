@@ -4,12 +4,16 @@ from psycopg.rows import dict_row
 from .access import Principal
 from .identity import AuthenticationError
 from .postgres import _idle
-from .staff_identity import StaffIDTokenVerifier
+from .staff_identity import STAFF_MFA_MAX_AGE_SECONDS, StaffIDTokenVerifier, VerifiedStaffLogin
 
 
 def resolve_staff_login(connection, verifier: StaffIDTokenVerifier, token, *, expected_nonce) -> Principal:
     """Internal callback boundary; never accept an ID token as an API bearer."""
-    identity = verifier.verify(token, expected_nonce=expected_nonce)
+    return _current_staff(connection, verifier.verify(token, expected_nonce=expected_nonce))
+
+
+def _current_staff(connection, identity: VerifiedStaffLogin) -> Principal:
+    """Recheck directory authority for trusted, previously verified authentication."""
     _idle(connection)
     with connection.transaction(), connection.cursor(row_factory=dict_row) as cursor:
         cursor.execute("SET TRANSACTION READ ONLY")
@@ -31,7 +35,8 @@ def resolve_staff_login(connection, verifier: StaffIDTokenVerifier, token, *, ex
                 OR NOT row_security_active(c.oid)
                 OR EXISTS (
                     SELECT FROM pg_namespace s
-                    WHERE s.nspname IN ('omnixat', 'omnixat_billing', 'omnixat_sandbox', 'omnixat_metrics')
+                    WHERE s.nspname IN ('omnixat', 'omnixat_billing', 'omnixat_sandbox', 'omnixat_metrics',
+                                           'omnixat_staff_login', 'omnixat_staff_session')
                       AND has_schema_privilege(s.oid, 'USAGE, CREATE')
                 ) AS unsafe
             FROM pg_roles r CROSS JOIN pg_class c
@@ -48,8 +53,8 @@ def resolve_staff_login(connection, verifier: StaffIDTokenVerifier, token, *, ex
         cursor.execute("""SELECT id, role FROM omnixat_staff.memberships
             WHERE issuer = %s AND subject = %s AND revoked_at IS NULL
               AND auth_valid_after < %s
-              AND statement_timestamp() < to_timestamp(%s) + interval '300 seconds'
-        """, (identity.issuer, identity.subject, identity.authenticated_at, identity.authenticated_at))
+              AND statement_timestamp() < to_timestamp(%s) + %s * interval '1 second'
+        """, (identity.issuer, identity.subject, identity.authenticated_at, identity.authenticated_at, STAFF_MFA_MAX_AGE_SECONDS))
         member = cursor.fetchone()
         if member is None:
             raise AuthenticationError("Staff authentication denied")

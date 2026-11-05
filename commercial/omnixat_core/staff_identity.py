@@ -8,6 +8,8 @@ import jwt
 
 from .identity import AuthenticationError, _pinned_rsa_keys
 
+STAFF_MFA_MAX_AGE_SECONDS = 300
+
 
 @dataclass(frozen=True, repr=False)
 class VerifiedStaffLogin:
@@ -59,7 +61,8 @@ class StaffIDTokenVerifier:
             if any(type(claims[k]) is not int for k in ('iat', 'exp', 'auth_time', 'nbf') if k in claims):
                 raise ValueError
             issued, expires, authenticated = (claims[k] for k in ('iat', 'exp', 'auth_time'))
-            if not 0 < expires - issued <= 600 or not 0 < authenticated <= issued or time() - authenticated >= 300:
+            if (not 0 < expires - issued <= 600 or not 0 < authenticated <= issued
+                    or time() - authenticated >= STAFF_MFA_MAX_AGE_SECONDS):
                 raise ValueError
             return VerifiedStaffLogin(self._issuer, subject, authenticated)
         except (jwt.InvalidTokenError, ValueError, TypeError, KeyError, OverflowError):

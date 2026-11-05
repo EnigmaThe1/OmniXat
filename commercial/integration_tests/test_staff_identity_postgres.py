@@ -14,7 +14,7 @@ from omnixat_core.staff_identity_postgres import resolve_staff_login
 from test_postgres import PostgresFixture
 
 
-class StaffIdentityPostgresTests(PostgresFixture):
+class StaffDirectoryFixture(PostgresFixture):
     issuer = "https://staff.example.invalid"
     nonce = "ab" * 32
 
@@ -57,6 +57,8 @@ class StaffIdentityPostgresTests(PostgresFixture):
         return resolve_staff_login(self.directory if connection is None else connection,
                                    self.verifier, token, expected_nonce=self.nonce)
 
+
+class StaffIdentityPostgresTests(StaffDirectoryFixture):
     def test_signed_login_without_staff_membership_cannot_self_enrol(self):
         self.owner.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,%s,'human')",
                            (self.staff_id, self.issuer, self.subject))
