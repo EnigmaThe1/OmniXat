@@ -228,3 +228,12 @@ See commercial/STAFF_AUTH_CLEANUP.md. **32 core, 21 identity and 124 PostgreSQL/
 tests pass**. The unchanged demo Chromium case still fails on a socket
 restriction. Next: isolated Keycloak browser qualification, staff browser
 controls and wiring a bounded cleanup runner. No job, realm or route was deployed.
+
+## Latest staff browser transport checkpoint
+
+The opt-in qualification app provides staff login, callback, session check
+and logout with an exact origin and secure cookies. See commercial/STAFF_BROWSER.md.
+**32 core, 21 identity and 130 PostgreSQL/HTTP tests pass** using simulated
+provider responses. The unchanged demo Chromium case still fails on a socket
+restriction. Next: real isolated realm and Chromium qualification, shared rate
+limits, log redaction and expiry runner before owner routes. Nothing deployed.

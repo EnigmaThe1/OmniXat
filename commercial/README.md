@@ -95,3 +95,6 @@ credential-free check of saved discovery metadata and approved signing keys.
 
 [Staff authentication cleanup](STAFF_AUTH_CLEANUP.md) removes expired login
 attempts and sessions in bounded operator batches.
+
+The [staff browser qualification app](STAFF_BROWSER.md) can be constructed
+explicitly for isolated testing. It is not mounted by the customer API.

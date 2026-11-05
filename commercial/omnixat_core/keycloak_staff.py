@@ -37,6 +37,10 @@ class KeycloakStaffLogin:
         self._mfa_acr = mfa_acr
         self._transport = transport
 
+    @property
+    def redirect_uri(self):
+        return self._redirect_uri
+
     def begin(self, attempts, *, browser_binding) -> str:
         """Create an attempt and return the provider URL for a trusted web adapter."""
         attempt = self._attempts.begin(attempts, browser_binding=browser_binding)

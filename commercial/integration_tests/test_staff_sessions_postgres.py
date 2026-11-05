@@ -163,7 +163,7 @@ class StaffSessionsTests(StaffDirectoryFixture):
     def _keycloak(self, handler):
         self.issuer += "/realms/fictional"
         self.claims["iss"] = self.issuer
-        self.redirect_uri = "https://app.example.invalid/staff/callback"
+        self.redirect_uri = "https://app.example.invalid/staff/login/callback"
         self.secret = token_urlsafe(32)
         self.provision()
         return KeycloakStaffLogin(
@@ -268,3 +268,42 @@ class StaffSessionsTests(StaffDirectoryFixture):
             with self.assertRaises(AuthenticationError):
                 provider.complete(attempts, self.sessions, self.directory, state=query["state"][0],
                                   browser_binding=binding, response_issuer=self.issuer, code="fictional")
+
+    def test_staff_browser_transport_issues_cookie_and_revokes_postgres_session(self):
+        from contextlib import nullcontext
+        from starlette.testclient import TestClient
+        from omnixat_core.staff_browser import create_staff_browser_app
+
+        def exchange(request):
+            token = jwt.encode(self.claims | {"nonce": query["nonce"][0]}, self.key,
+                               algorithm="RS256", headers={"kid": "test"})
+            return self._token_response(json.dumps({"id_token": token}).encode())
+
+        provider, attempts = self._keycloak(exchange), self._keycloak_attempts()
+        origin = "https://app.example.invalid"
+        app = create_staff_browser_app(origin=origin, provider=provider, attempts=lambda: nullcontext(attempts),
+                                       sessions=lambda: nullcontext(self.sessions),
+                                       directory=lambda: nullcontext(self.directory),
+                                       admit=lambda request, action: True)
+        with TestClient(app, base_url=origin, follow_redirects=False) as client:
+            start = client.post("/staff/login", headers={"origin": origin})
+            self.assertEqual(start.status_code, 303)
+            self.assertIn("__Host-omnixat-staff-binding=", start.headers["set-cookie"])
+            self.assertNotIn("domain=", start.headers["set-cookie"].lower())
+            for flag in ("secure", "httponly", "samesite=lax", "path=/"):
+                self.assertIn(flag, start.headers["set-cookie"].lower())
+            query = parse_qs(urlsplit(start.headers["location"]).query)
+            callback = client.get("/staff/login/callback",
+                                  params={"state": query["state"][0], "code": "fictional-code",
+                                          "iss": self.issuer, "session_state": str(uuid4())})
+            self.assertEqual(callback.status_code, 303)
+            self.assertEqual(callback.headers["location"], "/staff/session")
+            cookie_name = "__Host-omnixat-staff-session"
+            token = client.cookies[cookie_name]
+            self.assertNotIn(token, callback.text)
+            self.assertNotIn("__Host-omnixat-staff-binding", client.cookies)
+            self.assertEqual(client.get("/staff/session").json(), {"signed_in": True})
+            self.assertEqual(client.post("/staff/logout", headers={"origin": origin}).status_code, 204)
+            self.assertNotIn(cookie_name, client.cookies)
+            with self.assertRaises(AuthenticationError):
+                resolve_staff_session(self.sessions, self.directory, token)
