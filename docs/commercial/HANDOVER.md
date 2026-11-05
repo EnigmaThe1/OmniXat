@@ -79,7 +79,9 @@ checks honestly. Do not add invented progress merely to make a scheduled report.
 Implement durable tenant-scoped backend services and maintained identity integration;
 then owner administration, persistent pricing and hosted billing sandbox. Build AI
 document/ledger workflows on the same services; qualify bank and filing adapters
-separately. The maintained identity system, production PostgreSQL isolation, full
+separately. The first PostgreSQL organisation/note schema and tested RLS repository now exist
+(see `commercial/POSTGRES.md`); membership/revocation and identity integration are next.
+The maintained identity system, complete production persistence qualification, full
 ledger, owner UI, actual AI provider, bank connector and filing transport are not
 already delivered by the existing domain contracts.
 
@@ -93,3 +95,12 @@ python3 -m unittest discover -s tests -v
 The historical fictional-demo browser test requires Chromium. Do not silently skip
 or delete it to report a green full-suite result. No real user data is needed for
 development tests. Do not use public GitHub issues as private planning/evidence packs.
+
+## Latest C1 checkpoint
+
+PostgreSQL first record slice: 32 offline tests and 22 integration tests pass.
+Read the latest DEVELOPMENT_STATUS.md and commercial/POSTGRES.md for exact evidence
+and limits. Integration requires an explicit disposable-cluster DSN; no automatic
+skip. It creates/drops its own random test database and role. The historical demo
+still has the known missing-Chromium failure. Next work is persistent membership
+and identity verification, not another replacement of this schema.

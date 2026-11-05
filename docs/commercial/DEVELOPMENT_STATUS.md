@@ -57,3 +57,48 @@ were used. The prototype browser prerequisite limitation remains unchanged.
 Next: implement production PostgreSQL repositories and maintained identity adapter;
 use the durable job contract for the AI orchestration service. Before modifying a
 module, inspect the current branch rather than assuming this checkpoint is newest.
+
+## C1 PostgreSQL persistence increment — completed first slice
+
+Scope: versioned initial PostgreSQL schema, tenant-scoped organisation/note repository,
+forced row-level isolation and non-owner runtime role checks. Validate with fictional
+cross-tenant reads/writes, composite references, rollback and pooled-context reuse.
+No identity provider, HTTP route, filing or billing is enabled by this increment.
+Recovered clean checkout at e7330e5; no unfinished task recorded or other writer found.
+
+Implemented `commercial/migrations/0001_tenant_records.sql` and the optional
+`omnixat_core.postgres` adapter: tenant/organisation/note tables, composite foreign
+keys, forced RLS, principal permissions, actor attribution and transaction-local
+context. Runtime roles with superuser/BYPASSRLS, table ownership/owner-role membership
+or inactive RLS are rejected. Read units are database READ ONLY; exceptions roll
+back; nested and ended units cannot be reused. Migration SQL/version records are
+atomic, locked and checksum checked. No runtime schema/provisioning permission.
+
+Validation on 5 November 2026:
+
+- `cd commercial && python3 -m unittest discover -s tests -v`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  `OMNIXAT_TEST_ADMIN_DSN` pointing to a temporary local PostgreSQL **16.2** cluster:
+  **22 passed**, psycopg **3.3.8**. Includes real constrained-login RLS tests,
+  composite cross-tenant FK rejection, grants, persistence, rollback/reuse,
+  migration repeat/checksum/failure and role-safety checks. Temporary server used
+  pgserver's bundled binaries, launched over loopback TCP; no production DB used.
+- Initial integration run exposed a test-fixture ownership/grant restoration issue;
+  corrected fixture and reran the complete integration suite successfully.
+- `cd prototype && python3 -m unittest discover -s tests -v`: **19 passed, 1 failed**
+  at the unchanged Chromium-dependent browser test (503 Chromium unavailable).
+  Existing unclosed-file ResourceWarning also appeared. No prototype code changed.
+- `git diff --check`: passed. No new commercial UI, browser or live adapter tested.
+
+Boundaries: trusted Principal remains an internal input, not authenticated identity.
+RLS protects missing query predicates, not a compromised runtime able to set tenant
+context. Persistent membership/revocation, entity grants, complete audit, production
+DB version/restore qualification and HTTP surfaces remain unfinished. Note creation
+is not idempotent; do not describe it as exactly-once ledger posting. Existing
+SQLite jobs are still a development adapter. No bank, billing, filing or model
+connection was enabled. See `commercial/POSTGRES.md` for setup and test prerequisites.
+
+Next resumable increment: persistent memberships with revocation and maintained
+identity verification feeding a trusted Principal; then shared customer/API services.
+Keep the current PostgreSQL schema and RLS regression suite as the starting point.
+No active/unfinished implementation remains in this increment.

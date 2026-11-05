@@ -1,0 +1,2 @@
+# Optional PostgreSQL adapter/integration dependency, separate from offline core.
+psycopg[binary]==3.3.8

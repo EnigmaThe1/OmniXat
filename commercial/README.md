@@ -1,6 +1,6 @@
 # Commercial foundation — development slice C0
 
-This is **working internal Python domain code**, not a deployable SaaS or filing service. It is separate from the fictional family demo. Python 3.11+; no third-party dependencies.
+This is **working internal Python domain code**, not a deployable SaaS or filing service. It is separate from the fictional family demo. Python 3.11+; the offline core has no third-party dependencies. The optional PostgreSQL adapter uses psycopg.
 
 ```bash
 cd commercial
@@ -20,7 +20,7 @@ Implemented:
 - Historic/current nominal micro-threshold lookup and revised-replacement completeness checks.
 - Dated source catalogue with explicit research-only versus bounded-function support.
 
-**Important boundaries:** No login/session implementation, authenticated HTTP API, database tenant isolation, billing collection, persistent price administration, owner dashboard, filing submission, tax calculation or authoritative filing status is provided by this slice. `Principal` must come from a trusted identity adapter, never customer-supplied role headers. In-memory prices/audit are a contract spike, not durable production records. Approval helpers are not a complete approval service: entity/ruleset binding, persistence, expiry/revocation and live release qualification are still required.
+**Important boundaries:** No login/session implementation, authenticated HTTP API, complete production tenant-isolation qualification, billing collection, persistent price administration, owner dashboard, filing submission, tax calculation or authoritative filing status is provided by this slice. `Principal` must come from a trusted identity adapter, never customer-supplied role headers. In-memory prices/audit are a contract spike, not durable production records. Approval helpers are not a complete approval service: entity/ruleset binding, persistence, expiry/revocation and live release qualification are still required.
 
 Rule functions are narrow helpers, not full applicability engines. Special deadlines, calendar MTD elections, two-year/group/transition eligibility, continuing mandation and authority overrides remain to implement. Recheck current rules before using these helpers in a released product. No real financial data or credentials are required to run the tests.
 
@@ -30,3 +30,12 @@ The [AI and banking specification](../docs/commercial/AI_AND_BANKING_SPEC.md)
 defines autonomous bookkeeping, evidence intake, clarification, reconciliation
 and business bank connectivity. These workflows are requirements, not implemented
 connectors. After adding human-only approval guards, the core suite passes 27 tests.
+
+## PostgreSQL record persistence
+
+The optional [PostgreSQL adapter](POSTGRES.md) now provides versioned migrations,
+forced tenant RLS, composite organisation/note references and attributed record
+operations in isolated transactions. Its **22 PostgreSQL integration tests** and
+the **32 offline core tests** pass. Membership/identity integration, entity grants,
+production restoration/security qualification and PostgreSQL job persistence remain
+unfinished. This does not make the commercial platform deployable.
