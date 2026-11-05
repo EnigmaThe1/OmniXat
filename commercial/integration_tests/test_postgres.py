@@ -15,7 +15,7 @@ from omnixat_core.access import Principal
 from omnixat_core.postgres import migrate, tenant_records
 
 
-class PostgresRecordsTests(unittest.TestCase):
+class PostgresFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         dsn = os.environ.get("OMNIXAT_TEST_ADMIN_DSN")
@@ -41,6 +41,7 @@ class PostgresRecordsTests(unittest.TestCase):
         cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat TO {} ").format(sql.Identifier(cls.role)))
         cls.owner.execute(sql.SQL("GRANT SELECT ON omnixat.tenants TO {} ").format(sql.Identifier(cls.role)))
         cls.owner.execute(sql.SQL("GRANT SELECT, INSERT ON omnixat.organisations, omnixat.notes TO {} ").format(sql.Identifier(cls.role)))
+        cls.owner.execute(sql.SQL("GRANT SELECT ON omnixat.identities, omnixat.memberships TO {} ").format(sql.Identifier(cls.role)))
         cls.runtime_dsn = make_conninfo(dsn, dbname=cls.database, user=cls.role, password=password)
         cls.runtime = psycopg.connect(cls.runtime_dsn, autocommit=True)
         cls.addClassCleanup(cls.runtime.close)
@@ -57,6 +58,8 @@ class PostgresRecordsTests(unittest.TestCase):
             self.org = records.create_organisation("Fictional organisation")["id"]
             self.note = records.create_note(self.org, "Fictional evidence note")["id"]
 
+
+class PostgresRecordsTests(PostgresFixture):
     def test_persistence_after_reconnect(self):
         with psycopg.connect(self.runtime_dsn, autocommit=True) as db:
             with tenant_records(db, self.actor, self.a) as records:
@@ -157,7 +160,8 @@ class PostgresRecordsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "checksum"):
                 migrate(self.owner)
         finally:
-            self.owner.execute("UPDATE public.omnixat_schema_migrations SET digest=%s", (before[0][1],))
+            for version, digest, _ in before:
+                self.owner.execute("UPDATE public.omnixat_schema_migrations SET digest=%s WHERE version=%s", (digest, version))
 
     def test_blank_note_rejected_atomically(self):
         with self.assertRaises(psycopg.errors.CheckViolation):
@@ -197,14 +201,15 @@ class PostgresRecordsTests(unittest.TestCase):
         from omnixat_core import postgres
         with TemporaryDirectory() as temp:
             path = Path(temp)
-            (path / '0001_tenant_records.sql').write_bytes((postgres.MIGRATIONS / '0001_tenant_records.sql').read_bytes())
-            (path / '0002_failure.sql').write_text(
+            for source in postgres.MIGRATIONS.glob('*.sql'):
+                (path / source.name).write_bytes(source.read_bytes())
+            (path / '9999_failure.sql').write_text(
                 "CREATE TABLE omnixat.must_rollback (id int); SELECT 1/0;")
             with patch.object(postgres, 'MIGRATIONS', path):
                 with self.assertRaises(psycopg.errors.DivisionByZero):
                     migrate(self.owner)
         self.assertIsNone(self.owner.execute("SELECT to_regclass('omnixat.must_rollback')").fetchone()[0])
-        self.assertEqual(self.owner.execute("SELECT count(*) FROM public.omnixat_schema_migrations").fetchone()[0], 1)
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM public.omnixat_schema_migrations").fetchone()[0], len(list(postgres.MIGRATIONS.glob("*.sql"))))
 
     def test_membership_of_table_owner_role_is_rejected(self):
         original = self.owner.execute("SELECT current_user").fetchone()[0]
@@ -224,3 +229,28 @@ class PostgresRecordsTests(unittest.TestCase):
         with TemporaryDirectory() as temp, patch.object(postgres, 'MIGRATIONS', Path(temp)):
             with self.assertRaisesRegex(ValueError, "unavailable"):
                 migrate(self.owner)
+
+    def test_upgrade_from_first_schema_preserves_existing_records(self):
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        from unittest.mock import patch
+        from omnixat_core import postgres
+        database = 'omnixat_test_' + uuid4().hex
+        self.admin.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(database)))
+        try:
+            with psycopg.connect(self.admin.info.dsn, dbname=database, autocommit=True) as owner:
+                with TemporaryDirectory() as temp:
+                    first = Path(temp)
+                    source = postgres.MIGRATIONS / '0001_tenant_records.sql'
+                    (first / source.name).write_bytes(source.read_bytes())
+                    with patch.object(postgres,'MIGRATIONS',first):
+                        migrate(owner)
+                tenant,organisation = uuid4(),uuid4()
+                owner.execute("INSERT INTO omnixat.tenants VALUES (%s,'Fictional legacy tenant')",(tenant,))
+                owner.execute("INSERT INTO omnixat.organisations VALUES (%s,%s,'Fictional legacy organisation','fixture',DEFAULT)",
+                              (tenant,organisation))
+                migrate(owner)
+                self.assertEqual(owner.execute('SELECT id FROM omnixat.organisations').fetchall(),[(organisation,)])
+                self.assertEqual(owner.execute('SELECT count(*) FROM public.omnixat_schema_migrations').fetchone()[0],2)
+        finally:
+            self.admin.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(database)))

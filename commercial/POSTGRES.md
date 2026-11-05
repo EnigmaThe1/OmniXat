@@ -53,8 +53,9 @@ rows. Viewer/API scope/staff restrictions use the existing shared permission cod
 
 This trusts the server's Principal and SQL execution boundary. A caller with raw
 runtime credentials can select a different tenant context; RLS does not authenticate
-customers or protect a compromised server. Persistent membership/revocation checks,
-entity grants and maintained identity integration are still required before HTTP,
+customers or protect a compromised server. The optional [identity adapter](IDENTITY.md) now provides persistent membership and
+revocation checks for signed bearer access. Entity grants, maintained-provider login
+and transport integration are still required before HTTP,
 web or developer API exposure. Notes do not grant filing approval or financial
 posting authority. This slice has no retries/idempotency keys for record creation;
 AI job retries must not call it as an exactly-once ledger service.
@@ -89,3 +90,10 @@ The core suite remains dependency-free. The historical demo/browser suite is sep
 
 These sources informed the engineering implementation. No legal rule or live filing
 capability was added or changed in this increment.
+
+## Additive membership migration
+
+`0002_identity_memberships.sql` builds on immutable migration 0001. Runtime access
+for the identity adapter also needs SELECT on `omnixat.identities` and
+`omnixat.memberships`; no write/DDL grant. Current integration suite has **37 tests**.
+See [IDENTITY.md](IDENTITY.md) for trust configuration and revocation semantics.

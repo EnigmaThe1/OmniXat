@@ -104,3 +104,13 @@ and limits. Integration requires an explicit disposable-cluster DSN; no automati
 skip. It creates/drops its own random test database and role. The historical demo
 still has the known missing-Chromium failure. Next work is persistent membership
 and identity verification, not another replacement of this schema.
+
+## Latest identity checkpoint
+
+The C1 second slice adds persistent identity/membership/revocation plus signed bearer
+verification, with **32 core, 9 token and 37 PostgreSQL tests passing**. Migration 0001
+is unchanged; 0002 is additive and upgrade-tested. Read `commercial/IDENTITY.md` and
+the latest status for exact boundaries. Next is shared authenticated HTTP/API service
+work and maintained-provider login qualification. Do not rebuild membership storage
+or mistake synthetic signed-token tests for a live OIDC login integration. Bearer
+principals have records-only scopes and no filing-approval or staff authority.

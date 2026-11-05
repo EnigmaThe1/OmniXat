@@ -1,0 +1,3 @@
+-r requirements-postgres.txt
+# Tested maintained verifier; keys are provisioned public keys, never stored secrets.
+PyJWT[crypto]==2.13.0

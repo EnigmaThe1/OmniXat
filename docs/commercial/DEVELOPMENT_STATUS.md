@@ -102,3 +102,49 @@ Next resumable increment: persistent memberships with revocation and maintained
 identity verification feeding a trusted Principal; then shared customer/API services.
 Keep the current PostgreSQL schema and RLS regression suite as the starting point.
 No active/unfinished implementation remains in this increment.
+
+## C1 membership and token verification — completed second slice
+
+Recovered clean c547e53 checkout, no recorded unfinished increment or active writer.
+Scope: additive persistent identity/membership/revocation migration; maintained
+PyJWT RS256 access-token verification with pinned issuer/audience/public keys;
+transaction-bound membership lookup feeding existing record services. No role,
+staff, MFA or agent elevation from token claims. No login UI, live provider setup,
+filing, payment or bank integration. Test signed fictional tokens and real PostgreSQL.
+
+Implemented additive `0002_identity_memberships.sql`, `identity.py` and
+`identity_postgres.py`. Access tokens use maintained PyJWT with pinned RSA public
+keys/issuer/audience and a bounded RFC 9068 profile. Persistent identity/membership
+lookup occurs in the same scoped transaction as record work. Database role/actor
+kind override untrusted claims; no staff/MFA grants are inferred. Fixed records-only
+bearer scopes preserve the human filing-approval boundary. Revocation, identity
+disable, issue-time cutoff and role downgrade are checked on each new unit of work.
+Original migration 0001 is unchanged; upgrade preservation has a PostgreSQL test.
+
+Verification on 5 November 2026 (Python 3.12):
+
+- `cd commercial && python3 -m unittest discover -s tests -v`: **32 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -v`: **9 passed**;
+  generated-in-memory RSA signing keys, signature/algorithm/type/key-source attacks,
+  issuer/audience/time/required-claim checks and explicit trusted key rotation.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  disposable local PostgreSQL 16.2 through `OMNIXAT_TEST_ADMIN_DSN`: **37 passed**.
+  Includes the original 22 cases, 14 membership/token-to-record cases, and legacy
+  schema upgrade preservation. PyJWT 2.13.0, cryptography 50.0.0, psycopg 3.3.8.
+- `cd prototype && python3 -m unittest discover -s tests -v`: **19 passed, 1 failed**
+  at the unchanged browser test with explicit Chromium-unavailable 503. Existing
+  unclosed-file ResourceWarning appeared. No demo source or test was removed/skipped.
+- `git diff --check`: passed. No live provider, customer data or signing keys used.
+
+Limits: this is a verified resource-token/membership adapter, not a completed
+maintained-provider login deployment. No provider selected/activated, discovery/JWKS
+refresh, HTTP route, browser session, PKCE/CSRF, recovery or MFA step-up implemented.
+Revocation applies to the next unit; an in-flight transaction is not cancelled and
+token expiry is checked on entry. Add bounded request/transaction lifetimes at the
+transport. Runtime membership tables are SELECT only; administrative provisioning,
+revocation UI/audit and entity grants remain to build. No idempotent ledger effects,
+statutory submission, bank connection or billing was enabled.
+
+Next resumable increment: shared authenticated customer/API transport with bounded
+transactions and controlled error responses, and qualify a maintained-provider login
+flow separately. See `commercial/IDENTITY.md`. No active task remains in this slice.

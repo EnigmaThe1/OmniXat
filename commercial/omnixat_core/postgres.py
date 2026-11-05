@@ -1,7 +1,8 @@
 """PostgreSQL record adapter. Principals must already be server-verified.
 
 RLS is defence in depth against missing predicates, not protection from a compromised
-runtime/SQL injection: that role can set tenant context. No HTTP/identity integration.
+runtime/SQL injection: that role can set tenant context. For signed bearer identity
+resolution use identity_postgres; no HTTP transport exists here.
 One exclusive, idle autocommit connection per unit of work; never share concurrently.
 """
 from contextlib import contextmanager
@@ -57,29 +58,38 @@ def tenant_records(connection, actor, tenant_id, *, write=False):
         raise ValueError("Explicit write flag required")
     require_tenant(actor, tenant_id, "records:write" if write else "records:read")
     tenant = UUID(tenant_id)
+    with _tenant_transaction(connection, tenant, write=write):
+        records = TenantRecords(connection, actor, tenant, write)
+        try:
+            yield records
+        finally:
+            records._active = False
+
+
+@contextmanager
+def _tenant_transaction(connection, tenant, *, write=False, identity_tables=False):
+    """Internal exclusive transaction; caller must establish authorisation."""
     _idle(connection)
+    tables_required = ('tenants', 'organisations', 'notes')
+    if identity_tables:
+        tables_required += ('identities', 'memberships')
     with connection.transaction():
         if not write:
             connection.execute("SET TRANSACTION READ ONLY")
         with connection.cursor(row_factory=dict_row) as cursor:
-            cursor.execute("""SELECT rolsuper, rolbypassrls FROM pg_roles
-                              WHERE rolname = current_user""")
+            cursor.execute("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
             role = cursor.fetchone()
             if role["rolsuper"] or role["rolbypassrls"]:
                 raise PermissionError("Runtime identity must not bypass row security")
             cursor.execute("""SELECT c.relname, pg_has_role(current_user, c.relowner, 'MEMBER') AS owned,
                                   row_security_active(c.oid) AS protected
                 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-                WHERE n.nspname = 'omnixat' AND c.relname IN ('tenants','organisations','notes')""")
+                WHERE n.nspname = 'omnixat' AND c.relname = ANY(%s)""", (list(tables_required),))
             tables = cursor.fetchall()
-            if len(tables) != 3 or any(t["owned"] or not t["protected"] for t in tables):
+            if len(tables) != len(tables_required) or any(t["owned"] or not t["protected"] for t in tables):
                 raise PermissionError("Non-owner runtime and active row security required")
             cursor.execute("SELECT set_config('omnixat.tenant_id', %s, true)", (str(tenant),))
-        records = TenantRecords(connection, actor, tenant, write)
-        try:
-            yield records
-        finally:
-            records._active = False
+        yield
 
 
 class TenantRecords:

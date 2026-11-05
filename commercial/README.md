@@ -36,6 +36,15 @@ connectors. After adding human-only approval guards, the core suite passes 27 te
 The optional [PostgreSQL adapter](POSTGRES.md) now provides versioned migrations,
 forced tenant RLS, composite organisation/note references and attributed record
 operations in isolated transactions. Its **22 PostgreSQL integration tests** and
-the **32 offline core tests** pass. Membership/identity integration, entity grants,
+the **32 offline core tests** pass. Complete provider login integration, entity grants,
 production restoration/security qualification and PostgreSQL job persistence remain
 unfinished. This does not make the commercial platform deployable.
+
+## Signed identity and persistent memberships
+
+[Identity adapter](IDENTITY.md): additive identity/membership schema, signed bearer
+verification with pinned issuer/audience/public keys, and persisted role/revocation
+lookup feeding the same record services. Token role/MFA/staff/actor claims cannot
+elevate database authority; bearer tokens cannot approve filings. Current checks:
+**32 core + 9 identity + 37 PostgreSQL tests pass**. No browser login, provider
+onboarding, public HTTP API or complete production identity qualification exists yet.
