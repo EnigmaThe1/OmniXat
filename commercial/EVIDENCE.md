@@ -355,3 +355,22 @@ Give a dedicated non-owner, NOBYPASSRLS writer USAGE on
 Do not grant direct table access or combine this with other evidence roles.
 A funding choice does not infer reimbursement, a director's loan, tax
 treatment or a ledger account, and it cannot move funds or post a journal.
+
+## Scoped funding review
+
+Migration 0028 adds `read_expense_funding_context` for interactive tenant
+users with records and evidence read permissions, including viewers.
+Supply the organisation and expense receipt IDs. The read rechecks
+expense eligibility and funding source status in one snapshot. It returns
+the saved payer reference, funding source and kind, recorder and timestamp,
+plus whether the recorded source is still eligible. A disabled source
+remains visible as historical context and must not be used for preparation.
+
+An eligible draft with no funding choice returns `None`. Missing,
+out-of-scope and ineligible expense drafts return the same unavailable
+result. The read does not verify payment or select a counterpart account.
+
+Give a dedicated non-owner, NOBYPASSRLS reader USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.read_expense_funding_context(uuid,uuid)`.
+Keep it separate from writer and other evidence grants.

@@ -57,3 +57,34 @@ def record_expense_funding_context(
         if row["outcome"] != "stored":
             raise RuntimeError("Expense funding receipt unavailable")
         return ExpenseFundingReceipt(draft, funding_source_id, payer_id, row["funding_kind"], row["recorded_at"])
+
+
+@dataclass(frozen=True)
+class ExpenseFundingReview:
+    receipt: ExpenseFundingReceipt
+    recorded_by: str = field(repr=False)
+    source_eligible: bool
+
+
+def read_expense_funding_context(
+    connection, actor, tenant_id, organisation_id, draft_id,
+) -> ExpenseFundingReview | None:
+    """Review an eligible draft's funding choice, or return None if none was recorded."""
+    tenant = _authorize(actor, tenant_id, "records:read")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant expense review required")
+    organisation, draft = (UUID(str(value)) for value in (organisation_id, draft_id))
+    with _tenant_transaction(connection, tenant, tables_required=_TABLES):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_expense_funding_context")
+            cursor.execute("SELECT * FROM omnixat_extraction.read_expense_funding_context(%s,%s)",
+                           (organisation, draft))
+            row = cursor.fetchone()
+    if row is None:
+        raise EvidenceNotEligible("Expense draft is unavailable")
+    if row["funding_source_id"] is None:
+        return None
+    receipt = ExpenseFundingReceipt(draft, row["funding_source_id"], row["payer_id"],
+                                    row["funding_kind"], row["recorded_at"])
+    return ExpenseFundingReview(receipt, row["recorded_by"], row["source_eligible"])

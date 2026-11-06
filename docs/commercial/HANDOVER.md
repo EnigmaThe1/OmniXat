@@ -427,3 +427,11 @@ funding source against one eligible expense draft, with attributed replay.
 **44 core, 21 identity and 194 PostgreSQL/HTTP tests pass**. The unchanged
 prototype browser fails on Chromium socket permissions. Next: scoped funding
 review and counterpart account policy before journal preparation. No posting.
+
+## Latest expense funding review checkpoint
+
+Migration 0028 provides scoped read-only review of an eligible draft's
+recorded payer and funding choice, distinguishing missing and disabled
+choices. **44 core, 21 identity and 196 PostgreSQL/HTTP tests pass**.
+The unchanged prototype browser fails on Chromium socket permissions.
+Next: explicit counterpart account policy for journal preparation. No posting.

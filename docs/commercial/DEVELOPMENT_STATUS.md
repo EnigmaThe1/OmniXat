@@ -1248,3 +1248,33 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: make funding context available in scoped review and validate an
 explicit eligible counterpart account before preparing a balanced journal.
 There is no funding correction, payment verification or ledger action.
+
+## C4 scoped expense funding review — completed
+
+Recovered clean b648923. Read one attributed funding choice through a
+dedicated read-only service. Distinguish an eligible draft with no recorded
+choice from an unavailable draft, and show whether a recorded funding
+source is still eligible. No account inference, correction or posting.
+
+Migration 0028 adds an execute-only funding read. The service rechecks
+expense eligibility and returns the saved choice and attribution with
+current funding source status. It distinguishes an eligible draft without
+a selection from an unavailable draft, and preserves disabled selections
+for review without marking them eligible.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **196 passed**. New cases
+  cover missing, enabled, disabled and unavailable choices; attribution;
+  scope; policy changes; and read/write role separation.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: add tenant/organisation policy for an explicitly selected counterpart
+account tied to the saved funding source before preparing a balanced journal.
+No approval, posting or payment.

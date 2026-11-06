@@ -34,7 +34,9 @@ from omnixat_core.evidence_review_postgres import (
 from omnixat_core.evidence_scan_postgres import (
     EvidenceScanBusy, EvidenceScanError, scan_quarantined_evidence,
 )
-from omnixat_core.expense_funding_postgres import ExpenseFundingConflict, record_expense_funding_context
+from omnixat_core.expense_funding_postgres import (
+    ExpenseFundingConflict, read_expense_funding_context, record_expense_funding_context,
+)
 from test_postgres import PostgresFixture
 
 
@@ -192,6 +194,19 @@ class EvidenceScanTests(PostgresFixture):
         ).format(funding_writer))
         cls.funding_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                        user=funding_role, password=password)
+
+        funding_reader_role = cls.role + "_funding_reader"
+        funding_reader = sql.Identifier(funding_reader_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(funding_reader, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, funding_reader_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(funding_reader))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_expense_funding_context(uuid,uuid) TO {}"
+        ).format(funding_reader))
+        cls.funding_reader_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                              user=funding_reader_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -1108,3 +1123,65 @@ class EvidenceScanTests(PostgresFixture):
                                (self.a, self.org, business["funding_source_id"]))
             with self.assertRaises(EvidenceNotEligible):
                 record_expense_funding_context(db, self.actor, self.a, self.org, draft.id, **business)
+
+    def test_expense_funding_review_distinguishes_missing_disabled_and_unavailable(self):
+        scope, period, context = self.expense_write_fixture()
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            draft = create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+        selection = self.configure_funding_source(self.a, self.org, "personal_funds")
+        viewer = Principal("fictional-viewer", self.a, "viewer")
+        with psycopg.connect(self.funding_reader_dsn, autocommit=True) as reader:
+            def review():
+                return read_expense_funding_context(reader, viewer, self.a, self.org, draft.id)
+
+            self.assertIsNone(review())
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                review()
+            self.set_active_policy("fictional-v1")
+            with psycopg.connect(self.funding_dsn, autocommit=True) as writer:
+                saved = record_expense_funding_context(writer, self.actor, self.a, self.org, draft.id, **selection)
+            result = review()
+            self.assertEqual((result.receipt, result.recorded_by, result.source_eligible),
+                             (saved, self.actor.user_id, True))
+            self.owner.execute("""UPDATE omnixat.expense_funding_sources SET eligible_for_drafts=false
+                WHERE tenant_id=%s AND organisation_id=%s AND id=%s""",
+                               (self.a, self.org, selection["funding_source_id"]))
+            result = review()
+            self.assertEqual(result.receipt, saved)
+            self.assertFalse(result.source_eligible)
+            self.owner.execute("""UPDATE omnixat.expense_accounting_periods SET open_for_drafts=false
+                WHERE tenant_id=%s AND organisation_id=%s AND id=%s""", (self.a, self.org, period))
+            with self.assertRaises(EvidenceNotEligible):
+                review()
+
+    def test_expense_funding_review_requires_scope_and_dedicated_read_grants(self):
+        scope, period, context = self.expense_write_fixture()
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            draft = create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+        selection = self.configure_funding_source(self.a, self.org, "business_funds")
+        with psycopg.connect(self.funding_dsn, autocommit=True) as writer:
+            record_expense_funding_context(writer, self.actor, self.a, self.org, draft.id, **selection)
+            with self.assertRaises(PermissionError):
+                read_expense_funding_context(writer, self.actor, self.a, self.org, draft.id)
+        with psycopg.connect(self.funding_reader_dsn, autocommit=True) as reader:
+            for actor, tenant, org, receipt_id in (
+                (self.actor, self.a, uuid4(), draft.id),
+                (self.actor, self.a, self.org, uuid4()),
+                (self.other, self.b, self.org, draft.id),
+            ):
+                with self.subTest(tenant=tenant, org=org, receipt_id=receipt_id), self.assertRaisesRegex(
+                    EvidenceNotEligible, "^Expense draft is unavailable$",
+                ):
+                    read_expense_funding_context(reader, actor, tenant, org, receipt_id)
+            for actor in (
+                self.other, Principal("agent", self.a, "viewer", actor_kind="agent"),
+                Principal("api", self.a, "viewer", api_scopes=frozenset({"records:read", "evidence:read"})),
+                Principal("staff", self.a, "viewer", staff_role="platform_owner"),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    read_expense_funding_context(reader, actor, self.a, self.org, draft.id)
+            with self.assertRaises(PermissionError):
+                record_expense_funding_context(reader, self.actor, self.a, self.org, draft.id, **selection)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                reader.execute("SELECT * FROM omnixat.expense_funding_context")
