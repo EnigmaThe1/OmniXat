@@ -37,7 +37,9 @@ from omnixat_core.evidence_scan_postgres import (
 from omnixat_core.expense_funding_postgres import (
     ExpenseFundingConflict, read_expense_funding_context, record_expense_funding_context,
 )
-from omnixat_core.expense_journal_postgres import prepare_expense_journal_preview
+from omnixat_core.expense_journal_postgres import (
+    ExpenseJournalConflict, create_expense_journal_draft, prepare_expense_journal_preview,
+)
 from test_postgres import PostgresFixture
 
 
@@ -221,6 +223,19 @@ class EvidenceScanTests(PostgresFixture):
         ).format(journal_reader))
         cls.journal_preview_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                                user=journal_role, password=password)
+
+        journal_writer_role = cls.role + "_journal_writer"
+        journal_writer = sql.Identifier(journal_writer_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(journal_writer, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, journal_writer_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(journal_writer))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.create_expense_journal_draft(uuid,uuid,uuid,text) TO {}"
+        ).format(journal_writer))
+        cls.journal_writer_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                              user=journal_writer_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -1286,3 +1301,90 @@ class EvidenceScanTests(PostgresFixture):
             with self.assertRaises(PermissionError):
                 prepare_expense_journal_preview(writer, self.actor, self.a, self.org, draft.id,
                                                 counterpart_account_id=eligible)
+
+    def journal_write_fixture(self):
+        scope, period, context = self.expense_write_fixture()
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            draft = create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+        selection = self.configure_funding_source(self.a, self.org, "business_funds")
+        with psycopg.connect(self.funding_dsn, autocommit=True) as writer:
+            record_expense_funding_context(writer, self.actor, self.a, self.org, draft.id, **selection)
+        source = selection["funding_source_id"]
+        account = uuid4()
+        self.configure_counterpart(self.a, self.org, source, account, enable=True)
+        return scope, period, context, draft, source, account
+
+    def test_journal_write_persists_exact_snapshot_and_replays_concurrently(self):
+        _, period, context, draft, source, account = self.journal_write_fixture()
+        start = Barrier(2)
+
+        def save():
+            with psycopg.connect(self.journal_writer_dsn, autocommit=True) as writer:
+                start.wait(timeout=5)
+                return create_expense_journal_draft(writer, self.actor, self.a, self.org, draft.id,
+                                                    counterpart_account_id=account)
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(lambda _: save(), range(2)))
+        self.assertEqual(first, second)
+        self.assertEqual(self.owner.execute("""
+            SELECT id, expense_draft_id, expense_account_id, counterpart_account_id, funding_source_id,
+                   amount_pence, currency, accounting_date, period_id, scan_policy_version,
+                   content_sha256, created_by, created_at
+            FROM omnixat.expense_journal_drafts WHERE tenant_id=%s
+        """, (self.a,)).fetchall(), [
+            (first.id, draft.id, context.expense_account_id, account, source, 1234, "GBP",
+             context.accounting_date, period, "fictional-v1", sha256(self.original).digest(),
+             self.actor.user_id, first.created_at),
+        ])
+        other_account = uuid4()
+        self.configure_counterpart(self.a, self.org, source, other_account, enable=True)
+        with psycopg.connect(self.journal_writer_dsn, autocommit=True) as writer:
+            with self.assertRaises(ExpenseJournalConflict):
+                create_expense_journal_draft(writer, self.actor, self.a, self.org, draft.id,
+                                             counterpart_account_id=other_account)
+            with self.assertRaises(EvidenceNotEligible):
+                create_expense_journal_draft(writer, self.other, self.b, self.org, draft.id,
+                                             counterpart_account_id=account)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                writer.execute("SELECT * FROM omnixat.expense_journal_drafts")
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                create_expense_journal_draft(writer, self.actor, self.a, self.org, draft.id,
+                                             counterpart_account_id=account)
+        with psycopg.connect(self.journal_preview_dsn, autocommit=True) as reader:
+            with self.assertRaises(PermissionError):
+                create_expense_journal_draft(reader, self.actor, self.a, self.org, draft.id,
+                                             counterpart_account_id=account)
+
+    def test_journal_write_holds_eligibility_through_commit(self):
+        scope, period, _, draft, source, account = self.journal_write_fixture()
+        evidence = scope[2]
+        changes = (
+            ("UPDATE omnixat_extraction.active_scan_policy SET policy_version='fictional-v2'", ()),
+            ("UPDATE omnixat.expense_accounting_periods SET open_for_drafts=false WHERE tenant_id=%s AND id=%s",
+             (self.a, period)),
+            ("UPDATE omnixat.expense_funding_sources SET eligible_for_drafts=false WHERE tenant_id=%s AND id=%s",
+             (self.a, source)),
+            ("""UPDATE omnixat.expense_counterpart_policy SET eligible_for_drafts=false
+                WHERE tenant_id=%s AND funding_source_id=%s AND account_id=%s""", (self.a, source, account)),
+            ("""INSERT INTO omnixat.evidence_scan_verdicts
+                (tenant_id,evidence_id,content_sha256,byte_size,policy_version,verdict)
+                VALUES (%s,%s,%s,%s,'fictional-v1','blocked')""",
+             (self.a, evidence, sha256(self.original).digest(), len(self.original))),
+        )
+        with psycopg.connect(self.journal_writer_dsn, autocommit=True) as writer:
+            with writer.transaction():
+                writer.execute("SELECT set_config('omnixat.tenant_id', %s, true)", (self.a,))
+                self.assertEqual(writer.execute("""
+                    SELECT outcome FROM omnixat_extraction.create_expense_journal_draft(%s,%s,%s,%s)
+                """, (self.org, draft.id, account, self.actor.user_id)).fetchone(), ("stored",))
+                for statement, args in changes:
+                    with self.subTest(statement=statement), self.assertRaises(psycopg.errors.LockNotAvailable):
+                        with self.owner.transaction():
+                            self.owner.execute("SET LOCAL lock_timeout='100ms'")
+                            self.owner.execute(statement, args)
+            self.owner.execute(*changes[-1])
+            with self.assertRaises(EvidenceNotEligible):
+                create_expense_journal_draft(writer, self.actor, self.a, self.org, draft.id,
+                                             counterpart_account_id=account)

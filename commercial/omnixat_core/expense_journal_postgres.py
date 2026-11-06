@@ -1,7 +1,7 @@
-"""Preview a two-line expense journal without saving or posting it."""
+"""Prepare and save bounded two-line expense journal drafts without posting."""
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -39,10 +39,7 @@ class ExpenseJournalPreview:
     lines: tuple[JournalPreviewLine, JournalPreviewLine]
 
 
-def prepare_expense_journal_preview(
-    connection, actor, tenant_id, organisation_id, draft_id, *, counterpart_account_id: UUID,
-) -> ExpenseJournalPreview:
-    """Check the selected counterpart and return two equal, opposing GBP lines."""
+def _journal_scope(actor, tenant_id, organisation_id, draft_id, counterpart_account_id):
     tenant = _authorize(actor, tenant_id, "records:write")
     _authorize(actor, tenant_id, "evidence:read")
     if actor.actor_kind != "human" or actor.api_scopes is not None:
@@ -50,6 +47,15 @@ def prepare_expense_journal_preview(
     if type(counterpart_account_id) is not UUID or not counterpart_account_id.int:
         raise ValueError("Select an explicit counterpart account")
     organisation, draft = (UUID(str(value)) for value in (organisation_id, draft_id))
+
+    return tenant, organisation, draft
+
+
+def prepare_expense_journal_preview(
+    connection, actor, tenant_id, organisation_id, draft_id, *, counterpart_account_id: UUID,
+) -> ExpenseJournalPreview:
+    """Check the selected counterpart and return two equal, opposing GBP lines."""
+    tenant, organisation, draft = _journal_scope(actor, tenant_id, organisation_id, draft_id, counterpart_account_id)
 
     with _tenant_transaction(connection, tenant, tables_required=_TABLES):
         with connection.cursor(row_factory=dict_row) as cursor:
@@ -67,3 +73,37 @@ def prepare_expense_journal_preview(
         (JournalPreviewLine(row["expense_account_id"], "debit", pence),
          JournalPreviewLine(row["counterpart_account_id"], "credit", pence)),
     )
+
+
+class ExpenseJournalConflict(Exception):
+    """An eligible expense already has a journal draft with different inputs."""
+
+
+@dataclass(frozen=True)
+class ExpenseJournalReceipt:
+    id: UUID
+    expense_draft_id: UUID
+    created_at: datetime
+
+
+def create_expense_journal_draft(
+    connection, actor, tenant_id, organisation_id, draft_id, *, counterpart_account_id: UUID,
+) -> ExpenseJournalReceipt:
+    """Save the current eligible preview as a draft and return an idempotent receipt."""
+    tenant, organisation, draft = _journal_scope(actor, tenant_id, organisation_id, draft_id, counterpart_account_id)
+    actor_id = actor.user_id
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
+        raise ValueError("Invalid journal attribution")
+    with _tenant_transaction(connection, tenant, write=True, tables_required=(*_TABLES, "expense_journal_drafts")):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "create_expense_journal_draft")
+            cursor.execute("SELECT * FROM omnixat_extraction.create_expense_journal_draft(%s,%s,%s,%s)",
+                           (organisation, draft, counterpart_account_id, actor_id))
+            row = cursor.fetchone()
+        if row["outcome"] == "unavailable":
+            raise EvidenceNotEligible("Expense draft, funding source or counterpart account is unavailable")
+        if row["outcome"] == "conflict":
+            raise ExpenseJournalConflict("A different journal draft already exists for this expense")
+        if row["outcome"] != "stored":
+            raise RuntimeError("Journal draft receipt unavailable")
+        return ExpenseJournalReceipt(row["journal_id"], draft, row["created_at"])

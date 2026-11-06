@@ -443,3 +443,11 @@ funding source and returns a balanced two-line GBP preview with evidence
 provenance. **44 core, 21 identity and 198 PostgreSQL/HTTP tests pass**.
 The unchanged prototype browser fails on Chromium socket permissions.
 Next: save an idempotent journal draft with commit-time eligibility checks.
+
+## Latest durable expense journal checkpoint
+
+Migration 0030 saves one balanced journal draft per expense with exact
+pence and source provenance, locking evidence and policy through commit.
+**44 core, 21 identity and 200 PostgreSQL/HTTP tests pass**. The unchanged
+prototype browser fails on Chromium socket permissions. Next: scoped
+review of saved journal drafts against current eligibility. No posting.

@@ -1307,3 +1307,32 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: persist a retry-safe, balanced journal draft and hold the relevant
 eligibility checks through commit. No ledger posting or approval.
+
+## C4 durable expense journal draft — completed
+
+Recovered clean dbcbab5. Persist one balanced GBP journal draft per expense,
+using the exact amount and explicit eligible counterpart. Lock eligibility
+inputs through commit and return the same receipt on eligible retries.
+No general ledger, approval, payment or posting.
+
+Migration 0030 stores a balanced draft as one exact amount and two
+distinct accounts, with source fingerprint, scanner policy and attribution.
+The dedicated writer reuses preview eligibility after acquiring locks
+on the relevant evidence and policy rows. Concurrent identical eligible
+retries return one receipt; a different eligible selection or actor conflicts.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **200 passed**. New cases
+  cover the saved snapshot, concurrent replay, conflicts, isolation, and
+  attempts to change scanner, period, funding or counterpart policy before commit.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: add scoped journal draft review that compares the saved snapshot
+with current eligibility and provenance. No posting or approval.

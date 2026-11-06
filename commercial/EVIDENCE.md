@@ -398,3 +398,25 @@ Give a dedicated non-owner, NOBYPASSRLS preview login USAGE on
 Keep direct table access and other evidence grants separate. This preview
 is not durable; a future journal draft writer must recheck all inputs
 inside its transaction. It cannot post or approve anything.
+
+## Saving a balanced journal draft
+
+Migration 0030 adds `create_expense_journal_draft`. An interactive tenant
+owner or editor with evidence access selects the counterpart account for
+a saved expense. PostgreSQL reuses the preview checks after locking the
+scanner policy, relevant evidence, period, expense account, funding and
+counterpart rows. The locks remain until commit. A retryable lock conflict
+can be retried with the same inputs.
+
+The draft stores one exact positive GBP pence amount for two distinct
+accounts, plus the expense link, funding source, date, period, scanner
+policy, evidence fingerprint and attribution. Identical eligible retries
+return the original receipt; a different eligible selection or actor
+conflicts. A later policy change can make a saved draft ineligible without
+deleting it. No ledger balances change.
+
+Give a separate non-owner, NOBYPASSRLS writer USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.create_expense_journal_draft(uuid,uuid,uuid,text)`.
+Keep direct table access and preview grants separate. There is no
+journal review endpoint, posting, payment or approval in this slice.
