@@ -108,5 +108,5 @@ quarantine spool computes fingerprints from bounded streams. The internal
 PostgreSQL quarantine can retain matching originals. A separate worker can record
 verdicts from a trusted scanner callback using recoverable PostgreSQL claims.
 A separate read gate checks the active scan policy before releasing an original
-to trusted worker code. An internal CSV reader returns source-linked decimal candidates; no real scanner,
-OCR, model or upload route is wired.
+to trusted worker code. CSV decimal candidates can be stored with source
+provenance and safe retries. No real scanner, OCR, model or upload route is wired.

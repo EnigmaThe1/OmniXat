@@ -338,3 +338,11 @@ missing, blank and ambiguous values distinct from zero. **42 core,
 21 identity and 170 PostgreSQL/HTTP tests pass**. The unchanged demo browser
 fails on Chromium socket permissions. Next: persist results with retry
 protection and recheck the active policy at write time. No deployment.
+
+## Latest durable CSV extraction checkpoint
+
+Migration 0018 stores source-linked CSV results through a dedicated function
+that checks admission again and holds the active policy through commit.
+Identical retries return the original receipt. **42 core, 21 identity and
+174 PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on
+Chromium socket permissions. Next: scoped reads for review and clarification.

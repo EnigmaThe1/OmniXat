@@ -174,6 +174,20 @@ cell returns a distinct status and no amount; the reader does not infer
 currency or interpret grouped numbers, locale-specific separators or
 exponents. Values are candidates for review, not ledger entries.
 
-Only the in-memory result is returned. No database persistence, OCR,
-model, public route or accounting effect is wired. Next: persist bounded
-results with retry protection and an active-policy recheck at write time.
+The read-only worker can return candidates in memory. For durable storage,
+`extract_and_store_csv_amounts` accepts a stable server-assigned job ID and
+stores the source fingerprint, policy and versioned parser results, including
+decimal strings and original cell coordinates. Migration 0018 adds an
+append-only, tenant-isolated table with no direct worker access. Grant
+the existing execute-only extraction login EXECUTE on
+`omnixat_extraction.store_csv_result(uuid,uuid,uuid,text,bytea,jsonb)` only
+in addition to the existing admission grants. It is a trusted job boundary,
+not a client-facing write API.
+
+The write function checks eligibility again and locks the active policy row
+against rotation until commit. It refuses stale results, returns the first
+receipt for an identical retry, and rejects reuse of the job ID for a
+different result. A new extraction under a changed policy needs a new job
+ID. Previously committed results remain historical; a future consumer must
+recheck eligibility before using them. No OCR, model, public route or ledger
+effect is wired.

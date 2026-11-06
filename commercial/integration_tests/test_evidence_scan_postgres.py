@@ -4,17 +4,19 @@ from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Event
+from threading import Barrier, Event
 from uuid import uuid4
 
 import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from psycopg.pq import TransactionStatus
+from psycopg.types.json import Jsonb
 
 from omnixat_core.evidence_csv import AmountCell
 from omnixat_core.evidence_extraction_postgres import (
-    EvidenceNotEligible, extract_csv_amounts, read_evidence_for_extraction,
+    CSVExtractionConflict, EvidenceNotEligible, _store_csv_extraction,
+    extract_and_store_csv_amounts, extract_csv_amounts, read_evidence_for_extraction,
 )
 from omnixat_core.evidence_intake import stage_evidence
 from omnixat_core.evidence_postgres import register_evidence
@@ -66,6 +68,9 @@ class EvidenceScanTests(PostgresFixture):
         cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(gate))
         cls.owner.execute(sql.SQL(
             "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_eligible_original(uuid,uuid) TO {}"
+        ).format(gate))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.store_csv_result(uuid,uuid,uuid,text,bytea,jsonb) TO {}"
         ).format(gate))
         cls.gate_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                      user=gate_role, password=gate_password)
@@ -322,3 +327,88 @@ class EvidenceScanTests(PostgresFixture):
         self.set_active_policy("fictional-v2")
         with self.assertRaises(EvidenceNotEligible):
             extract_csv_amounts(*args)
+
+    def test_csv_storage_replays_and_rejects_changed_plan(self):
+        gate = self.gate_connection()
+        self.addCleanup(self.owner.execute, "DELETE FROM omnixat_extraction.active_scan_policy")
+        self.set_active_policy("fictional-v1")
+        self.run_scan(lambda *_: "clean")
+        job = uuid4()
+        args = (gate, self.a, self.org, self.registration.id, job)
+        selections = (AmountCell("net", 2, 2), AmountCell("vat", 2, 3))
+        receipt = extract_and_store_csv_amounts(*args, selections)
+        self.assertEqual(extract_and_store_csv_amounts(*args, selections), receipt)
+        with self.assertRaises(CSVExtractionConflict):
+            extract_and_store_csv_amounts(*args, (AmountCell("net", 2, 1),))
+        row = self.owner.execute("""
+            SELECT evidence_id, policy_version, content_sha256, amounts
+            FROM omnixat.csv_extraction_results WHERE tenant_id=%s AND job_id=%s
+        """, (self.a, job)).fetchone()
+        self.assertEqual(row[:3], (self.registration.id, "fictional-v1", sha256(self.original).digest()))
+        self.assertEqual(row[3], [
+            {"field_name": "net", "row": 2, "column": 2, "status": "found", "amount": "12"},
+            {"field_name": "vat", "row": 2, "column": 3, "status": "missing", "amount": None},
+        ])
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            gate.execute("SELECT * FROM omnixat.csv_extraction_results")
+
+    def test_csv_storage_rechecks_scope_and_policy_after_read(self):
+        gate = self.gate_connection()
+        self.addCleanup(self.owner.execute, "DELETE FROM omnixat_extraction.active_scan_policy")
+        self.set_active_policy("fictional-v1")
+        self.run_scan(lambda *_: "clean")
+        result = extract_csv_amounts(
+            gate, self.a, self.org, self.registration.id, (AmountCell("net", 2, 2),),
+        )
+        job = uuid4()
+        with self.assertRaises(EvidenceNotEligible):
+            _store_csv_extraction(gate, self.b, self.org, job, result)
+        self.set_active_policy("fictional-v2")
+        with self.assertRaises(EvidenceNotEligible):
+            _store_csv_extraction(gate, self.a, self.org, job, result)
+        self.assertEqual(self.owner.execute(
+            "SELECT count(*) FROM omnixat.csv_extraction_results WHERE job_id=%s", (job,),
+        ).fetchone()[0], 0)
+
+    def test_concurrent_csv_storage_replays_one_receipt(self):
+        self.addCleanup(self.owner.execute, "DELETE FROM omnixat_extraction.active_scan_policy")
+        self.set_active_policy("fictional-v1")
+        self.run_scan(lambda *_: "clean")
+        job = uuid4()
+        barrier = Barrier(2, timeout=5)
+
+        def attempt():
+            with psycopg.connect(self.gate_dsn, autocommit=True) as gate:
+                result = extract_csv_amounts(
+                    gate, self.a, self.org, self.registration.id, (AmountCell("net", 2, 2),),
+                )
+                barrier.wait()
+                return _store_csv_extraction(gate, self.a, self.org, job, result)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first, second = (pool.submit(attempt) for _ in range(2))
+            self.assertEqual(first.result(timeout=10), second.result(timeout=10))
+        self.assertEqual(self.owner.execute(
+            "SELECT count(*) FROM omnixat.csv_extraction_results WHERE job_id=%s", (job,),
+        ).fetchone()[0], 1)
+
+    def test_csv_write_serializes_with_active_policy_rotation(self):
+        gate = self.gate_connection()
+        self.addCleanup(self.owner.execute, "DELETE FROM omnixat_extraction.active_scan_policy")
+        self.set_active_policy("fictional-v1")
+        self.run_scan(lambda *_: "clean")
+        job = uuid4()
+        with gate.transaction():
+            gate.execute("SELECT set_config('omnixat.tenant_id',%s,true)", (self.a,))
+            receipt = gate.execute("""
+                SELECT outcome FROM omnixat_extraction.store_csv_result(%s,%s,%s,%s,%s,%s)
+            """, (self.org, self.registration.id, job, "fictional-v1", sha256(self.original).digest(),
+                  Jsonb([{"field_name": "net", "row": 2, "column": 2, "status": "found", "amount": "12"}])))
+            self.assertEqual(receipt.fetchone(), ("stored",))
+            with self.assertRaises(psycopg.errors.LockNotAvailable), self.owner.transaction():
+                self.owner.execute("SET LOCAL lock_timeout = '100ms'")
+                self.set_active_policy("fictional-v2")
+        self.set_active_policy("fictional-v2")
+        self.assertEqual(self.owner.execute("""
+            SELECT policy_version FROM omnixat.csv_extraction_results WHERE tenant_id=%s AND job_id=%s
+        """, (self.a, job)).fetchone(), ("fictional-v1",))

@@ -935,3 +935,32 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: durable, tenant-scoped extraction results with retry protection and
 an active-policy recheck at write time. Scanner qualification, OCR,
 model extraction, ledger effects and deployment remain outside this slice.
+
+## C4 durable CSV extraction results — completed
+
+Recovered clean f074a8a. Store bounded CSV results with source provenance,
+tenant isolation and a stable job ID for retries. Recheck active policy
+and source eligibility inside the write boundary. No public read API,
+model, ledger effect or deployment.
+
+Migration 0018 stores exact decimal strings and source coordinates with
+the original fingerprint and scanner policy. An execute-only function
+rechecks eligibility and holds the active policy through commit. An
+identical retry reuses the original receipt; changed results conflict.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **42 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **174 passed**. Four new
+  cases cover persisted provenance, same/changed and concurrent retries,
+  scope, privilege boundaries, stale policy and policy rotation locking.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Chromium could not open a socket,
+  confirmed by direct launch. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: a scoped review read service that rechecks current eligibility and
+exposes unresolved cells for clarification. No public route, live scanner,
+ledger effect or deployment.
