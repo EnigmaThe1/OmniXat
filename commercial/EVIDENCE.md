@@ -156,3 +156,24 @@ Admission is a point-in-time read, not a revocation mechanism for bytes
 already handed to a worker. No extractor runs. Next: qualify a scanner
 and wire a bounded, isolated extraction worker with source provenance,
 retry controls and an active-policy recheck before persisting results.
+
+## Bounded CSV amount extraction
+
+The internal `extract_csv_amounts` worker reads only an admitted
+`text/csv` original and accepts explicit, named cell selections. Every
+result references the evidence ID, exact SHA-256, scan policy and one-based
+logical record and column; headers count as records and quoted newlines do
+not start a new record. It accepts comma-separated UTF-8 with optional BOM,
+up to 512 KiB, 5,000 records, 64 columns, 4,096 characters per cell and 32
+selections. No format detection, formula evaluation or network is involved.
+
+The reader uses exact decimal arithmetic for an optional sign, up to 18
+integer digits and up to six fractional digits separated by a period.
+Surrounding ASCII spaces and tabs are ignored. A missing, blank or ambiguous
+cell returns a distinct status and no amount; the reader does not infer
+currency or interpret grouped numbers, locale-specific separators or
+exponents. Values are candidates for review, not ledger entries.
+
+Only the in-memory result is returned. No database persistence, OCR,
+model, public route or accounting effect is wired. Next: persist bounded
+results with retry protection and an active-policy recheck at write time.

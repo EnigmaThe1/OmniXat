@@ -907,3 +907,31 @@ Next: qualify a scanner and wire a bounded extraction worker with source
 provenance, retry controls and an active-policy recheck before storing
 results. The gate is a point-in-time read. No actual scanner, extraction,
 route, live records or deployment.
+
+## C4 source-linked CSV amounts — completed
+
+Recovered clean 4962a43. Add a bounded deterministic CSV amount reader behind
+the existing evidence gate. Use explicitly selected cells, preserve the
+source reference and distinguish missing or ambiguous values from zero.
+No result persistence, model, scanner activation or ledger effects.
+
+The internal worker reads explicitly selected CSV cells after the existing
+extraction gate. It preserves exact decimal amounts and binds each result
+to an evidence ID, fingerprint, policy and source coordinates. Missing,
+blank or ambiguous inputs produce no figure. Results are memory-only.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **42 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **170 passed**. The new
+  integration case checks pre-scan and stale-policy denial and exact source binding.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch confirmed
+  socket permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: durable, tenant-scoped extraction results with retry protection and
+an active-policy recheck at write time. Scanner qualification, OCR,
+model extraction, ledger effects and deployment remain outside this slice.

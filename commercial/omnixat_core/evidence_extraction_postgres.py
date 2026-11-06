@@ -1,4 +1,4 @@
-"""Read one admitted original for a trusted extraction job; no parser or model."""
+"""Read one admitted original for a trusted extraction job and read explicitly selected CSV amounts."""
 
 from dataclasses import dataclass, field
 from hashlib import sha256
@@ -6,6 +6,7 @@ from uuid import UUID
 
 from psycopg.rows import dict_row
 
+from .evidence_csv import AmountCell, CellAmount, EvidenceCSVError, read_csv_amounts
 from .evidence_intake import MAX_EVIDENCE_BYTES
 from .postgres import _tenant_transaction
 
@@ -50,3 +51,24 @@ def read_evidence_for_extraction(connection, tenant_id, organisation_id, evidenc
     ):
         raise EvidenceNotEligible("Evidence is not eligible for extraction")
     return AdmittedEvidence(evidence, row["policy_version"], row["media_type"], digest.hex(), original)
+
+
+@dataclass(frozen=True)
+class CSVAmountExtraction:
+    evidence_id: UUID
+    policy_version: str
+    content_sha256: str
+    amounts: tuple[CellAmount, ...]
+
+
+def extract_csv_amounts(
+    connection, tenant_id, organisation_id, evidence_id, selections: tuple[AmountCell, ...],
+) -> CSVAmountExtraction:
+    """Run the bounded CSV reader only after admission; no result is persisted."""
+    admitted = read_evidence_for_extraction(connection, tenant_id, organisation_id, evidence_id)
+    if admitted.media_type != "text/csv":
+        raise EvidenceCSVError("CSV extraction requires text/csv evidence")
+    return CSVAmountExtraction(
+        admitted.evidence_id, admitted.policy_version, admitted.content_sha256,
+        read_csv_amounts(admitted.original_bytes, selections),
+    )

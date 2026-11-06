@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
@@ -11,7 +12,10 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from psycopg.pq import TransactionStatus
 
-from omnixat_core.evidence_extraction_postgres import EvidenceNotEligible, read_evidence_for_extraction
+from omnixat_core.evidence_csv import AmountCell
+from omnixat_core.evidence_extraction_postgres import (
+    EvidenceNotEligible, extract_csv_amounts, read_evidence_for_extraction,
+)
 from omnixat_core.evidence_intake import stage_evidence
 from omnixat_core.evidence_postgres import register_evidence
 from omnixat_core.evidence_quarantine_postgres import store_quarantined_evidence
@@ -298,3 +302,23 @@ class EvidenceScanTests(PostgresFixture):
                 connection.execute(query, params)
         with self.assertRaises(PermissionError):
             self.gate_read(self.scanner)
+
+    def test_csv_worker_requires_admission_and_returns_bound_source(self):
+        gate = self.gate_connection()
+        self.addCleanup(self.owner.execute, "DELETE FROM omnixat_extraction.active_scan_policy")
+        self.set_active_policy("fictional-v1")
+        selection = (AmountCell("amount", 2, 2), AmountCell("vat", 2, 3))
+        args = (gate, self.a, self.org, self.registration.id, selection)
+        with self.assertRaises(EvidenceNotEligible):
+            extract_csv_amounts(*args)
+        self.run_scan(lambda *_: "clean")
+        extracted = extract_csv_amounts(*args)
+        self.assertEqual(extracted.evidence_id, self.registration.id)
+        self.assertEqual(extracted.policy_version, "fictional-v1")
+        self.assertEqual(extracted.content_sha256, sha256(self.original).hexdigest())
+        self.assertEqual(extracted.amounts[0].cell, selection[0])
+        self.assertEqual(extracted.amounts[0].amount, Decimal("12"))
+        self.assertEqual(extracted.amounts[1].status, "missing")
+        self.set_active_policy("fictional-v2")
+        with self.assertRaises(EvidenceNotEligible):
+            extract_csv_amounts(*args)

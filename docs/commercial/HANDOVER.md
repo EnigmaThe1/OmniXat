@@ -329,3 +329,12 @@ verdict or live claim. It starts disabled and uses an execute-only login.
 **38 core, 21 identity and 169 PostgreSQL/HTTP tests pass**. The unchanged
 demo browser fails on Chromium socket permissions. Next: qualify a scanner
 and wire isolated extraction with provenance, retry and policy rechecks.
+
+## Latest source-linked CSV extraction checkpoint
+
+The internal CSV reader uses the existing gate and returns exact decimal
+candidates with evidence ID, digest, policy and cell coordinates. It keeps
+missing, blank and ambiguous values distinct from zero. **42 core,
+21 identity and 170 PostgreSQL/HTTP tests pass**. The unchanged demo browser
+fails on Chromium socket permissions. Next: persist results with retry
+protection and recheck the active policy at write time. No deployment.
