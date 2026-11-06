@@ -194,9 +194,10 @@ effect is wired.
 
 ## Scoped CSV review
 
-Migration 0019 lets a dedicated review login read one result through
-`omnixat_extraction.read_csv_review(uuid,uuid,uuid)`. Grant that function
-and USAGE on `omnixat_extraction` only; keep this login separate from the
+Migration 0021 lets a dedicated review login read one result with answers
+through `omnixat_extraction.read_csv_review_with_answers(uuid,uuid,uuid)`.
+Grant that function and USAGE on `omnixat_extraction` only; revoke the old
+`read_csv_review` grant from the review login if present. Keep it separate from the
 extraction worker and give it no raw schema access. The application service
 requires a verified interactive tenant user with evidence read permission.
 The database checks tenant, organisation, evidence and job ID and reuses
@@ -204,10 +205,8 @@ the active-policy gate at read time. It returns structured candidates and
 provenance without raw source bytes or original cell text.
 
 The service prepares fixed questions only for missing, blank and ambiguous
-cells. It does not send, persist or resolve questions. A review is a
-point-in-time read; any future write must recheck eligibility. Next: store
-authorised, source-linked clarification answers without modifying extraction
-results or creating ledger entries.
+cells without a saved answer. It does not send questions. A review is a
+point-in-time read; any future accounting write must recheck eligibility.
 
 ## Durable clarification answers
 
@@ -221,6 +220,7 @@ Grant the dedicated answer login USAGE on `omnixat_extraction` and EXECUTE on
 `omnixat_extraction.store_csv_answer(uuid,uuid,uuid,text,integer,integer,text,text)`
 only. Keep it separate from the review and extraction logins. The write
 function checks current eligibility and holds the active policy until commit.
-It does not modify extraction results. Answers are not yet shown in review
-or used for accounting; a future read can suppress answered prompts while
-showing the separately attributed decision.
+It does not modify extraction results. Review shows each answer, its
+author and timestamp separately, without rewriting the original candidate.
+An unavailable answer suppresses the repeated question but supplies no
+amount for accounting. Neither the answer nor the review posts a ledger entry.

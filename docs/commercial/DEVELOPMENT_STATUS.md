@@ -1021,3 +1021,32 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: show attributed answers in scoped review and suppress answered prompts
 while preserving original values. No public route, ledger effect or deployment.
+
+## C4 clarification answers in CSV review — completed
+
+Recovered clean 13dcedb. Return attributed answers alongside original
+candidates in scoped review and suppress only their matching prompts.
+Preserve eligibility checks, role separation, and zero versus unavailable.
+No ledger effects, routes or deployment.
+
+Migration 0021 returns original candidates and separately attributed
+answers in one eligible review read. Exact cell matches suppress prompts;
+unavailable answers remain distinct from zero. Invalid stored answer
+coordinates fail closed. Review and answer writer roles remain separate.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **42 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **180 passed**. Coverage
+  includes answer provenance, zero/unavailable, prompt suppression,
+  stale policy, role isolation and mismatched coordinates.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: a source-linked draft mapping for accounting preparation that refuses
+unavailable or unanswered amounts and rechecks eligibility before writing.
+No public route, ledger effect or deployment.

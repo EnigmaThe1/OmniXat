@@ -362,3 +362,11 @@ write-time scanner policy recheck and safe replay. **42 core, 21 identity and
 179 PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on
 Chromium socket permissions. Next: show answers in review and suppress
 resolved prompts without rewriting extraction results.
+
+## Latest answer-aware CSV review checkpoint
+
+Migration 0021 shows attributed answers separately from original candidates
+and suppresses only answered prompts. **42 core, 21 identity and 180
+PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on Chromium
+socket permissions. Next: source-linked draft mapping that refuses missing
+amounts and rechecks eligibility before a write.

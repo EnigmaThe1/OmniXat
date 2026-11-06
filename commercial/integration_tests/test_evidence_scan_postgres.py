@@ -87,7 +87,7 @@ class EvidenceScanTests(PostgresFixture):
         cls.addClassCleanup(cls.drop_role, review_role)
         cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(review))
         cls.owner.execute(sql.SQL(
-            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_csv_review(uuid,uuid,uuid) TO {}"
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_csv_review_with_answers(uuid,uuid,uuid) TO {}"
         ).format(review))
         cls.review_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                        user=review_role, password=review_password)
@@ -514,7 +514,9 @@ class EvidenceScanTests(PostgresFixture):
             self.assertEqual(receipt, store_csv_clarification(*args, selections[1], amount="0.00"))
             with self.assertRaises(CSVClarificationConflict):
                 store_csv_clarification(*args, selections[1], amount="1.00")
-            store_csv_clarification(*args, selections[2], amount=None)
+            unavailable = store_csv_clarification(*args, selections[2], amount=None)
+            with self.assertRaises(PermissionError):
+                read_csv_extraction_review(answer, self.actor, self.a, self.org, self.registration.id, job)
             for cell in (selections[0], AmountCell("vat", 2, 3)):
                 with self.assertRaises(EvidenceNotEligible):
                     store_csv_clarification(*args, cell, amount="1")
@@ -525,6 +527,17 @@ class EvidenceScanTests(PostgresFixture):
         self.assertEqual(rows, [("net", None, self.actor.user_id), ("vat", "0.00", self.actor.user_id)])
         before = read_csv_extraction_review(review, self.actor, self.a, self.org, self.registration.id, job)
         self.assertEqual([value.status for value in before.amounts], ["found", "blank", "ambiguous", "missing"])
+        zero_answer, unavailable_answer = before.answers
+        self.assertEqual((zero_answer.cell, zero_answer.answered_by, zero_answer.answered_at),
+                         (selections[1], self.actor.user_id, receipt.answered_at))
+        self.assertEqual(zero_answer.amount.as_tuple(), Decimal("0.00").as_tuple())
+        self.assertEqual((unavailable_answer.cell, unavailable_answer.amount, unavailable_answer.answered_at),
+                         (selections[2], None, unavailable.answered_at))
+        self.assertEqual(tuple(prompt.cell for prompt in before.clarifications), (selections[3],))
+
+        self.set_active_policy("fictional-v2")
+        with self.assertRaises(EvidenceNotEligible):
+            read_csv_extraction_review(review, self.actor, self.a, self.org, self.registration.id, job)
 
     def test_csv_clarifications_enforce_human_scope_grants_and_current_policy(self):
         gate, review, job, selections = self.prepare_csv_review()
@@ -554,3 +567,16 @@ class EvidenceScanTests(PostgresFixture):
         self.assertEqual(self.owner.execute("""
             SELECT count(*) FROM omnixat.csv_clarification_answers WHERE job_id=%s
         """, (job,)).fetchone()[0], 0)
+
+    def test_csv_review_denies_answer_with_mismatched_source_coordinates(self):
+        _, review, job, selections = self.prepare_csv_review()
+        with psycopg.connect(self.answer_dsn, autocommit=True) as answer:
+            store_csv_clarification(
+                answer, self.actor, self.a, self.org, self.registration.id, job, selections[1], amount="1",
+            )
+        self.owner.execute("""
+            UPDATE omnixat.csv_clarification_answers SET source_row=2
+            WHERE tenant_id=%s AND job_id=%s
+        """, (self.a, job))
+        with self.assertRaises(EvidenceNotEligible):
+            read_csv_extraction_review(review, self.actor, self.a, self.org, self.registration.id, job)

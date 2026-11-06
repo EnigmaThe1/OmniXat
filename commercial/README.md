@@ -109,5 +109,5 @@ PostgreSQL quarantine can retain matching originals. A separate worker can recor
 verdicts from a trusted scanner callback using recoverable PostgreSQL claims.
 A separate read gate checks the active scan policy before releasing an original
 to trusted worker code. CSV decimal candidates can be stored with source
-provenance and safe retries. A scoped read service prepares questions for
-unresolved cells. No real scanner, OCR, model or upload route is wired.
+provenance and safe retries. Scoped review shows attributed answers alongside
+original candidates and prompts only for unanswered cells. No real scanner, OCR, model or upload route is wired.
