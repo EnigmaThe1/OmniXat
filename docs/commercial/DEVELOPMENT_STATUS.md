@@ -1336,3 +1336,31 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: add scoped journal draft review that compares the saved snapshot
 with current eligibility and provenance. No posting or approval.
+
+## C4 scoped saved journal review — completed
+
+Recovered clean 799e653. Read one saved journal by tenant, organisation
+and receipt ID. Return both lines and linked provenance only if the saved
+snapshot still matches eligible inputs. No posting, approval or mutation.
+
+Migration 0031 adds an execute-only journal draft reader. It compares the
+saved snapshot to currently eligible inputs and returns the original
+receipt, attribution, exact lines and linked source provenance. Missing,
+out-of-scope, stale and mismatched drafts are unavailable. No changes are
+made to saved drafts, approvals or ledger balances.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **202 passed**. New cases
+  cover exact lines and provenance, scoped reader grants, scanner rotation,
+  disabled counterpart policy and mismatched saved amount or fingerprint.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: design an attributed human review decision bound to the exact
+eligible journal snapshot, separate from any statutory approval or posting.

@@ -451,3 +451,11 @@ pence and source provenance, locking evidence and policy through commit.
 **44 core, 21 identity and 200 PostgreSQL/HTTP tests pass**. The unchanged
 prototype browser fails on Chromium socket permissions. Next: scoped
 review of saved journal drafts against current eligibility. No posting.
+
+## Latest saved journal review checkpoint
+
+Migration 0031 reads one scoped saved journal, comparing the stored
+snapshot against current eligibility and provenance. **44 core,
+21 identity and 202 PostgreSQL/HTTP tests pass**. The unchanged prototype
+browser fails on Chromium socket permissions. Next: an attributed human
+journal review decision bound to the exact snapshot. No posting.

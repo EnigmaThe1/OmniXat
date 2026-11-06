@@ -420,3 +420,24 @@ Give a separate non-owner, NOBYPASSRLS writer USAGE on
 `omnixat_extraction.create_expense_journal_draft(uuid,uuid,uuid,text)`.
 Keep direct table access and preview grants separate. There is no
 journal review endpoint, posting, payment or approval in this slice.
+
+## Reviewing a saved journal draft
+
+Migration 0031 adds `read_expense_journal_draft` for interactive tenant
+users with records and evidence read permissions, including viewers.
+Supply the organisation and journal receipt IDs. In one snapshot the
+service reruns the preview eligibility checks and compares the saved
+accounts, funding, amount, currency, date, period, scan policy and
+fingerprint to current inputs. Missing, out-of-scope, stale and mismatched
+drafts all return the same unavailable result.
+
+An eligible review returns the original receipt and attribution, both
+saved journal lines, and provenance from the linked expense: evidence ID,
+extraction job and CSV cell. The read does not expose original bytes or
+perform any mutation, approval or posting. Current eligibility can change
+after the review returns.
+
+Give a separate non-owner, NOBYPASSRLS reader USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.read_expense_journal_draft(uuid,uuid)`.
+Keep direct table access and preview or writer grants separate.

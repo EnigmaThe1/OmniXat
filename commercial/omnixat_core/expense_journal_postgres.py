@@ -1,4 +1,4 @@
-"""Prepare and save bounded two-line expense journal drafts without posting."""
+"""Prepare, save and review two-line expense journal drafts without posting."""
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -15,6 +15,7 @@ from .expense_funding_postgres import _TABLES as _FUNDING_TABLES
 from .postgres import _tenant_transaction
 
 _TABLES = (*_FUNDING_TABLES, "expense_counterpart_policy")
+_DRAFT_TABLES = (*_TABLES, "expense_journal_drafts")
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,10 @@ def prepare_expense_journal_preview(
             row = cursor.fetchone()
     if row is None:
         raise EvidenceNotEligible("Expense draft, funding source or counterpart account is unavailable")
+    return _journal_details(row, draft)
+
+
+def _journal_details(row, draft):
     pence = int(row["amount_pence"])
     return ExpenseJournalPreview(
         draft, row["funding_source_id"], row["currency"], row["accounting_date"], row["period_id"],
@@ -94,7 +99,7 @@ def create_expense_journal_draft(
     actor_id = actor.user_id
     if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
         raise ValueError("Invalid journal attribution")
-    with _tenant_transaction(connection, tenant, write=True, tables_required=(*_TABLES, "expense_journal_drafts")):
+    with _tenant_transaction(connection, tenant, write=True, tables_required=_DRAFT_TABLES):
         with connection.cursor(row_factory=dict_row) as cursor:
             _require_draft_role(cursor, "create_expense_journal_draft")
             cursor.execute("SELECT * FROM omnixat_extraction.create_expense_journal_draft(%s,%s,%s,%s)",
@@ -107,3 +112,32 @@ def create_expense_journal_draft(
         if row["outcome"] != "stored":
             raise RuntimeError("Journal draft receipt unavailable")
         return ExpenseJournalReceipt(row["journal_id"], draft, row["created_at"])
+
+
+@dataclass(frozen=True)
+class ExpenseJournalReview:
+    receipt: ExpenseJournalReceipt
+    created_by: str = field(repr=False)
+    journal: ExpenseJournalPreview
+
+
+def read_expense_journal_draft(
+    connection, actor, tenant_id, organisation_id, journal_id,
+) -> ExpenseJournalReview:
+    """Review one saved journal only while its snapshot matches eligible inputs."""
+    tenant = _authorize(actor, tenant_id, "records:read")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal review required")
+    organisation, journal = (UUID(str(value)) for value in (organisation_id, journal_id))
+    with _tenant_transaction(connection, tenant, tables_required=_DRAFT_TABLES):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_expense_journal_draft")
+            cursor.execute("SELECT * FROM omnixat_extraction.read_expense_journal_draft(%s,%s)",
+                           (organisation, journal))
+            row = cursor.fetchone()
+    if row is None:
+        raise EvidenceNotEligible("Journal draft is unavailable")
+    draft = row["expense_draft_id"]
+    receipt = ExpenseJournalReceipt(row["journal_id"], draft, row["journal_created_at"])
+    return ExpenseJournalReview(receipt, row["journal_created_by"], _journal_details(row, draft))

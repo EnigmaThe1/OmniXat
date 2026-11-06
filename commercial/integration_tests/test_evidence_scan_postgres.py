@@ -38,7 +38,7 @@ from omnixat_core.expense_funding_postgres import (
     ExpenseFundingConflict, read_expense_funding_context, record_expense_funding_context,
 )
 from omnixat_core.expense_journal_postgres import (
-    ExpenseJournalConflict, create_expense_journal_draft, prepare_expense_journal_preview,
+    ExpenseJournalConflict, create_expense_journal_draft, prepare_expense_journal_preview, read_expense_journal_draft,
 )
 from test_postgres import PostgresFixture
 
@@ -236,6 +236,19 @@ class EvidenceScanTests(PostgresFixture):
         ).format(journal_writer))
         cls.journal_writer_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                               user=journal_writer_role, password=password)
+
+        journal_review_role = cls.role + "_journal_review"
+        journal_review = sql.Identifier(journal_review_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(journal_review, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, journal_review_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(journal_review))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_expense_journal_draft(uuid,uuid) TO {}"
+        ).format(journal_review))
+        cls.journal_review_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                              user=journal_review_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -1388,3 +1401,76 @@ class EvidenceScanTests(PostgresFixture):
             with self.assertRaises(EvidenceNotEligible):
                 create_expense_journal_draft(writer, self.actor, self.a, self.org, draft.id,
                                              counterpart_account_id=account)
+
+    def test_journal_review_reads_saved_lines_and_provenance_with_scoped_grants(self):
+        scope, period, context, draft, source, account = self.journal_write_fixture()
+        with psycopg.connect(self.journal_writer_dsn, autocommit=True) as writer:
+            receipt = create_expense_journal_draft(writer, self.actor, self.a, self.org, draft.id,
+                                                   counterpart_account_id=account)
+            with self.assertRaises(PermissionError):
+                read_expense_journal_draft(writer, self.actor, self.a, self.org, receipt.id)
+        viewer = Principal("fictional-viewer", self.a, "viewer")
+        with psycopg.connect(self.journal_review_dsn, autocommit=True) as reader:
+            result = read_expense_journal_draft(reader, viewer, self.a, self.org, receipt.id)
+            self.assertEqual((result.receipt, result.created_by), (receipt, self.actor.user_id))
+            j = result.journal
+            self.assertEqual((j.draft_id, j.funding_source_id, j.currency, j.accounting_date, j.period_id),
+                             (draft.id, source, "GBP", context.accounting_date, period))
+            self.assertEqual((j.evidence_id, j.extraction_job_id, j.source_cell), scope[2:])
+            self.assertEqual(j.content_sha256, sha256(self.original).hexdigest())
+            self.assertEqual(j.scan_policy_version, "fictional-v1")
+            self.assertEqual([(line.account_id, line.side, line.amount_pence) for line in j.lines],
+                             [(context.expense_account_id, "debit", 1234), (account, "credit", 1234)])
+            for actor, tenant, org, journal in (
+                (viewer, self.a, uuid4(), receipt.id),
+                (viewer, self.a, self.org, uuid4()),
+                (self.other, self.b, self.org, receipt.id),
+            ):
+                with self.subTest(tenant=tenant, org=org, journal=journal), self.assertRaisesRegex(
+                    EvidenceNotEligible, "^Journal draft is unavailable$",
+                ):
+                    read_expense_journal_draft(reader, actor, tenant, org, journal)
+            for actor in (
+                self.other, Principal("agent", self.a, "viewer", actor_kind="agent"),
+                Principal("api", self.a, "viewer", api_scopes=frozenset({"records:read", "evidence:read"})),
+                Principal("staff", self.a, "viewer", staff_role="platform_owner"),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    read_expense_journal_draft(reader, actor, self.a, self.org, receipt.id)
+            with self.assertRaises(PermissionError):
+                create_expense_journal_draft(reader, self.actor, self.a, self.org, draft.id,
+                                             counterpart_account_id=account)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                reader.execute("SELECT * FROM omnixat.expense_journal_drafts")
+
+    def test_journal_review_withholds_stale_or_mismatched_saved_snapshot(self):
+        _, _, _, draft, source, account = self.journal_write_fixture()
+        with psycopg.connect(self.journal_writer_dsn, autocommit=True) as writer:
+            receipt = create_expense_journal_draft(writer, self.actor, self.a, self.org, draft.id,
+                                                   counterpart_account_id=account)
+        with psycopg.connect(self.journal_review_dsn, autocommit=True) as reader:
+            def review():
+                return read_expense_journal_draft(reader, self.actor, self.a, self.org, receipt.id)
+
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                review()
+            self.set_active_policy("fictional-v1")
+            self.assertEqual(review().receipt, receipt)
+            update_policy = """UPDATE omnixat.expense_counterpart_policy SET eligible_for_drafts=%s
+                WHERE tenant_id=%s AND organisation_id=%s AND funding_source_id=%s AND account_id=%s"""
+            policy_scope = (self.a, self.org, source, account)
+            self.owner.execute(update_policy, (False, *policy_scope))
+            with self.assertRaises(EvidenceNotEligible):
+                review()
+            self.owner.execute(update_policy, (True, *policy_scope))
+            self.assertEqual(review().receipt, receipt)
+            self.owner.execute("""UPDATE omnixat.expense_journal_drafts SET amount_pence=1235
+                WHERE tenant_id=%s AND id=%s""", (self.a, receipt.id))
+            with self.assertRaises(EvidenceNotEligible):
+                review()
+            self.owner.execute("""UPDATE omnixat.expense_journal_drafts
+                SET amount_pence=1234, content_sha256=%s WHERE tenant_id=%s AND id=%s""",
+                               (sha256(b"Different fictional document").digest(), self.a, receipt.id))
+            with self.assertRaises(EvidenceNotEligible):
+                review()
