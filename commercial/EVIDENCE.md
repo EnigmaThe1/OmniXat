@@ -84,8 +84,36 @@ This adapter buffers one verified original (at most 20 MiB) for a single
 binary SQL parameter. It is not a streaming external store and does not
 enforce aggregate storage or worker concurrency limits.
 
-There is no scan verdict, raw byte retrieval service or extraction authority.
 Before real use, qualify storage and backup encryption, payload-free database
-logging, capacity, retention and restore. Next: add a separate scanner role
-and verified decisions bound to the exact stored bytes, followed by an
-extraction gate. See [PostgreSQL binary functions](https://www.postgresql.org/docs/16/functions-binarystring.html).
+logging, capacity, retention and restore. See [PostgreSQL binary functions](https://www.postgresql.org/docs/16/functions-binarystring.html).
+
+## Scanner-only verdicts
+
+Migration 0015 records append-only `clean` or `blocked` observations tied by
+foreign key to the tenant, evidence ID, digest and size of the quarantined
+original. A trusted worker calls `scan_quarantined_evidence` with scope from
+its job and a server-selected scanner and policy version. The policy version
+must identify an immutable scanner configuration, including its engine and
+rules or signatures. Use a new version for a rescan after configuration changes.
+
+The worker reads only the requested tenant/organisation/evidence, verifies the
+bytes and calls the scanner outside the database transaction. Scanner failures
+or unknown results create no verdict. Replay for the same version returns the
+recorded result without calling the scanner again. If concurrent scans
+disagree, both observations are retained and future reads prefer `blocked`.
+A receipt is a point-in-time observation, never authority to extract.
+
+Use a separate non-owner, non-BYPASSRLS scanner login. Grant schema USAGE,
+SELECT on the evidence registration, quarantine and verdict tables, and
+INSERT on verdict columns `tenant_id, evidence_id, content_sha256, byte_size,
+policy_version, verdict`. Do not grant mutation of originals or existing
+verdicts. Do not reuse intake or customer credentials. These are internal
+worker grants; the login must not be exposed to a model, HTTP client or
+general query interface. As elsewhere, RLS protects against missing predicates
+under an established context, not a compromised worker setting its own context.
+
+No scanner is selected or qualified. Next: claim scan jobs so a clean
+observation cannot release evidence while another scan of the same policy
+is in flight; then enforce the current policy, blocked precedence and an
+exact-byte check at the extraction boundary. A deployment also needs scanner
+isolation, time/resource limits and retry/recovery controls.

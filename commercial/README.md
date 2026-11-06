@@ -105,5 +105,6 @@ shares qualification rate limits across workers through PostgreSQL.
 The [evidence registry](EVIDENCE.md) records document fingerprints and minimal
 metadata with organisation-scoped duplicate detection. An internal local
 quarantine spool computes fingerprints from bounded streams. The internal
-PostgreSQL quarantine can retain matching originals; there is no HTTP route,
-scanner or extraction integration.
+PostgreSQL quarantine can retain matching originals. A separate worker can record
+verdicts from a trusted scanner callback. No real scanner, upload route or
+extraction is wired.

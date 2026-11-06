@@ -300,3 +300,13 @@ payload. See commercial/EVIDENCE.md. **38 core, 21 identity and 158 PostgreSQL/H
 tests pass**. The unchanged demo Chromium case still fails on a socket restriction.
 Next: scanner-specific access and an exact-byte verdict before any extraction.
 No upload route, scanner, extraction, live records or deployment.
+
+## Latest scanner verdict checkpoint
+
+Migration 0015 records exact-byte observations by scanner policy through a
+separate worker login. Failures leave no verdict, retries reuse a recorded
+result and concurrent disagreements preserve both outcomes with blocked
+precedence. See commercial/EVIDENCE.md. **38 core, 21 identity and 163
+PostgreSQL/HTTP tests pass**. The unchanged demo browser still fails on a
+Chromium socket restriction. Next: durable scan claims and an extraction
+gate; no real scanner or extraction is enabled.

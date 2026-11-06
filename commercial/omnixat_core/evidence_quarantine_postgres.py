@@ -64,10 +64,12 @@ def store_quarantined_evidence(
             ):
                 raise EvidenceConflict("Staged bytes do not match registration")
 
+            # The primary key and the exact-byte foreign-key target can both
+            # conflict on replay; arbitrate both unique indexes.
             cursor.execute("""
                 INSERT INTO omnixat.evidence_quarantine (tenant_id, evidence_id, original_bytes)
                 VALUES (%s,%s,%b)
-                ON CONFLICT (tenant_id, evidence_id) DO NOTHING
+                ON CONFLICT DO NOTHING
                 RETURNING stored_at
             """, (tenant, evidence, original))
             stored = cursor.fetchone()

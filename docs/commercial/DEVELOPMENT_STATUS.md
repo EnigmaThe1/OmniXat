@@ -809,3 +809,37 @@ Next: separate scanner role and a durable verdict tied to exact bytes and
 scanner policy, then gate extraction on the verified decision. The adapter
 buffers one bounded file; real use also needs capacity, retention, logging,
 encryption and restore qualification. No deployment or real evidence used.
+
+## C4 scanner verdict boundary — completed
+
+Recovered clean cc1220a. Add a scanner-only service with an append-only
+PostgreSQL verdict tied to the stored original and a configured policy
+version. Verify separation from intake, failure handling and retry safety
+with a fictional scanner. No real scanner, extraction, upload route or deployment.
+
+Migration 0015 binds append-only scanner observations to the tenant,
+quarantined bytes, digest, size and configured scanner policy. A separate
+worker login reads the scoped original, verifies it, calls a trusted
+scanner outside the database transaction and records only a supported
+decision. Failures leave no decision; retries reuse the recorded observation.
+If concurrent scans disagree, both outcomes survive and blocked takes
+precedence on subsequent reads. No receipt authorises extraction.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **38 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **163 passed**. Five new cases
+  cover exact bytes and policy binding, replay, failure, isolation/grants,
+  and concurrent disagreement. A rerun caught a duplicate-index race in
+  quarantine inserts after adding the foreign-key target; the insert now
+  handles conflicts on both indexes and the final full run passed.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch confirmed
+  socket permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: add a durable scan claim/recovery boundary, then enforce the active
+policy, blocked precedence and exact byte binding before extraction.
+A real scanner still needs isolation, time/resource limits and qualification.
