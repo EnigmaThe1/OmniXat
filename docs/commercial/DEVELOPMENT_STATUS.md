@@ -1078,3 +1078,28 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: scoped draft read and validation of explicitly supplied accounting
 context before creating expense or ledger drafts. No posting or deployment.
+
+## C4 scoped accounting draft reads — completed
+
+Recovered clean 8e5263c. Add a read-only service for one exact draft cell,
+with source provenance and a fresh eligibility check. Keep reader grants
+separate from writers. No accounting context inference or ledger effects.
+
+Migration 0023 adds a dedicated read boundary for one exact draft amount.
+It returns provenance with an exact decimal and withholds ineligible
+results. Reader and writer database grants are separate.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **42 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **184 passed**. Two new
+  cases cover exact decimal/provenance, policy rotation, scope and grants.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch confirmed
+  socket permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: validate explicit currency, accounting date and account context for
+expense or ledger drafts. No public route, posting or deployment.

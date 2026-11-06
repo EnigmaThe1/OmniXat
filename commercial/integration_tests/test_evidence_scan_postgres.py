@@ -15,7 +15,9 @@ from psycopg.types.json import Jsonb
 
 from omnixat_core.access import Principal
 from omnixat_core.evidence_csv import AmountCell
-from omnixat_core.evidence_drafts_postgres import EvidenceDraftConflict, create_csv_draft_amount
+from omnixat_core.evidence_drafts_postgres import (
+    EvidenceDraftConflict, create_csv_draft_amount, read_csv_draft_amount,
+)
 from omnixat_core.evidence_extraction_postgres import (
     CSVExtractionConflict, EvidenceNotEligible, _store_csv_extraction,
     extract_and_store_csv_amounts, extract_csv_amounts, read_evidence_for_extraction,
@@ -118,6 +120,19 @@ class EvidenceScanTests(PostgresFixture):
         ).format(draft))
         cls.draft_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                       user=draft_role, password=draft_password)
+
+        draft_reader_role = cls.role + "_draft_reader"
+        draft_reader = sql.Identifier(draft_reader_role)
+        reader_password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(draft_reader, sql.Literal(reader_password)))
+        cls.addClassCleanup(cls.drop_role, draft_reader_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(draft_reader))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_csv_draft_amount(uuid,uuid,uuid,text,integer,integer) TO {}"
+        ).format(draft_reader))
+        cls.draft_reader_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                             user=draft_reader_role, password=reader_password)
 
     @classmethod
     def drop_role(cls, role):
@@ -640,3 +655,46 @@ class EvidenceScanTests(PostgresFixture):
         self.assertEqual(self.owner.execute(
             "SELECT count(*) FROM omnixat.evidence_draft_amounts WHERE job_id=%s", (job,),
         ).fetchone()[0], 0)
+
+    def test_csv_draft_read_preserves_amount_and_provenance_until_policy_changes(self):
+        _, _, job, cells = self.prepare_csv_review()
+        scope = (self.a, self.org, self.registration.id, job)
+        viewer = Principal("viewer", self.a, "viewer")
+        with psycopg.connect(self.draft_reader_dsn, autocommit=True) as reader:
+            with self.assertRaises(EvidenceNotEligible):
+                read_csv_draft_amount(reader, viewer, *scope, cells[0])
+            with psycopg.connect(self.draft_dsn, autocommit=True) as writer:
+                receipt = create_csv_draft_amount(writer, self.actor, *scope, cells[0])
+            result = read_csv_draft_amount(reader, viewer, *scope, cells[0])
+            self.assertEqual(result.receipt, receipt)
+            self.assertEqual(result.amount.as_tuple(), Decimal("0.00").as_tuple())
+            self.assertEqual(result.created_by, self.actor.user_id)
+            self.assertEqual(result.content_sha256, sha256(self.original).hexdigest())
+            self.assertEqual(result.policy_version, "fictional-v1")
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                read_csv_draft_amount(reader, viewer, *scope, cells[0])
+
+    def test_csv_draft_read_requires_exact_scope_and_separate_login(self):
+        _, _, job, cells = self.prepare_csv_review()
+        scope = (self.a, self.org, self.registration.id, job, cells[0])
+        with psycopg.connect(self.draft_dsn, autocommit=True) as writer, \
+             psycopg.connect(self.draft_reader_dsn, autocommit=True) as reader:
+            create_csv_draft_amount(writer, self.actor, *scope)
+            for actor in (Principal("agent", self.a, "editor", actor_kind="agent"),
+                          Principal("bearer", self.a, "viewer", api_scopes=frozenset({"evidence:read"})),
+                          Principal("staff", self.a, "owner", staff_role="platform_owner")):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    read_csv_draft_amount(reader, actor, *scope)
+            with self.assertRaises(EvidenceNotEligible):
+                read_csv_draft_amount(reader, self.other, self.b, *scope[1:])
+            with self.assertRaises(EvidenceNotEligible):
+                read_csv_draft_amount(reader, self.actor, self.a, uuid4(), *scope[2:])
+            with self.assertRaises(EvidenceNotEligible):
+                read_csv_draft_amount(reader, self.actor, *scope[:-1], AmountCell(cells[0].field_name, 2, 2))
+            with self.assertRaises(PermissionError):
+                read_csv_draft_amount(writer, self.actor, *scope)
+            with self.assertRaises(PermissionError):
+                create_csv_draft_amount(reader, self.actor, *scope)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                reader.execute("SELECT * FROM omnixat.evidence_draft_amounts")

@@ -241,3 +241,16 @@ only. The source link is the immutable extraction job and cell; the draft
 records whether its value was extracted or clarified. This stores an amount
 candidate only. It assigns no currency, accounting date, account or tax
 treatment and cannot post to the ledger.
+
+## Scoped draft amount reads
+
+Migration 0023 adds `read_csv_draft_amount` for interactive tenant users
+with evidence read permission. The caller selects an exact organisation,
+evidence, extraction job and cell. The read rechecks the active policy and
+source eligibility and returns the exact decimal, source kind, digest,
+creator and timestamp. Stale or mismatched requests return no draft.
+
+Give the dedicated reader login USAGE on `omnixat_extraction` and EXECUTE on
+`omnixat_extraction.read_csv_draft_amount(uuid,uuid,uuid,text,integer,integer)`
+only. Keep it separate from draft, answer and extraction writers. This
+read neither validates accounting context nor authorises ledger effects.

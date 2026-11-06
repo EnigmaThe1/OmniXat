@@ -1,16 +1,19 @@
 """Prepare a draft amount from an exact eligible evidence cell; never post it."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
 from psycopg.rows import dict_row
 
-from .evidence_csv import AmountCell, _FIELD, _MAX_COLUMNS, _MAX_ROWS
+from .evidence_csv import AmountCell, _DECIMAL, _FIELD, _MAX_COLUMNS, _MAX_ROWS
 from .evidence_extraction_postgres import EvidenceNotEligible, _TABLES
 from .evidence_postgres import _authorize
 from .postgres import _tenant_transaction
+
+_DRAFT_TABLES = (*_TABLES, "csv_extraction_results", "csv_clarification_answers", "evidence_draft_amounts")
 
 
 class EvidenceDraftConflict(Exception):
@@ -26,6 +29,30 @@ class EvidenceDraftReceipt:
     created_at: datetime
 
 
+def _validate_cell(cell):
+    if (
+        type(cell) is not AmountCell or not isinstance(cell.field_name, str) or not _FIELD.fullmatch(cell.field_name)
+        or type(cell.row) is not int or not 1 <= cell.row <= _MAX_ROWS
+        or type(cell.column) is not int or not 1 <= cell.column <= _MAX_COLUMNS
+    ):
+        raise ValueError("Invalid draft source cell")
+
+
+def _require_draft_role(cursor, allowed_function):
+    cursor.execute("""
+        SELECT has_schema_privilege('omnixat', 'USAGE,CREATE')
+            OR has_schema_privilege('omnixat_extraction', 'CREATE')
+            OR EXISTS (
+                SELECT 1 FROM pg_catalog.pg_proc p
+                JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'omnixat_extraction' AND p.proname <> %s
+                  AND has_function_privilege(p.oid, 'EXECUTE')
+            ) AS overprivileged
+    """, (allowed_function,))
+    if cursor.fetchone()["overprivileged"]:
+        raise PermissionError("Dedicated draft grants required")
+
+
 def create_csv_draft_amount(
     connection, actor, tenant_id, organisation_id, evidence_id, job_id, cell: AmountCell,
 ) -> EvidenceDraftReceipt:
@@ -37,29 +64,12 @@ def create_csv_draft_amount(
     actor_id = actor.user_id
     if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
         raise ValueError("Invalid draft attribution")
-    if (
-        type(cell) is not AmountCell or not isinstance(cell.field_name, str) or not _FIELD.fullmatch(cell.field_name)
-        or type(cell.row) is not int or not 1 <= cell.row <= _MAX_ROWS
-        or type(cell.column) is not int or not 1 <= cell.column <= _MAX_COLUMNS
-    ):
-        raise ValueError("Invalid draft source cell")
+    _validate_cell(cell)
 
     organisation, evidence, job = (UUID(str(value)) for value in (organisation_id, evidence_id, job_id))
-    tables = (*_TABLES, "csv_extraction_results", "csv_clarification_answers", "evidence_draft_amounts")
-    with _tenant_transaction(connection, tenant, write=True, tables_required=tables):
+    with _tenant_transaction(connection, tenant, write=True, tables_required=_DRAFT_TABLES):
         with connection.cursor(row_factory=dict_row) as cursor:
-            cursor.execute("""
-                SELECT has_schema_privilege('omnixat', 'USAGE,CREATE')
-                    OR has_schema_privilege('omnixat_extraction', 'CREATE')
-                    OR EXISTS (
-                        SELECT 1 FROM pg_catalog.pg_proc p
-                        JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-                        WHERE n.nspname = 'omnixat_extraction' AND p.proname <> 'create_csv_draft_amount'
-                          AND has_function_privilege(p.oid, 'EXECUTE')
-                    ) AS overprivileged
-            """)
-            if cursor.fetchone()["overprivileged"]:
-                raise PermissionError("Dedicated draft grants required")
+            _require_draft_role(cursor, "create_csv_draft_amount")
             cursor.execute("""
                 SELECT * FROM omnixat_extraction.create_csv_draft_amount(%s,%s,%s,%s,%s,%s,%s)
             """, (organisation, evidence, job, cell.field_name, cell.row, cell.column, actor_id))
@@ -71,3 +81,35 @@ def create_csv_draft_amount(
             if row["outcome"] != "stored":
                 raise RuntimeError("Draft receipt unavailable")
             return EvidenceDraftReceipt(evidence, job, cell, row["stored_source"], row["stored_at"])
+
+
+@dataclass(frozen=True)
+class EvidenceDraftAmount:
+    receipt: EvidenceDraftReceipt
+    amount: Decimal = field(repr=False)
+    created_by: str = field(repr=False)
+    policy_version: str
+    content_sha256: str
+
+
+def read_csv_draft_amount(
+    connection, actor, tenant_id, organisation_id, evidence_id, job_id, cell: AmountCell,
+) -> EvidenceDraftAmount:
+    """Read one draft after rechecking its exact source under the current policy."""
+    tenant = _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant draft review required")
+    _validate_cell(cell)
+    organisation, evidence, job = (UUID(str(value)) for value in (organisation_id, evidence_id, job_id))
+    with _tenant_transaction(connection, tenant, tables_required=_DRAFT_TABLES):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_csv_draft_amount")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.read_csv_draft_amount(%s,%s,%s,%s,%s,%s)
+            """, (organisation, evidence, job, cell.field_name, cell.row, cell.column))
+            row = cursor.fetchone()
+    if row is None or not _DECIMAL.fullmatch(row["amount"]):
+        raise EvidenceNotEligible("CSV draft amount is unavailable")
+    receipt = EvidenceDraftReceipt(evidence, job, cell, row["source_kind"], row["created_at"])
+    return EvidenceDraftAmount(receipt, Decimal(row["amount"]), row["created_by"],
+                               row["policy_version"], row["content_sha256"].hex())

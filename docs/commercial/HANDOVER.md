@@ -378,3 +378,10 @@ extracted cell or attributed clarification. It refuses unresolved amounts
 and cannot post to the ledger. **42 core, 21 identity and 182 PostgreSQL/HTTP
 tests pass**. The unchanged demo browser fails on Chromium socket permissions.
 Next: scoped draft reads and explicit accounting context validation.
+
+## Latest scoped draft amount read checkpoint
+
+Migration 0023 returns an exact eligible draft amount with source provenance
+through a dedicated read-only role. **42 core, 21 identity and 184
+PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on Chromium
+socket permissions. Next: validate explicit accounting context for drafts.
