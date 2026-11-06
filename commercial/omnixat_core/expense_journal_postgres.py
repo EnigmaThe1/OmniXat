@@ -196,17 +196,34 @@ def record_expense_journal_decision(
         return ExpenseJournalDecisionReceipt(journal, snapshot_sha256, decision, actor_id, row["decision_recorded_at"])
 
 
+JournalCorrectionReason = Literal["amount", "account", "funding", "accounting_date", "source_evidence"]
+
+
+class ExpenseJournalCorrectionConflict(Exception):
+    """A different correction reason is already attached to the observation."""
+
+
+@dataclass(frozen=True)
+class ExpenseJournalCorrectionReceipt:
+    journal_id: UUID
+    snapshot_sha256: str
+    reason: JournalCorrectionReason
+    reviewer_id: str = field(repr=False)
+    recorded_at: datetime
+
+
 @dataclass(frozen=True)
 class ExpenseJournalDecisionPage:
     decisions: tuple[ExpenseJournalDecisionReceipt, ...]
     next_after_reviewer: str | None = field(repr=False)
+    corrections: tuple[ExpenseJournalCorrectionReceipt, ...] = ()
 
 
 def read_expense_journal_decisions(
     connection, actor, tenant_id, organisation_id, journal_id, *,
     snapshot_sha256: str, page_size: int = 25, after_reviewer: str | None = None,
 ) -> ExpenseJournalDecisionPage:
-    """Read observations for the exact eligible snapshot, ordered by reviewer ID."""
+    """Read observations and their attached corrections for one eligible snapshot."""
     tenant = _authorize(actor, tenant_id, "records:read")
     _authorize(actor, tenant_id, "evidence:read")
     if actor.actor_kind != "human" or actor.api_scopes is not None:
@@ -223,10 +240,13 @@ def read_expense_journal_decisions(
     organisation, journal = (UUID(str(value)) for value in (organisation_id, journal_id))
 
     with _tenant_transaction(connection, tenant,
-                             tables_required=(*_DRAFT_TABLES, "expense_journal_review_decisions")):
+                             tables_required=(*_DRAFT_TABLES, "expense_journal_review_decisions",
+                                              "expense_journal_correction_requests")):
         with connection.cursor(row_factory=dict_row) as cursor:
-            _require_draft_role(cursor, "read_expense_journal_decisions")
-            cursor.execute("SELECT * FROM omnixat_extraction.read_expense_journal_decisions(%s,%s,%s,%s,%s)",
+            _require_draft_role(cursor, "read_expense_journal_decisions_with_corrections")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.read_expense_journal_decisions_with_corrections(%s,%s,%s,%s,%s)
+            """,
                            (organisation, journal, bytes.fromhex(snapshot_sha256), after_reviewer, page_size))
             rows = cursor.fetchall()
     if not rows:
@@ -237,23 +257,10 @@ def read_expense_journal_decisions(
         journal, snapshot_sha256, row["decision"], row["reviewer_id"], row["recorded_at"],
     ) for row in rows[:page_size])
     next_cursor = decisions[-1].reviewer_id if len(rows) > page_size else None
-    return ExpenseJournalDecisionPage(decisions, next_cursor)
-
-
-JournalCorrectionReason = Literal["amount", "account", "funding", "accounting_date", "source_evidence"]
-
-
-class ExpenseJournalCorrectionConflict(Exception):
-    """A different correction reason is already attached to the observation."""
-
-
-@dataclass(frozen=True)
-class ExpenseJournalCorrectionReceipt:
-    journal_id: UUID
-    snapshot_sha256: str
-    reason: JournalCorrectionReason
-    reviewer_id: str = field(repr=False)
-    recorded_at: datetime
+    corrections = tuple(ExpenseJournalCorrectionReceipt(
+        journal, snapshot_sha256, row["correction_reason"], row["reviewer_id"], row["correction_recorded_at"],
+    ) for row in rows[:page_size] if row["correction_reason"] is not None)
+    return ExpenseJournalDecisionPage(decisions, next_cursor, corrections)
 
 
 def record_expense_journal_correction(

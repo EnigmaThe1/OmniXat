@@ -485,10 +485,20 @@ restart from the first page to include newly recorded reviewers who
 sort before the cursor. Older snapshots are retained but not listed here.
 The list conveys no overall verdict, approval or posting authority.
 
+Migration 0035 adds correction receipts to the same read snapshot.
+The page's `corrections` tuple contains only reasons and timestamps for
+decisions on that page. Match a correction to its decision by reviewer
+ID within the page. A changes-requested decision can exist without a
+reason; a reason from a different snapshot is never carried forward.
+Decision receipts, page size and cursor behavior are unchanged.
+
 Give a dedicated non-owner, NOBYPASSRLS reader USAGE on
 `omnixat_extraction` and EXECUTE only on
-`omnixat_extraction.read_expense_journal_decisions(uuid,uuid,bytea,text,integer)`.
-Keep it separate from direct table access and other journal roles.
+`omnixat_extraction.read_expense_journal_decisions_with_corrections(uuid,uuid,bytea,text,integer)`.
+When upgrading from migration 0033, replace that reader's previous
+`read_expense_journal_decisions(uuid,uuid,bytea,text,integer)` grant.
+Migration 0035 leaves existing ACLs unchanged. Keep direct table access
+and other journal grants separate.
 
 ## Recording a structured journal correction request
 
@@ -503,7 +513,7 @@ the matching changes-requested observation.
 An identical eligible retry returns the original receipt. A different
 reason conflicts; missing, stale and out-of-scope targets are unavailable.
 The record neither changes the journal nor replaces the decision. No
-correction read, resolution workflow, approval or posting is enabled.
+resolution workflow, approval or posting is enabled.
 
 Give a dedicated non-owner, NOBYPASSRLS writer USAGE on
 `omnixat_extraction` and EXECUTE only on

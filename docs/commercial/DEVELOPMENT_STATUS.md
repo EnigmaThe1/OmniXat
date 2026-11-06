@@ -1450,3 +1450,30 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: show correction reasons alongside the corresponding current-snapshot
 observations through a scoped read. No correction resolution or posting.
+
+## C4 journal correction history — completed
+
+Recovered clean 22eca98. Return structured correction reasons and timestamps
+on the same bounded, scoped read as their current-snapshot observations.
+Keep decision receipts and cursor behavior unchanged. No resolution or posting.
+
+Migration 0035 adds structured correction receipts to the same scoped
+snapshot and page as their parent decisions. No older snapshot or
+lookahead-row correction is returned. Existing decision receipts are
+unchanged; replace the decision reader grant as described in EVIDENCE.md.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **208 passed**. Extended
+  cases cover exact correction receipts, lookahead exclusion, historical
+  corrections for the same reviewer, stale cursors and denied table reads.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: derive focused follow-up prompts from current-snapshot correction
+reasons without guessing values or changing the journal. No posting.

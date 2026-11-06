@@ -483,3 +483,11 @@ changes-requested observation, with attribution and retry protection.
 **44 core, 21 identity and 208 PostgreSQL/HTTP tests pass**. The unchanged
 prototype browser fails on Chromium socket permissions. Next: show reasons
 in scoped review history. No mutation of journals, approval or posting.
+
+## Latest journal correction history checkpoint
+
+Migration 0035 returns exact-snapshot corrections on the same page as
+their decisions. Replace the decision-reader grant as described in EVIDENCE.md.
+**44 core, 21 identity and 208 PostgreSQL/HTTP tests pass**. The unchanged
+prototype browser fails on Chromium socket permissions. Next: focused prompts
+for correction reasons. No journal mutation, approval or posting.
