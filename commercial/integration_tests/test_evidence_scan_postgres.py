@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Barrier, Event
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import psycopg
 from psycopg import sql
@@ -23,7 +23,7 @@ from omnixat_core.evidence_extraction_postgres import (
     CSVExtractionConflict, EvidenceNotEligible, _store_csv_extraction,
     extract_and_store_csv_amounts, extract_csv_amounts, read_evidence_for_extraction,
 )
-from omnixat_core.expense_context import ExpenseDraftContext, ExpenseDraftPolicy
+from omnixat_core.expense_context import ExpenseDraftContext
 from omnixat_core.evidence_intake import stage_evidence
 from omnixat_core.evidence_postgres import register_evidence
 from omnixat_core.evidence_quarantine_postgres import store_quarantined_evidence
@@ -135,6 +135,20 @@ class EvidenceScanTests(PostgresFixture):
         ).format(draft_reader))
         cls.draft_reader_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                              user=draft_reader_role, password=reader_password)
+
+        preview_role = cls.role + "_expense_preview"
+        preview = sql.Identifier(preview_role)
+        preview_password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(preview, sql.Literal(preview_password)))
+        cls.addClassCleanup(cls.drop_role, preview_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(preview))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_csv_expense_preview"
+            "(uuid,uuid,uuid,text,integer,integer,uuid,uuid,date) TO {}"
+        ).format(preview))
+        cls.expense_preview_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                               user=preview_role, password=preview_password)
 
     @classmethod
     def drop_role(cls, role):
@@ -709,13 +723,98 @@ class EvidenceScanTests(PostgresFixture):
             store_csv_clarification(answer, self.actor, *scope, amount="12.340")
         with psycopg.connect(self.draft_dsn, autocommit=True) as writer:
             receipt = create_csv_draft_amount(writer, self.actor, *scope)
-        account = uuid4()
-        context = ExpenseDraftContext("GBP", date(2026, 11, 6), account)
-        policy = ExpenseDraftPolicy(UUID(self.a), self.org, date(2026, 11, 1),
-                                    date(2026, 11, 30), frozenset({account}))
-        with psycopg.connect(self.draft_reader_dsn, autocommit=True) as reader:
-            preview = prepare_csv_expense_draft(reader, self.actor, *scope, context=context, policy=policy)
-            self.assertEqual((preview.source.receipt, preview.amount_pence, preview.context), (receipt, 1234, context))
+        account, period = uuid4(), uuid4()
+        context = ExpenseDraftContext("GBP", date(2026, 11, 1), account)
+        with psycopg.connect(self.expense_preview_dsn, autocommit=True) as reader:
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                prepare_csv_expense_draft(reader, self.actor, *scope, context=context, period_id=period)
+            self.configure_expense_policy(self.a, self.org, period, account)
+            preview = prepare_csv_expense_draft(reader, self.actor, *scope, context=context, period_id=period)
+            self.assertEqual((preview.source.receipt, preview.amount_pence, preview.context, preview.period_id),
+                             (receipt, 1234, context, period))
             self.set_active_policy("fictional-v2")
             with self.assertRaises(EvidenceNotEligible):
-                prepare_csv_expense_draft(reader, self.actor, *scope, context=context, policy=policy)
+                prepare_csv_expense_draft(reader, self.actor, *scope, context=context, period_id=period)
+
+    def configure_expense_policy(self, tenant, org, period, account, *, opened=True, eligible=True):
+        self.owner.execute("""INSERT INTO omnixat.expense_accounting_periods
+            (tenant_id, organisation_id, id, starts_on, ends_on, open_for_drafts)
+            VALUES (%s,%s,%s,'2026-11-01','2026-11-30',%s)""", (tenant, org, period, opened))
+        self.owner.execute("""INSERT INTO omnixat.expense_account_policy
+            (tenant_id, organisation_id, account_id, eligible_for_drafts)
+            VALUES (%s,%s,%s,%s)""", (tenant, org, account, eligible))
+
+    def test_csv_expense_preview_rejects_unavailable_policy_and_scope(self):
+        _, _, job, cells = self.prepare_csv_review()
+        scope = (self.a, self.org, self.registration.id, job, cells[0])
+        account, period = uuid4(), uuid4()
+        other_org, other_period, other_account = uuid4(), uuid4(), uuid4()
+        self.owner.execute("""INSERT INTO omnixat.organisations (tenant_id,id,display_name,created_by)
+            VALUES (%s,%s,'Fictional other org','fixture'),(%s,%s,'Fictional other tenant org','fixture')""",
+                           (self.a, other_org, self.b, self.org))
+        self.configure_expense_policy(self.a, other_org, other_period, other_account)
+        self.configure_expense_policy(self.b, self.org, period, account)
+        context = ExpenseDraftContext("GBP", date(2026, 11, 30), account)
+        with psycopg.connect(self.expense_preview_dsn, autocommit=True) as reader:
+            def preview(ctx=context, selected=period, actor=self.actor):
+                return prepare_csv_expense_draft(reader, actor, *scope, context=ctx, period_id=selected)
+
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                preview()  # Identical IDs provisioned in another tenant.
+            self.configure_expense_policy(self.a, self.org, period, account, opened=False, eligible=False)
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                preview()
+            self.owner.execute("""UPDATE omnixat.expense_accounting_periods SET open_for_drafts=true
+                WHERE tenant_id=%s AND organisation_id=%s AND id=%s""", (self.a, self.org, period))
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                preview()
+            self.owner.execute("""UPDATE omnixat.expense_account_policy SET eligible_for_drafts=true
+                WHERE tenant_id=%s AND organisation_id=%s AND account_id=%s""", (self.a, self.org, account))
+            with self.assertRaises(EvidenceNotEligible):
+                preview()  # End date passes policy; draft source is still required.
+            for ctx, selected in (
+                (context, other_period),
+                (ExpenseDraftContext("GBP", date(2026, 11, 30), other_account), period),
+                (ExpenseDraftContext("GBP", date(2026, 12, 1), account), period),
+                (ExpenseDraftContext("USD", date(2026, 11, 30), account), period),
+            ):
+                with self.subTest(context=ctx, period=selected), self.assertRaises(ValueError):
+                    preview(ctx, selected)
+            for actor in (self.other, Principal("viewer", self.a, "viewer"),
+                          Principal("agent", self.a, "editor", actor_kind="agent"),
+                          Principal("api", self.a, "editor", api_scopes=frozenset({"records:write", "evidence:read"}))):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    preview(actor=actor)
+
+    def test_expense_policy_constraints_and_preview_role_grants(self):
+        period, account = uuid4(), uuid4()
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.configure_expense_policy(self.b, self.org, period, account)
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.owner.execute("""INSERT INTO omnixat.expense_accounting_periods
+                (tenant_id, organisation_id, id, starts_on, ends_on)
+                VALUES (%s,%s,%s,'2026-12-01','2026-11-30')""", (self.a, self.org, period))
+        self.owner.execute("""INSERT INTO omnixat.expense_accounting_periods
+            (tenant_id, organisation_id, id, starts_on, ends_on)
+            VALUES (%s,%s,%s,'2026-11-01','2026-11-30')""", (self.a, self.org, period))
+        self.owner.execute("""INSERT INTO omnixat.expense_account_policy
+            (tenant_id, organisation_id, account_id) VALUES (%s,%s,%s)""", (self.a, self.org, account))
+        self.assertEqual(self.owner.execute("""SELECT p.open_for_drafts, a.eligible_for_drafts
+            FROM omnixat.expense_accounting_periods p
+            JOIN omnixat.expense_account_policy a USING (tenant_id, organisation_id)
+            WHERE p.tenant_id=%s AND p.id=%s AND a.account_id=%s""", (self.a, period, account)).fetchone(),
+                         (False, False))
+        with psycopg.connect(self.expense_preview_dsn, autocommit=True) as reader:
+            for statement in ("SELECT * FROM omnixat.expense_accounting_periods",
+                              "UPDATE omnixat.expense_account_policy SET eligible_for_drafts=true"):
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    reader.execute(statement)
+            with self.assertRaises(PermissionError):
+                read_csv_draft_amount(reader, self.actor, self.a, self.org,
+                                      self.registration.id, uuid4(), AmountCell("amount", 2, 2))
+        with psycopg.connect(self.draft_reader_dsn, autocommit=True) as reader:
+            with self.assertRaises(PermissionError):
+                prepare_csv_expense_draft(
+                    reader, self.actor, self.a, self.org, self.registration.id, uuid4(), AmountCell("amount", 2, 2),
+                    context=ExpenseDraftContext("GBP", date(2026, 11, 30), account), period_id=period,
+                )

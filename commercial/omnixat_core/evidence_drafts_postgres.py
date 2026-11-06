@@ -1,7 +1,7 @@
 """Prepare a draft amount from an exact eligible evidence cell; never post it."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -109,7 +109,12 @@ def read_csv_draft_amount(
                 SELECT * FROM omnixat_extraction.read_csv_draft_amount(%s,%s,%s,%s,%s,%s)
             """, (organisation, evidence, job, cell.field_name, cell.row, cell.column))
             row = cursor.fetchone()
-    if row is None or not _DECIMAL.fullmatch(row["amount"]):
+
+    return _read_amount(row, evidence, job, cell)
+
+
+def _read_amount(row, evidence, job, cell) -> EvidenceDraftAmount:
+    if row is None or row["amount"] is None or not _DECIMAL.fullmatch(row["amount"]):
         raise EvidenceNotEligible("CSV draft amount is unavailable")
     receipt = EvidenceDraftReceipt(evidence, job, cell, row["source_kind"], row["created_at"])
     return EvidenceDraftAmount(receipt, Decimal(row["amount"]), row["created_by"],
@@ -120,18 +125,42 @@ def read_csv_draft_amount(
 class PreparedExpenseDraft:
     source: EvidenceDraftAmount
     context: ExpenseDraftContext
+    period_id: UUID
     amount_pence: int = field(repr=False)
 
 
 def prepare_csv_expense_draft(
     connection, actor, tenant_id, organisation_id, evidence_id, job_id, cell: AmountCell, *,
-    context: ExpenseDraftContext, policy: ExpenseDraftPolicy,
+    context: ExpenseDraftContext, period_id: UUID,
 ) -> PreparedExpenseDraft:
-    """Return a validated preview only; durable writes must recheck eligibility and context."""
+    """Read the selected accounting context and eligible evidence in one snapshot."""
     tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
     if actor.actor_kind != "human" or actor.api_scopes is not None:
         raise PermissionError("Interactive tenant expense preparation required")
-    organisation = UUID(str(organisation_id))
+    if type(context) is not ExpenseDraftContext or context.currency != "GBP":
+        raise ValueError("Explicit GBP currency required")
+    if type(context.accounting_date) is not date:
+        raise ValueError("An explicit accounting date is required")
+    if type(period_id) is not UUID or not period_id.int:
+        raise ValueError("Select an accounting period")
+    if type(context.expense_account_id) is not UUID or not context.expense_account_id.int:
+        raise ValueError("Select an eligible expense account")
+    _validate_cell(cell)
+    organisation, evidence, job = (UUID(str(value)) for value in (organisation_id, evidence_id, job_id))
+    tables = (*_DRAFT_TABLES, "expense_accounting_periods", "expense_account_policy")
+    with _tenant_transaction(connection, tenant, tables_required=tables):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_csv_expense_preview")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.read_csv_expense_preview(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (organisation, evidence, job, cell.field_name, cell.row, cell.column,
+                  period_id, context.expense_account_id, context.accounting_date))
+            row = cursor.fetchone()
+    if row is None:
+        raise ValueError("Selected period, date or expense account is unavailable")
+    policy = ExpenseDraftPolicy(tenant, organisation, row["period_start"], row["period_end"],
+                                frozenset({context.expense_account_id}))
     validate_expense_context(tenant, organisation, context, policy)
-    source = read_csv_draft_amount(connection, actor, tenant_id, organisation, evidence_id, job_id, cell)
-    return PreparedExpenseDraft(source, context, expense_pence(source.amount))
+    source = _read_amount(row, evidence, job, cell)
+    return PreparedExpenseDraft(source, context, period_id, expense_pence(source.amount))

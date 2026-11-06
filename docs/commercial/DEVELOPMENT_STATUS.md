@@ -1131,3 +1131,33 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: persist tenant-scoped accounting periods and expense account policy
 before implementing a transactional expense draft write. No posting or deployment.
+
+## C4 persistent expense preparation policy — completed
+
+Recovered clean c78beb8. Add operator-provisioned PostgreSQL accounting periods
+and expense-account eligibility with tenant/organisation scope, then use the
+selected period and account for a read-only evidence expense preview. Verify
+default denial and role separation. No statutory rules, draft writes or posting.
+
+Migration 0024 adds internal accounting periods and expense-account eligibility
+with composite organisation references, forced tenant RLS and disabled defaults.
+The separate execute-only preview reads policy and source eligibility in one
+snapshot, preserving the selected period and exact source amount. Policy is
+provisioned by a trusted operator; there is no chart of accounts or admin route.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **187 passed**. Covers
+  missing/closed periods, disabled accounts, date bounds, exact scope,
+  restricted grants, policy rotation and migration upgrade.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  confirmed a socket permission error. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: add a transactional, idempotent expense draft write that derives the
+amount from eligible evidence and holds the selected accounting policy
+through commit. No ledger posting, tax rules, routes or deployment.

@@ -393,3 +393,12 @@ account against trusted scoped policy and converts eligible source amounts
 to pence without rounding. **44 core, 21 identity and 185 PostgreSQL/HTTP tests
 pass**. The unchanged demo browser fails on Chromium socket permissions.
 Next: persistent accounting periods/account policy and a draft-only write.
+
+## Latest persistent expense preparation policy checkpoint
+
+Migration 0024 adds tenant/organisation accounting periods and expense-account
+eligibility. A dedicated read-only preview checks the selected period, account
+and source eligibility in one snapshot. **44 core, 21 identity and 187
+PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on Chromium
+socket permissions. Next: an idempotent expense draft write with fresh evidence
+and policy checks held through commit. No posting or deployment.

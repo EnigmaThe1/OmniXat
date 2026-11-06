@@ -257,15 +257,32 @@ read neither validates accounting context nor authorises ledger effects.
 
 ## GBP expense draft preflight
 
-`prepare_csv_expense_draft` accepts an explicit GBP currency, accounting
-date and expense-account UUID. The trusted caller supplies the organisation's
-configured period and eligible expense accounts; this policy must not be
-constructed from request data. The service checks tenant and organisation,
-write authority, period and account, then reads the source through the
-existing eligibility gate. It accepts only positive whole-penny amounts
-without rounding and retains the original decimal and source provenance.
+Migration 0024 stores internal accounting periods and expense-account
+eligibility under the exact tenant and organisation. An operator must
+explicitly open a period and enable an account for drafting; both flags
+default to false. No period or account is selected automatically. These
+records are preparation policy, not a chart of accounts or a statutory
+or tax calendar. There is no policy administration endpoint.
+
+`prepare_csv_expense_draft` takes an explicit period UUID, GBP currency,
+accounting date and account UUID. It requires an interactive tenant editor
+or owner with evidence access. The date must be within the selected
+period (including both boundary dates). A single read snapshot checks
+that the period and account are eligible and that the exact draft amount
+still passes the active scanner policy. The preview preserves the source
+and period ID and accepts only positive whole-penny amounts without rounding.
+
+Provision a separate non-owner, NOBYPASSRLS preview login with USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.read_csv_expense_preview(uuid,uuid,uuid,text,integer,integer,uuid,uuid,date)`.
+Do not grant table access or combine this login with the draft amount
+reader, writer, or scanner. Provision policy rows through a trusted
+operator connection, using the transaction-local `omnixat.tenant_id`
+context for a non-bypass role. Keep policy writes off the preview login.
+
 For currency reference see the [ISO 4217 maintenance agency](https://www.six-group.com/en/products-services/financial-information/market-reference-data/data-standards.html).
 
-This is an in-memory preview. The account and period policy is not persisted,
-and no expense or ledger entry is written. A future write must load trusted
-account and period data and recheck both context and evidence in the transaction.
+The preview has no durable effect and may become stale after it returns.
+A future expense draft write must independently recheck and hold evidence
+eligibility and the selected policy rows through commit. There is no
+ledger posting or tax treatment in this workflow.

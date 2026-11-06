@@ -251,7 +251,10 @@ class PostgresRecordsTests(PostgresFixture):
                               (tenant,organisation))
                 migrate(owner)
                 self.assertEqual(owner.execute('SELECT id FROM omnixat.organisations').fetchall(),[(organisation,)])
-                self.assertEqual(owner.execute('SELECT count(*) FROM public.omnixat_schema_migrations').fetchone()[0],23)
+                self.assertEqual(
+                    owner.execute('SELECT count(*) FROM public.omnixat_schema_migrations').fetchone()[0],
+                    len(list(postgres.MIGRATIONS.glob("*.sql"))),
+                )
         finally:
             self.admin.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(database)))
 
