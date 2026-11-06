@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
+import re
 from typing import Literal
 from uuid import UUID
 
@@ -119,6 +120,7 @@ class ExpenseJournalReview:
     receipt: ExpenseJournalReceipt
     created_by: str = field(repr=False)
     journal: ExpenseJournalPreview
+    snapshot_sha256: str
 
 
 def read_expense_journal_draft(
@@ -132,12 +134,63 @@ def read_expense_journal_draft(
     organisation, journal = (UUID(str(value)) for value in (organisation_id, journal_id))
     with _tenant_transaction(connection, tenant, tables_required=_DRAFT_TABLES):
         with connection.cursor(row_factory=dict_row) as cursor:
-            _require_draft_role(cursor, "read_expense_journal_draft")
-            cursor.execute("SELECT * FROM omnixat_extraction.read_expense_journal_draft(%s,%s)",
+            _require_draft_role(cursor, "read_expense_journal_review")
+            cursor.execute("SELECT * FROM omnixat_extraction.read_expense_journal_review(%s,%s)",
                            (organisation, journal))
             row = cursor.fetchone()
     if row is None:
         raise EvidenceNotEligible("Journal draft is unavailable")
     draft = row["expense_draft_id"]
     receipt = ExpenseJournalReceipt(row["journal_id"], draft, row["journal_created_at"])
-    return ExpenseJournalReview(receipt, row["journal_created_by"], _journal_details(row, draft))
+    return ExpenseJournalReview(receipt, row["journal_created_by"], _journal_details(row, draft),
+                                row["snapshot_sha256"].hex())
+
+
+JournalDecision = Literal["reviewed", "changes_requested"]
+
+
+class ExpenseJournalDecisionConflict(Exception):
+    """The reviewer already made a different decision for this snapshot."""
+
+
+@dataclass(frozen=True)
+class ExpenseJournalDecisionReceipt:
+    journal_id: UUID
+    snapshot_sha256: str
+    decision: JournalDecision
+    reviewer_id: str = field(repr=False)
+    recorded_at: datetime
+
+
+def record_expense_journal_decision(
+    connection, actor, tenant_id, organisation_id, journal_id, *,
+    snapshot_sha256: str, decision: JournalDecision,
+) -> ExpenseJournalDecisionReceipt:
+    """Record a historical bookkeeping observation with no approval or posting authority."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal review required")
+    actor_id = actor.user_id
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
+        raise ValueError("Invalid journal reviewer")
+    if type(snapshot_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", snapshot_sha256):
+        raise ValueError("An exact journal snapshot digest is required")
+    if decision not in ("reviewed", "changes_requested"):
+        raise ValueError("Unsupported journal review decision")
+    organisation, journal = (UUID(str(value)) for value in (organisation_id, journal_id))
+
+    with _tenant_transaction(connection, tenant, write=True,
+                             tables_required=(*_DRAFT_TABLES, "expense_journal_review_decisions")):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "record_expense_journal_decision")
+            cursor.execute("SELECT * FROM omnixat_extraction.record_expense_journal_decision(%s,%s,%s,%s,%s)",
+                           (organisation, journal, bytes.fromhex(snapshot_sha256), decision, actor_id))
+            row = cursor.fetchone()
+        if row["outcome"] == "unavailable":
+            raise EvidenceNotEligible("Journal snapshot is unavailable")
+        if row["outcome"] == "conflict":
+            raise ExpenseJournalDecisionConflict("A different decision already exists for this reviewer and snapshot")
+        if row["outcome"] != "stored":
+            raise RuntimeError("Journal decision receipt unavailable")
+        return ExpenseJournalDecisionReceipt(journal, snapshot_sha256, decision, actor_id, row["decision_recorded_at"])

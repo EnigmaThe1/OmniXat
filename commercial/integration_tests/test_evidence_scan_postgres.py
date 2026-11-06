@@ -38,7 +38,8 @@ from omnixat_core.expense_funding_postgres import (
     ExpenseFundingConflict, read_expense_funding_context, record_expense_funding_context,
 )
 from omnixat_core.expense_journal_postgres import (
-    ExpenseJournalConflict, create_expense_journal_draft, prepare_expense_journal_preview, read_expense_journal_draft,
+    ExpenseJournalConflict, ExpenseJournalDecisionConflict, create_expense_journal_draft,
+    prepare_expense_journal_preview, read_expense_journal_draft, record_expense_journal_decision,
 )
 from test_postgres import PostgresFixture
 
@@ -245,10 +246,24 @@ class EvidenceScanTests(PostgresFixture):
         cls.addClassCleanup(cls.drop_role, journal_review_role)
         cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(journal_review))
         cls.owner.execute(sql.SQL(
-            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_expense_journal_draft(uuid,uuid) TO {}"
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_expense_journal_review(uuid,uuid) TO {}"
         ).format(journal_review))
         cls.journal_review_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                               user=journal_review_role, password=password)
+
+        decision_role = cls.role + "_decision_writer"
+        decision_writer = sql.Identifier(decision_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(decision_writer, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, decision_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(decision_writer))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.record_expense_journal_decision"
+            "(uuid,uuid,bytea,text,text) TO {}"
+        ).format(decision_writer))
+        cls.decision_writer_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                               user=decision_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -1474,3 +1489,86 @@ class EvidenceScanTests(PostgresFixture):
                                (sha256(b"Different fictional document").digest(), self.a, receipt.id))
             with self.assertRaises(EvidenceNotEligible):
                 review()
+
+    def journal_decision_fixture(self):
+        _, _, _, draft, _, account = self.journal_write_fixture()
+        with psycopg.connect(self.journal_writer_dsn, autocommit=True) as writer:
+            receipt = create_expense_journal_draft(writer, self.actor, self.a, self.org, draft.id,
+                                                   counterpart_account_id=account)
+        with psycopg.connect(self.journal_review_dsn, autocommit=True) as reader:
+            first = read_expense_journal_draft(reader, self.actor, self.a, self.org, receipt.id)
+            reader.execute("SET TIME ZONE 'Pacific/Auckland'")
+            second = read_expense_journal_draft(reader, self.actor, self.a, self.org, receipt.id)
+            self.assertEqual(first.snapshot_sha256, second.snapshot_sha256)
+        return first
+
+    def test_journal_decision_is_attributed_and_replays_concurrently(self):
+        review = self.journal_decision_fixture()
+        journal, digest = review.receipt.id, review.snapshot_sha256
+        barrier = Barrier(2)
+
+        def record():
+            with psycopg.connect(self.decision_writer_dsn, autocommit=True) as writer:
+                barrier.wait(timeout=5)
+                return record_expense_journal_decision(writer, self.actor, self.a, self.org, journal,
+                                                       snapshot_sha256=digest, decision="reviewed")
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(lambda _: record(), range(2)))
+        self.assertEqual(first, second)
+        self.assertEqual((first.journal_id, first.snapshot_sha256, first.decision, first.reviewer_id),
+                         (journal, digest, "reviewed", self.actor.user_id))
+        with psycopg.connect(self.decision_writer_dsn, autocommit=True) as writer:
+            with self.assertRaises(ExpenseJournalDecisionConflict):
+                record_expense_journal_decision(writer, self.actor, self.a, self.org, journal,
+                                                snapshot_sha256=digest, decision="changes_requested")
+            other = Principal("fictional-second-reviewer", self.a, "editor")
+            result = record_expense_journal_decision(writer, other, self.a, self.org, journal,
+                                                     snapshot_sha256=digest, decision="changes_requested")
+            self.assertEqual(result.reviewer_id, other.user_id)
+        self.assertCountEqual(self.owner.execute("""
+            SELECT reviewer_id, decision, snapshot_sha256
+            FROM omnixat.expense_journal_review_decisions WHERE tenant_id=%s AND journal_id=%s
+        """, (self.a, journal)).fetchall(), [
+            (self.actor.user_id, "reviewed", bytes.fromhex(digest)),
+            (other.user_id, "changes_requested", bytes.fromhex(digest)),
+        ])
+
+    def test_journal_decision_refuses_stale_snapshot_scope_and_nonhuman_reviewers(self):
+        review = self.journal_decision_fixture()
+        journal, digest = review.receipt.id, review.snapshot_sha256
+        with psycopg.connect(self.decision_writer_dsn, autocommit=True) as writer:
+            def decide(actor=self.actor, tenant=self.a, org=self.org, expected=digest):
+                return record_expense_journal_decision(writer, actor, tenant, org, journal,
+                                                       snapshot_sha256=expected, decision="reviewed")
+
+            for actor in (
+                Principal("agent", self.a, "editor", actor_kind="agent"),
+                Principal("api", self.a, "editor", api_scopes=frozenset({"records:write", "evidence:read"})),
+                Principal("viewer", self.a, "viewer"),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    decide(actor=actor)
+            with self.assertRaises(EvidenceNotEligible):
+                decide(actor=self.other, tenant=self.b)
+            with self.assertRaises(EvidenceNotEligible):
+                decide(org=uuid4())
+            with self.assertRaises(ValueError):
+                decide(expected="malformed")
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                decide()
+            self.set_active_policy("fictional-v1")
+            self.owner.execute("""UPDATE omnixat.expense_journal_drafts SET created_by='fictional-corrected-author'
+                WHERE tenant_id=%s AND id=%s""", (self.a, journal))
+            with self.assertRaises(EvidenceNotEligible):
+                decide()
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                writer.execute("SELECT * FROM omnixat.expense_journal_review_decisions")
+        self.assertEqual(self.owner.execute("""
+            SELECT count(*) FROM omnixat.expense_journal_review_decisions WHERE tenant_id=%s
+        """, (self.a,)).fetchone(), (0,))
+        with psycopg.connect(self.journal_review_dsn, autocommit=True) as reader:
+            with self.assertRaises(PermissionError):
+                record_expense_journal_decision(reader, self.actor, self.a, self.org, journal,
+                                                snapshot_sha256=digest, decision="reviewed")

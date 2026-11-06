@@ -439,5 +439,31 @@ after the review returns.
 
 Give a separate non-owner, NOBYPASSRLS reader USAGE on
 `omnixat_extraction` and EXECUTE only on
-`omnixat_extraction.read_expense_journal_draft(uuid,uuid)`.
-Keep direct table access and preview or writer grants separate.
+`omnixat_extraction.read_expense_journal_review(uuid,uuid)`.
+When upgrading from migration 0031, replace the old
+`read_expense_journal_draft(uuid,uuid)` grant for that reader; migration
+0032 leaves existing ACLs unchanged. Keep direct table access and preview
+or writer grants separate.
+
+## Recording a human journal review decision
+
+Migration 0032 includes a versioned SHA-256 snapshot digest in eligible
+journal reviews. The digest binds the scope, saved journal, exact amount
+and accounts, funding reference, period, attribution and evidence
+provenance. An interactive tenant owner or editor with evidence access
+can record `reviewed` or `changes_requested` against the exact digest
+they saw. PostgreSQL recomputes it against the currently eligible journal
+at the write boundary. An identical eligible retry returns the original
+receipt; a changed decision for the same reviewer and snapshot conflicts.
+Different reviewers can leave distinct observations.
+
+A decision is a historical bookkeeping observation. It is not a
+commit-time eligibility lock, current readiness signal, payment, posting
+instruction or statutory approval. No aggregate verdict or correction
+workflow is defined. Any downstream action must independently verify
+current eligibility and authority.
+
+Give a dedicated non-owner, NOBYPASSRLS decision writer USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.record_expense_journal_decision(uuid,uuid,bytea,text,text)`.
+Keep it separate from journal reader and writer roles.

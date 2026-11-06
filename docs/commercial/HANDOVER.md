@@ -459,3 +459,11 @@ snapshot against current eligibility and provenance. **44 core,
 21 identity and 202 PostgreSQL/HTTP tests pass**. The unchanged prototype
 browser fails on Chromium socket permissions. Next: an attributed human
 journal review decision bound to the exact snapshot. No posting.
+
+## Latest journal review decision checkpoint
+
+Migration 0032 adds versioned snapshot digests and records attributed
+human bookkeeping observations against eligible snapshots. **44 core,
+21 identity and 204 PostgreSQL/HTTP tests pass**. The unchanged prototype
+browser fails on Chromium socket permissions. Replace the journal reader
+grant as described in EVIDENCE.md. Next: scoped decision review. No posting.

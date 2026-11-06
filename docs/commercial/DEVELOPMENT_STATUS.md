@@ -1364,3 +1364,32 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: design an attributed human review decision bound to the exact
 eligible journal snapshot, separate from any statutory approval or posting.
+
+## C4 human journal review decisions — completed
+
+Recovered clean 3dfc0ee. Bind an attributed human bookkeeping review
+decision to the exact currently eligible journal snapshot. Keep retries
+safe and deny agents and API keys. No posting or statutory approval.
+
+Migration 0032 returns a versioned snapshot digest in journal review and
+records an attributed `reviewed` or `changes_requested` observation only
+when the supplied digest matches the eligible snapshot at the write check.
+Same-reviewer identical retries return the receipt; a changed decision
+conflicts. The record is historical and conveys no authority or readiness.
+The journal reader grant must be replaced as documented in EVIDENCE.md.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **204 passed**. New cases
+  cover attributed decisions, concurrent replay, conflicting decisions,
+  timezone-stable digests, stale inputs, scope and read/write role separation.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: expose scoped review observations for the exact current snapshot,
+keeping historical decisions distinct from any posting or filing approval.
