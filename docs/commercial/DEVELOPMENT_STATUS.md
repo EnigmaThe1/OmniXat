@@ -1477,3 +1477,34 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: derive focused follow-up prompts from current-snapshot correction
 reasons without guessing values or changing the journal. No posting.
+
+## C4 journal correction questions — implemented
+
+Recovered clean 413f0cf. Derive fixed, focused questions from the correction
+reasons returned on each exact-snapshot decision page. Keep the read scoped
+and deduplicate reasons within each page. The questions introduce no guessed
+values and leave journal and review records untouched.
+
+
+The scoped decision page derives one question per distinct reason in order
+of first appearance. The questions ask for the missing detail and supporting
+context without incorporating record values. Deduplication across pages
+belongs to callers collecting questions for the same snapshot.
+
+Verification on 6 November 2026, Python 3.12:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+  New tests cover all five reasons, deduplication, order and empty input.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`:
+  **16 test module import errors** because psycopg is unavailable. The
+  package download was blocked by the runner's network policy. The
+  extended PostgreSQL paging test is pending in an equipped environment.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced a socket permission failure. No prototype test changed.
+- `git diff --check`: passed.
+
+Next: rerun PostgreSQL integration tests, then record explicit clarification
+answers against the exact eligible snapshot and reason. Keep journal changes
+and any approval as separate actions.

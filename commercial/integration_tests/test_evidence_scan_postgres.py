@@ -1611,7 +1611,9 @@ class EvidenceScanTests(PostgresFixture):
                 return read_expense_journal_decisions(reader, viewer, self.a, self.org, journal,
                                                       snapshot_sha256=digest, page_size=1, after_reviewer=cursor)
 
-            self.assertEqual((page().decisions, page().next_after_reviewer), ((), None))
+            empty_page = page()
+            self.assertEqual((empty_page.decisions, empty_page.next_after_reviewer), ((), None))
+            self.assertEqual(empty_page.follow_up_questions, ())
             earlier = Principal("fictional-reviewer-a", self.a, "editor")
             later = Principal("fictional-reviewer-z", self.a, "editor")
             with psycopg.connect(self.decision_writer_dsn, autocommit=True) as writer:
@@ -1634,9 +1636,11 @@ class EvidenceScanTests(PostgresFixture):
             first_page = page()
             self.assertEqual((first_page.decisions, first_page.next_after_reviewer), ((first,), earlier.user_id))
             self.assertEqual(first_page.corrections, ())
+            self.assertEqual(first_page.follow_up_questions, ())
             second_page = page(first_page.next_after_reviewer)
             self.assertEqual((second_page.decisions, second_page.next_after_reviewer), ((second,), None))
             self.assertEqual(second_page.corrections, (correction,))
+            self.assertEqual(tuple(question.reason for question in second_page.follow_up_questions), ("account",))
             self.assertEqual(page(later.user_id).decisions, ())
             self.owner.execute("""UPDATE omnixat.expense_journal_drafts SET created_by='fictional-other-author'
                 WHERE tenant_id=%s AND id=%s""", (self.a, journal))

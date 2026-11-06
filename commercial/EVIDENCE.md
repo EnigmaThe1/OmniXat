@@ -492,6 +492,13 @@ ID within the page. A changes-requested decision can exist without a
 reason; a reason from a different snapshot is never carried forward.
 Decision receipts, page size and cursor behavior are unchanged.
 
+`page.follow_up_questions` returns a fixed question for each distinct
+correction reason on the page, in order of first appearance. Each item
+contains a reason and question text. Callers collecting multiple pages
+can deduplicate by reason for the same snapshot. This derived property
+uses no record values or reviewer identifiers in the question text and
+has no database writes or delivery side effects.
+
 Give a dedicated non-owner, NOBYPASSRLS reader USAGE on
 `omnixat_extraction` and EXECUTE only on
 `omnixat_extraction.read_expense_journal_decisions_with_corrections(uuid,uuid,bytea,text,integer)`.

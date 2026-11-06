@@ -13,6 +13,9 @@ from .evidence_drafts_postgres import _require_draft_role
 from .evidence_extraction_postgres import EvidenceNotEligible
 from .evidence_postgres import _authorize
 from .expense_funding_postgres import _TABLES as _FUNDING_TABLES
+from .journal_correction_questions import (
+    ExpenseJournalFollowUpQuestion, JournalCorrectionReason, journal_correction_questions,
+)
 from .postgres import _tenant_transaction
 
 _TABLES = (*_FUNDING_TABLES, "expense_counterpart_policy")
@@ -196,9 +199,6 @@ def record_expense_journal_decision(
         return ExpenseJournalDecisionReceipt(journal, snapshot_sha256, decision, actor_id, row["decision_recorded_at"])
 
 
-JournalCorrectionReason = Literal["amount", "account", "funding", "accounting_date", "source_evidence"]
-
-
 class ExpenseJournalCorrectionConflict(Exception):
     """A different correction reason is already attached to the observation."""
 
@@ -217,6 +217,10 @@ class ExpenseJournalDecisionPage:
     decisions: tuple[ExpenseJournalDecisionReceipt, ...]
     next_after_reviewer: str | None = field(repr=False)
     corrections: tuple[ExpenseJournalCorrectionReceipt, ...] = ()
+
+    @property
+    def follow_up_questions(self) -> tuple[ExpenseJournalFollowUpQuestion, ...]:
+        return journal_correction_questions(correction.reason for correction in self.corrections)
 
 
 def read_expense_journal_decisions(

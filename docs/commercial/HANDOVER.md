@@ -491,3 +491,13 @@ their decisions. Replace the decision-reader grant as described in EVIDENCE.md.
 **44 core, 21 identity and 208 PostgreSQL/HTTP tests pass**. The unchanged
 prototype browser fails on Chromium socket permissions. Next: focused prompts
 for correction reasons. No journal mutation, approval or posting.
+
+## Latest journal correction questions checkpoint
+
+The scoped decision page provides one fixed, evidence-seeking question per
+distinct correction reason returned on that page. **46 core and 21 identity
+tests pass**. PostgreSQL integration verification is pending because this
+runner could not install psycopg. The prototype ran 19 of 20 tests
+successfully, with the browser test blocked by Chromium socket permissions.
+Next, rerun PostgreSQL integration tests and add explicit clarification
+answers bound to the eligible snapshot and reason.
