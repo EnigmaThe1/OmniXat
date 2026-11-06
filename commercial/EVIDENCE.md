@@ -467,3 +467,25 @@ Give a dedicated non-owner, NOBYPASSRLS decision writer USAGE on
 `omnixat_extraction` and EXECUTE only on
 `omnixat_extraction.record_expense_journal_decision(uuid,uuid,bytea,text,text)`.
 Keep it separate from journal reader and writer roles.
+
+## Reading journal review decisions
+
+Migration 0033 adds `read_expense_journal_decisions` for interactive tenant
+users with records and evidence read permissions, including viewers.
+Supply the organisation, journal receipt and exact digest returned by
+journal review. In one snapshot, the read rechecks current eligibility
+and returns only matching observations with reviewer and timestamp.
+A matching snapshot can have an empty page; stale, missing and
+out-of-scope snapshots return the same unavailable result.
+
+Pages contain 1–100 requested entries at most (default 25), in reviewer
+ID order. To continue, reuse the same digest and pass the returned
+`next_after_reviewer` as `after_reviewer`. Each page is a fresh read;
+restart from the first page to include newly recorded reviewers who
+sort before the cursor. Older snapshots are retained but not listed here.
+The list conveys no overall verdict, approval or posting authority.
+
+Give a dedicated non-owner, NOBYPASSRLS reader USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.read_expense_journal_decisions(uuid,uuid,bytea,text,integer)`.
+Keep it separate from direct table access and other journal roles.

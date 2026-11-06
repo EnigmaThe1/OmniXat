@@ -194,3 +194,47 @@ def record_expense_journal_decision(
         if row["outcome"] != "stored":
             raise RuntimeError("Journal decision receipt unavailable")
         return ExpenseJournalDecisionReceipt(journal, snapshot_sha256, decision, actor_id, row["decision_recorded_at"])
+
+
+@dataclass(frozen=True)
+class ExpenseJournalDecisionPage:
+    decisions: tuple[ExpenseJournalDecisionReceipt, ...]
+    next_after_reviewer: str | None = field(repr=False)
+
+
+def read_expense_journal_decisions(
+    connection, actor, tenant_id, organisation_id, journal_id, *,
+    snapshot_sha256: str, page_size: int = 25, after_reviewer: str | None = None,
+) -> ExpenseJournalDecisionPage:
+    """Read observations for the exact eligible snapshot, ordered by reviewer ID."""
+    tenant = _authorize(actor, tenant_id, "records:read")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal review required")
+    if type(snapshot_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", snapshot_sha256):
+        raise ValueError("An exact journal snapshot digest is required")
+    if type(page_size) is not int or not 1 <= page_size <= 100:
+        raise ValueError("Journal decision page size must be between 1 and 100")
+    if after_reviewer is not None and (
+        type(after_reviewer) is not str or not after_reviewer.strip()
+        or len(after_reviewer) > 200 or "\0" in after_reviewer
+    ):
+        raise ValueError("Invalid journal decision cursor")
+    organisation, journal = (UUID(str(value)) for value in (organisation_id, journal_id))
+
+    with _tenant_transaction(connection, tenant,
+                             tables_required=(*_DRAFT_TABLES, "expense_journal_review_decisions")):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_expense_journal_decisions")
+            cursor.execute("SELECT * FROM omnixat_extraction.read_expense_journal_decisions(%s,%s,%s,%s,%s)",
+                           (organisation, journal, bytes.fromhex(snapshot_sha256), after_reviewer, page_size))
+            rows = cursor.fetchall()
+    if not rows:
+        raise EvidenceNotEligible("Journal snapshot is unavailable")
+    if rows[0]["reviewer_id"] is None:
+        return ExpenseJournalDecisionPage((), None)
+    decisions = tuple(ExpenseJournalDecisionReceipt(
+        journal, snapshot_sha256, row["decision"], row["reviewer_id"], row["recorded_at"],
+    ) for row in rows[:page_size])
+    next_cursor = decisions[-1].reviewer_id if len(rows) > page_size else None
+    return ExpenseJournalDecisionPage(decisions, next_cursor)

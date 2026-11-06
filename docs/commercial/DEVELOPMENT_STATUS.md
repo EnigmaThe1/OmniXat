@@ -1393,3 +1393,31 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: expose scoped review observations for the exact current snapshot,
 keeping historical decisions distinct from any posting or filing approval.
+
+## C4 scoped journal decision history — completed
+
+Recovered clean 981097c. Expose bounded, attributed observations for the
+exact currently eligible snapshot through a separate read-only grant.
+Keep empty history distinct from stale or unavailable snapshots and do
+not derive approval, posting or readiness from observations.
+
+Migration 0033 adds a dedicated execute-only read of decisions for one
+eligible journal snapshot. Reviewers, decisions and timestamps are
+paginated by reviewer ID. A stale digest cannot continue a page, and
+historical decisions remain stored but separate. No aggregate verdict.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **206 passed**. New cases
+  cover attributed pagination, empty pages, exclusion of older snapshots,
+  stale cursor rejection, eligibility, scope and role separation.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: attach a structured correction request to an exact changes-requested
+observation, without mutating the saved journal or granting approval.
