@@ -310,3 +310,23 @@ Give a separate non-owner, NOBYPASSRLS writer login USAGE on
 Do not grant direct table access or combine it with preview, scan or
 extraction roles. The draft does not set VAT, payer or tax treatment,
 create a journal, or approve or submit any filing.
+
+## Scoped expense draft review
+
+Migration 0026 adds `read_csv_expense_draft` for interactive tenant
+users with records and evidence read permissions, including viewers.
+Supply the organisation ID and saved expense receipt ID. One snapshot
+checks scanner eligibility, the saved period and account, and the match
+between the stored pence and the exact source amount. Missing, out-of-scope
+and currently ineligible drafts all return the same unavailable result.
+
+The result contains the saved accounting context and expense attribution,
+along with the exact source decimal, evidence fingerprint, extraction
+job and cell, source kind, and draft amount attribution. It does not
+return the original file bytes or clarification text. A review is
+read-only and does not certify continued eligibility after it returns.
+
+Give a separate non-owner, NOBYPASSRLS reader USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.read_csv_expense_draft(uuid,uuid)`.
+Keep direct table access and preview, writer or scanner grants separate.

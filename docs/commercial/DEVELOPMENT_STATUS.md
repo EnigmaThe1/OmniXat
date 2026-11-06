@@ -1191,3 +1191,30 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: add a scoped expense draft read for review, with source provenance and
 current eligibility. Keep payer, tax treatment and journal preparation separate.
+
+## C4 scoped expense draft review — completed
+
+Recovered clean c0dc046. Add an execute-only read of one expense draft by
+tenant, organisation and receipt ID, returning provenance and rechecking
+scanner and accounting policy. No listing, mutation, posting or approval.
+
+Migration 0026 provides an interactive, read-only review of one scoped GBP
+draft. It returns the saved context, attribution and exact source provenance
+only if the evidence, period and account remain eligible and stored pence
+matches the exact source. No document bytes or clarification text are returned.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **192 passed**. New cases
+  cover receipt and provenance, tenant and organisation scope, reader grants,
+  scanner rotation, closed periods, disabled accounts and amount integrity.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: record explicitly selected payer and funding context as a separate
+draft-only step before preparing a balanced journal. No route or ledger posting.

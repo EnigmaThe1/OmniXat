@@ -411,3 +411,11 @@ through commit, and replays the same receipt for identical eligible retries.
 **44 core, 21 identity and 190 PostgreSQL/HTTP tests pass**. The unchanged
 prototype browser test fails on Chromium socket permissions. Next: a scoped
 expense draft read with source provenance and current eligibility. No posting.
+
+## Latest scoped expense draft review checkpoint
+
+Migration 0026 reads one scoped receipt with exact CSV provenance and saved
+accounting context, rechecking evidence, period and account eligibility.
+**44 core, 21 identity and 192 PostgreSQL/HTTP tests pass**. The unchanged
+prototype browser test fails on Chromium socket permissions. Next: explicit
+payer and funding context for draft preparation. No approval or posting.

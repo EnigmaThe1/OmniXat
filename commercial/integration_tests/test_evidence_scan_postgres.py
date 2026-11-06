@@ -18,7 +18,7 @@ from omnixat_core.access import Principal
 from omnixat_core.evidence_csv import AmountCell
 from omnixat_core.evidence_drafts_postgres import (
     EvidenceDraftConflict, ExpenseDraftConflict, create_csv_draft_amount, create_csv_expense_draft,
-    prepare_csv_expense_draft, read_csv_draft_amount,
+    prepare_csv_expense_draft, read_csv_draft_amount, read_csv_expense_draft,
 )
 from omnixat_core.evidence_extraction_postgres import (
     CSVExtractionConflict, EvidenceNotEligible, _store_csv_extraction,
@@ -164,6 +164,19 @@ class EvidenceScanTests(PostgresFixture):
         ).format(expense_writer))
         cls.expense_writer_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                                user=expense_writer_role, password=password)
+
+        expense_reader_role = cls.role + "_expense_reader"
+        expense_reader = sql.Identifier(expense_reader_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(expense_reader, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, expense_reader_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(expense_reader))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_csv_expense_draft(uuid,uuid) TO {}"
+        ).format(expense_reader))
+        cls.expense_reader_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                               user=expense_reader_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -928,3 +941,70 @@ class EvidenceScanTests(PostgresFixture):
             self.owner.execute(claim, claim_args)
             with self.assertRaises(EvidenceNotEligible):
                 create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+
+    def test_expense_review_shows_exact_saved_context_and_source_in_scope(self):
+        scope, period, context = self.expense_write_fixture()
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            receipt = create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+            with self.assertRaises(PermissionError):
+                read_csv_expense_draft(writer, self.actor, self.a, self.org, receipt.id)
+        viewer = Principal("fictional-viewer", self.a, "viewer")
+        with psycopg.connect(self.expense_reader_dsn, autocommit=True) as reader:
+            review = read_csv_expense_draft(reader, viewer, self.a, self.org, receipt.id)
+            self.assertEqual((review.receipt, review.created_by, review.context, review.period_id),
+                             (receipt, self.actor.user_id, context, period))
+            source = review.source
+            self.assertEqual((source.receipt.evidence_id, source.receipt.job_id, source.receipt.cell), scope[2:])
+            self.assertEqual(source.receipt.source_kind, "clarified")
+            self.assertEqual(source.amount.as_tuple(), Decimal("12.340").as_tuple())
+            self.assertEqual(source.policy_version, "fictional-v1")
+            self.assertEqual(source.content_sha256, sha256(self.original).hexdigest())
+            for actor, tenant, org, draft in (
+                (viewer, self.a, uuid4(), receipt.id),
+                (viewer, self.a, self.org, uuid4()),
+                (self.other, self.b, self.org, receipt.id),
+            ):
+                with self.subTest(tenant=tenant, org=org, draft=draft), self.assertRaisesRegex(
+                    EvidenceNotEligible, "^Expense draft is unavailable$",
+                ):
+                    read_csv_expense_draft(reader, actor, tenant, org, draft)
+            for actor in (
+                self.other, Principal("agent", self.a, "viewer", actor_kind="agent"),
+                Principal("api", self.a, "viewer", api_scopes=frozenset({"records:read", "evidence:read"})),
+                Principal("staff", self.a, "viewer", staff_role="platform_owner"),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    read_csv_expense_draft(reader, actor, self.a, self.org, receipt.id)
+            with self.assertRaises(PermissionError):
+                create_csv_expense_draft(reader, self.actor, *scope, context=context, period_id=period)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                reader.execute("SELECT * FROM omnixat.csv_expense_drafts")
+
+    def test_expense_review_withholds_draft_when_policy_or_amount_is_invalid(self):
+        scope, period, context = self.expense_write_fixture()
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            receipt = create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+        with psycopg.connect(self.expense_reader_dsn, autocommit=True) as reader:
+            def read():
+                return read_csv_expense_draft(reader, self.actor, self.a, self.org, receipt.id)
+
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                read()
+            self.set_active_policy("fictional-v1")
+            for table, identifier, flag, value in (
+                ("expense_accounting_periods", "id", "open_for_drafts", period),
+                ("expense_account_policy", "account_id", "eligible_for_drafts", context.expense_account_id),
+            ):
+                update = sql.SQL("UPDATE omnixat.{} SET {}=%s WHERE tenant_id=%s AND {}=%s").format(
+                    sql.Identifier(table), sql.Identifier(flag), sql.Identifier(identifier),
+                )
+                self.owner.execute(update, (False, self.a, value))
+                with self.subTest(table=table), self.assertRaises(EvidenceNotEligible):
+                    read()
+                self.owner.execute(update, (True, self.a, value))
+            self.assertEqual(read().receipt, receipt)
+            self.owner.execute("UPDATE omnixat.csv_expense_drafts SET amount_pence=1 WHERE tenant_id=%s AND id=%s",
+                               (self.a, receipt.id))
+            with self.assertRaises(EvidenceNotEligible):
+                read()

@@ -217,3 +217,43 @@ def create_csv_expense_draft(
     if row["outcome"] != "stored":
         raise RuntimeError("Expense draft receipt unavailable")
     return ExpenseDraftReceipt(row["draft_id"], row["stored_at"], int(row["stored_pence"]))
+
+
+@dataclass(frozen=True)
+class ExpenseDraftReview:
+    receipt: ExpenseDraftReceipt
+    created_by: str = field(repr=False)
+    context: ExpenseDraftContext
+    period_id: UUID
+    source: EvidenceDraftAmount
+
+
+def read_csv_expense_draft(
+    connection, actor, tenant_id, organisation_id, draft_id,
+) -> ExpenseDraftReview:
+    """Review one saved expense draft with fresh evidence and accounting policy checks."""
+    tenant = _authorize(actor, tenant_id, "records:read")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant expense review required")
+    organisation, draft = (UUID(str(value)) for value in (organisation_id, draft_id))
+    with _tenant_transaction(connection, tenant, tables_required=(*_EXPENSE_POLICY_TABLES,
+                                                                  "csv_expense_drafts")):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_csv_expense_draft")
+            cursor.execute("SELECT * FROM omnixat_extraction.read_csv_expense_draft(%s,%s)",
+                           (organisation, draft))
+            row = cursor.fetchone()
+    if row is None:
+        raise EvidenceNotEligible("Expense draft is unavailable")
+    cell = AmountCell(row["field_name"], row["source_row"], row["source_column"])
+    source = _read_amount(row, row["evidence_id"], row["job_id"], cell)
+    try:
+        amount_pence = expense_pence(source.amount)
+    except ValueError:
+        raise EvidenceNotEligible("Expense draft is unavailable") from None
+    if amount_pence != row["amount_pence"]:
+        raise EvidenceNotEligible("Expense draft is unavailable")
+    receipt = ExpenseDraftReceipt(row["draft_id"], row["expense_created_at"], amount_pence)
+    context = ExpenseDraftContext(row["currency"], row["accounting_date"], row["expense_account_id"])
+    return ExpenseDraftReview(receipt, row["expense_created_by"], context, row["period_id"], source)
