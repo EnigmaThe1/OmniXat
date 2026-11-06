@@ -843,3 +843,35 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: add a durable scan claim/recovery boundary, then enforce the active
 policy, blocked precedence and exact byte binding before extraction.
 A real scanner still needs isolation, time/resource limits and qualification.
+
+## C4 durable scanner claims — completed
+
+Recovered clean 14f8986. Add one expiring claim per tenant, quarantined
+original and policy. Prevent simultaneous current workers, recover abandoned
+claims, and reject stale completions before recording a verdict. Preserve
+legacy verdicts and blocked precedence. No extraction or live scanner.
+
+Migration 0016 adds database-timed scan claims with a 120-second lease.
+Duplicate requests cannot invoke the scanner while a claim is live. An
+expired claim can be reclaimed; completion checks the current lease token
+and deadline, then atomically records the verdict and releases the claim.
+Existing verdicts remain replayable, and blocked still wins for legacy
+disagreements. An expired engine call may still be running; this is not
+exactly-once execution or a scheduler.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **38 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **166 passed**. Scan cases
+  cover a live claim, policy isolation, expiry without a replacement,
+  takeover and stale rejection, plus legacy blocked precedence.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Chromium socket permission
+  failure confirmed by direct launch. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: a separate extraction boundary that checks active policy, no live
+claim, blocked precedence and exact byte binding. Scanner qualification,
+engine timeouts and production recovery remain open. No deployment.

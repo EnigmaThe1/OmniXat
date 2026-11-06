@@ -99,9 +99,9 @@ rules or signatures. Use a new version for a rescan after configuration changes.
 The worker reads only the requested tenant/organisation/evidence, verifies the
 bytes and calls the scanner outside the database transaction. Scanner failures
 or unknown results create no verdict. Replay for the same version returns the
-recorded result without calling the scanner again. If concurrent scans
-disagree, both observations are retained and future reads prefer `blocked`.
-A receipt is a point-in-time observation, never authority to extract.
+recorded result without calling the scanner again. If legacy observations
+disagree, reads prefer `blocked`. A receipt is a point-in-time observation,
+never authority to extract.
 
 Use a separate non-owner, non-BYPASSRLS scanner login. Grant schema USAGE,
 SELECT on the evidence registration, quarantine and verdict tables, and
@@ -112,8 +112,24 @@ worker grants; the login must not be exposed to a model, HTTP client or
 general query interface. As elsewhere, RLS protects against missing predicates
 under an established context, not a compromised worker setting its own context.
 
-No scanner is selected or qualified. Next: claim scan jobs so a clean
-observation cannot release evidence while another scan of the same policy
-is in flight; then enforce the current policy, blocked precedence and an
-exact-byte check at the extraction boundary. A deployment also needs scanner
-isolation, time/resource limits and retry/recovery controls.
+## Recoverable scan claims
+
+Migration 0016 adds a single claim per tenant, evidence ID and scanner policy
+version. Grant the scanner login SELECT, INSERT and DELETE on
+`omnixat.evidence_scan_claims` and UPDATE only on `lease_token, expires_at`.
+Do not grant claim access to intake or customer roles.
+
+The scanner commits a claim before calling the engine. A competing worker
+gets `EvidenceScanBusy` while the claim is live. The fixed 120-second lease
+uses the database clock; a later attempt can replace an expired claim.
+Completion records the verdict and removes the live claim in one transaction.
+An expired or replaced worker cannot publish or clear a replacement's claim.
+Failures release the worker's own claim when possible; if the process or
+database connection is lost, retry can recover once the lease expires.
+
+This is an on-demand claim, not a scheduler or exactly-once execution. The
+engine must have its own deadline shorter than the lease; expiration does not
+stop a running engine, and two executions can overlap after expiration. No
+real scanner is qualified. Next: enforce the active policy, absence of a live
+claim, blocked precedence and an exact-byte check at the extraction boundary.
+A deployment still needs worker isolation, bounded retries and monitoring.

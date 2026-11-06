@@ -106,5 +106,5 @@ The [evidence registry](EVIDENCE.md) records document fingerprints and minimal
 metadata with organisation-scoped duplicate detection. An internal local
 quarantine spool computes fingerprints from bounded streams. The internal
 PostgreSQL quarantine can retain matching originals. A separate worker can record
-verdicts from a trusted scanner callback. No real scanner, upload route or
-extraction is wired.
+verdicts from a trusted scanner callback using recoverable PostgreSQL claims.
+No real scanner, upload route or extraction is wired.

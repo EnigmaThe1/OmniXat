@@ -310,3 +310,13 @@ precedence. See commercial/EVIDENCE.md. **38 core, 21 identity and 163
 PostgreSQL/HTTP tests pass**. The unchanged demo browser still fails on a
 Chromium socket restriction. Next: durable scan claims and an extraction
 gate; no real scanner or extraction is enabled.
+
+## Latest scan claim checkpoint
+
+Migration 0016 gives each evidence/policy scan a recoverable PostgreSQL lease.
+Live claims exclude other workers; expired or replaced workers cannot write
+verdicts. Completion clears the claim and records the verdict atomically.
+**38 core, 21 identity and 166 PostgreSQL/HTTP tests pass**. The unchanged
+demo browser fails on Chromium socket permissions. Next: a separate
+extraction gate that checks active policy, claim state and exact bytes.
+No real scanner, extraction or deployment.
