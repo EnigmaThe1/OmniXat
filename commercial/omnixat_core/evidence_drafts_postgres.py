@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from .evidence_csv import AmountCell, _DECIMAL, _FIELD, _MAX_COLUMNS, _MAX_ROWS
 from .evidence_extraction_postgres import EvidenceNotEligible, _TABLES
 from .evidence_postgres import _authorize
+from .expense_context import ExpenseDraftContext, ExpenseDraftPolicy, expense_pence, validate_expense_context
 from .postgres import _tenant_transaction
 
 _DRAFT_TABLES = (*_TABLES, "csv_extraction_results", "csv_clarification_answers", "evidence_draft_amounts")
@@ -113,3 +114,24 @@ def read_csv_draft_amount(
     receipt = EvidenceDraftReceipt(evidence, job, cell, row["source_kind"], row["created_at"])
     return EvidenceDraftAmount(receipt, Decimal(row["amount"]), row["created_by"],
                                row["policy_version"], row["content_sha256"].hex())
+
+
+@dataclass(frozen=True)
+class PreparedExpenseDraft:
+    source: EvidenceDraftAmount
+    context: ExpenseDraftContext
+    amount_pence: int = field(repr=False)
+
+
+def prepare_csv_expense_draft(
+    connection, actor, tenant_id, organisation_id, evidence_id, job_id, cell: AmountCell, *,
+    context: ExpenseDraftContext, policy: ExpenseDraftPolicy,
+) -> PreparedExpenseDraft:
+    """Return a validated preview only; durable writes must recheck eligibility and context."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant expense preparation required")
+    organisation = UUID(str(organisation_id))
+    validate_expense_context(tenant, organisation, context, policy)
+    source = read_csv_draft_amount(connection, actor, tenant_id, organisation, evidence_id, job_id, cell)
+    return PreparedExpenseDraft(source, context, expense_pence(source.amount))

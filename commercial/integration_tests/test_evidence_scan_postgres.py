@@ -1,11 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from decimal import Decimal
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Barrier, Event
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
@@ -16,12 +17,13 @@ from psycopg.types.json import Jsonb
 from omnixat_core.access import Principal
 from omnixat_core.evidence_csv import AmountCell
 from omnixat_core.evidence_drafts_postgres import (
-    EvidenceDraftConflict, create_csv_draft_amount, read_csv_draft_amount,
+    EvidenceDraftConflict, create_csv_draft_amount, prepare_csv_expense_draft, read_csv_draft_amount,
 )
 from omnixat_core.evidence_extraction_postgres import (
     CSVExtractionConflict, EvidenceNotEligible, _store_csv_extraction,
     extract_and_store_csv_amounts, extract_csv_amounts, read_evidence_for_extraction,
 )
+from omnixat_core.expense_context import ExpenseDraftContext, ExpenseDraftPolicy
 from omnixat_core.evidence_intake import stage_evidence
 from omnixat_core.evidence_postgres import register_evidence
 from omnixat_core.evidence_quarantine_postgres import store_quarantined_evidence
@@ -698,3 +700,22 @@ class EvidenceScanTests(PostgresFixture):
                 create_csv_draft_amount(reader, self.actor, *scope)
             with self.assertRaises(psycopg.errors.InsufficientPrivilege):
                 reader.execute("SELECT * FROM omnixat.evidence_draft_amounts")
+
+    def test_csv_expense_preview_uses_eligible_amount_and_explicit_context(self):
+        _, _, job, cells = self.prepare_csv_review()
+        cell = cells[1]
+        scope = (self.a, self.org, self.registration.id, job, cell)
+        with psycopg.connect(self.answer_dsn, autocommit=True) as answer:
+            store_csv_clarification(answer, self.actor, *scope, amount="12.340")
+        with psycopg.connect(self.draft_dsn, autocommit=True) as writer:
+            receipt = create_csv_draft_amount(writer, self.actor, *scope)
+        account = uuid4()
+        context = ExpenseDraftContext("GBP", date(2026, 11, 6), account)
+        policy = ExpenseDraftPolicy(UUID(self.a), self.org, date(2026, 11, 1),
+                                    date(2026, 11, 30), frozenset({account}))
+        with psycopg.connect(self.draft_reader_dsn, autocommit=True) as reader:
+            preview = prepare_csv_expense_draft(reader, self.actor, *scope, context=context, policy=policy)
+            self.assertEqual((preview.source.receipt, preview.amount_pence, preview.context), (receipt, 1234, context))
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                prepare_csv_expense_draft(reader, self.actor, *scope, context=context, policy=policy)

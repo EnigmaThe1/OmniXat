@@ -385,3 +385,11 @@ Migration 0023 returns an exact eligible draft amount with source provenance
 through a dedicated read-only role. **42 core, 21 identity and 184
 PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on Chromium
 socket permissions. Next: validate explicit accounting context for drafts.
+
+## Latest expense draft preflight checkpoint
+
+The read-only GBP expense preview validates an explicitly selected date and
+account against trusted scoped policy and converts eligible source amounts
+to pence without rounding. **44 core, 21 identity and 185 PostgreSQL/HTTP tests
+pass**. The unchanged demo browser fails on Chromium socket permissions.
+Next: persistent accounting periods/account policy and a draft-only write.

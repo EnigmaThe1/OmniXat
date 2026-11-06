@@ -254,3 +254,18 @@ Give the dedicated reader login USAGE on `omnixat_extraction` and EXECUTE on
 `omnixat_extraction.read_csv_draft_amount(uuid,uuid,uuid,text,integer,integer)`
 only. Keep it separate from draft, answer and extraction writers. This
 read neither validates accounting context nor authorises ledger effects.
+
+## GBP expense draft preflight
+
+`prepare_csv_expense_draft` accepts an explicit GBP currency, accounting
+date and expense-account UUID. The trusted caller supplies the organisation's
+configured period and eligible expense accounts; this policy must not be
+constructed from request data. The service checks tenant and organisation,
+write authority, period and account, then reads the source through the
+existing eligibility gate. It accepts only positive whole-penny amounts
+without rounding and retains the original decimal and source provenance.
+For currency reference see the [ISO 4217 maintenance agency](https://www.six-group.com/en/products-services/financial-information/market-reference-data/data-standards.html).
+
+This is an in-memory preview. The account and period policy is not persisted,
+and no expense or ledger entry is written. A future write must load trusted
+account and period data and recheck both context and evidence in the transaction.

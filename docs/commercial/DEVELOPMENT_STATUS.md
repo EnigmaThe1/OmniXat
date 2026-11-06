@@ -1103,3 +1103,31 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: validate explicit currency, accounting date and account context for
 expense or ledger drafts. No public route, posting or deployment.
+
+## C4 explicit expense draft preflight — completed
+
+Recovered clean 7be3020. Validate explicit GBP, accounting date and
+expense account against a trusted tenant/organisation policy, then
+prepare a preview from an eligible evidence draft without rounding.
+No persistence, account provisioning, ledger posting or deployment.
+
+The preflight accepts only explicit GBP, a date within the trusted
+organisation period, and an eligible expense account. It checks source
+eligibility and preserves provenance. Positive amounts convert to pence
+without rounding. There is no database mutation.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **185 passed**. New coverage
+  checks policy scope, dates, accounts, exact precision, eligible source and
+  stale scanner policy.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: persist tenant-scoped accounting periods and expense account policy
+before implementing a transactional expense draft write. No posting or deployment.
