@@ -129,11 +129,10 @@ class PreparedExpenseDraft:
     amount_pence: int = field(repr=False)
 
 
-def prepare_csv_expense_draft(
-    connection, actor, tenant_id, organisation_id, evidence_id, job_id, cell: AmountCell, *,
-    context: ExpenseDraftContext, period_id: UUID,
-) -> PreparedExpenseDraft:
-    """Read the selected accounting context and eligible evidence in one snapshot."""
+_EXPENSE_POLICY_TABLES = (*_DRAFT_TABLES, "expense_accounting_periods", "expense_account_policy")
+
+
+def _expense_scope(actor, tenant_id, organisation_id, evidence_id, job_id, cell, context, period_id):
     tenant = _authorize(actor, tenant_id, "records:write")
     _authorize(actor, tenant_id, "evidence:read")
     if actor.actor_kind != "human" or actor.api_scopes is not None:
@@ -148,8 +147,18 @@ def prepare_csv_expense_draft(
         raise ValueError("Select an eligible expense account")
     _validate_cell(cell)
     organisation, evidence, job = (UUID(str(value)) for value in (organisation_id, evidence_id, job_id))
-    tables = (*_DRAFT_TABLES, "expense_accounting_periods", "expense_account_policy")
-    with _tenant_transaction(connection, tenant, tables_required=tables):
+    return tenant, organisation, evidence, job
+
+
+def prepare_csv_expense_draft(
+    connection, actor, tenant_id, organisation_id, evidence_id, job_id, cell: AmountCell, *,
+    context: ExpenseDraftContext, period_id: UUID,
+) -> PreparedExpenseDraft:
+    """Read the selected accounting context and eligible evidence in one snapshot."""
+    tenant, organisation, evidence, job = _expense_scope(
+        actor, tenant_id, organisation_id, evidence_id, job_id, cell, context, period_id,
+    )
+    with _tenant_transaction(connection, tenant, tables_required=_EXPENSE_POLICY_TABLES):
         with connection.cursor(row_factory=dict_row) as cursor:
             _require_draft_role(cursor, "read_csv_expense_preview")
             cursor.execute("""
@@ -164,3 +173,47 @@ def prepare_csv_expense_draft(
     validate_expense_context(tenant, organisation, context, policy)
     source = _read_amount(row, evidence, job, cell)
     return PreparedExpenseDraft(source, context, period_id, expense_pence(source.amount))
+
+
+class ExpenseDraftConflict(Exception):
+    """The selected source amount already has a different expense draft."""
+
+
+@dataclass(frozen=True)
+class ExpenseDraftReceipt:
+    id: UUID
+    created_at: datetime
+    amount_pence: int = field(repr=False)
+
+
+def create_csv_expense_draft(
+    connection, actor, tenant_id, organisation_id, evidence_id, job_id, cell: AmountCell, *,
+    context: ExpenseDraftContext, period_id: UUID,
+) -> ExpenseDraftReceipt:
+    """Persist one draft per source amount; never post it to the ledger."""
+    tenant, organisation, evidence, job = _expense_scope(
+        actor, tenant_id, organisation_id, evidence_id, job_id, cell, context, period_id,
+    )
+    actor_id = actor.user_id
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
+        raise ValueError("Invalid draft attribution")
+    with _tenant_transaction(connection, tenant, write=True, tables_required=(*_EXPENSE_POLICY_TABLES,
+                                                                              "csv_expense_drafts")):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "create_csv_expense_draft")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.create_csv_expense_draft(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (organisation, evidence, job, cell.field_name, cell.row, cell.column, period_id,
+                  context.expense_account_id, context.accounting_date, context.currency, actor_id))
+            row = cursor.fetchone()
+    if row["outcome"] == "ineligible":
+        raise EvidenceNotEligible("CSV draft amount is unavailable")
+    if row["outcome"] == "context":
+        raise ValueError("Selected period, date or expense account is unavailable")
+    if row["outcome"] == "amount":
+        raise ValueError("Expense amount must be positive, supported and exact to a penny")
+    if row["outcome"] == "conflict":
+        raise ExpenseDraftConflict("A different expense draft already exists for this source amount")
+    if row["outcome"] != "stored":
+        raise RuntimeError("Expense draft receipt unavailable")
+    return ExpenseDraftReceipt(row["draft_id"], row["stored_at"], int(row["stored_pence"]))

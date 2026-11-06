@@ -17,7 +17,8 @@ from psycopg.types.json import Jsonb
 from omnixat_core.access import Principal
 from omnixat_core.evidence_csv import AmountCell
 from omnixat_core.evidence_drafts_postgres import (
-    EvidenceDraftConflict, create_csv_draft_amount, prepare_csv_expense_draft, read_csv_draft_amount,
+    EvidenceDraftConflict, ExpenseDraftConflict, create_csv_draft_amount, create_csv_expense_draft,
+    prepare_csv_expense_draft, read_csv_draft_amount,
 )
 from omnixat_core.evidence_extraction_postgres import (
     CSVExtractionConflict, EvidenceNotEligible, _store_csv_extraction,
@@ -149,6 +150,20 @@ class EvidenceScanTests(PostgresFixture):
         ).format(preview))
         cls.expense_preview_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                                user=preview_role, password=preview_password)
+
+        expense_writer_role = cls.role + "_expense_writer"
+        expense_writer = sql.Identifier(expense_writer_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(expense_writer, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, expense_writer_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(expense_writer))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.create_csv_expense_draft"
+            "(uuid,uuid,uuid,text,integer,integer,uuid,uuid,date,text,text) TO {}"
+        ).format(expense_writer))
+        cls.expense_writer_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                               user=expense_writer_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -818,3 +833,98 @@ class EvidenceScanTests(PostgresFixture):
                     reader, self.actor, self.a, self.org, self.registration.id, uuid4(), AmountCell("amount", 2, 2),
                     context=ExpenseDraftContext("GBP", date(2026, 11, 30), account), period_id=period,
                 )
+
+    def expense_write_fixture(self, amount="12.340"):
+        _, _, job, cells = self.prepare_csv_review()
+        scope = (self.a, self.org, self.registration.id, job, cells[1])
+        with psycopg.connect(self.answer_dsn, autocommit=True) as answer:
+            store_csv_clarification(answer, self.actor, *scope, amount=amount)
+        with psycopg.connect(self.draft_dsn, autocommit=True) as draft:
+            create_csv_draft_amount(draft, self.actor, *scope)
+        period, account = uuid4(), uuid4()
+        self.configure_expense_policy(self.a, self.org, period, account)
+        return scope, period, ExpenseDraftContext("GBP", date(2026, 11, 6), account)
+
+    def test_expense_write_concurrent_retry_conflict_and_role_separation(self):
+        scope, period, context = self.expense_write_fixture()
+        start = Barrier(2)
+
+        def create():
+            with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+                start.wait(timeout=5)
+                return create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(lambda _: create(), range(2)))
+        self.assertEqual(first, second)
+        self.assertEqual(first.amount_pence, 1234)
+        self.assertEqual(self.owner.execute("""
+            SELECT id, evidence_id, job_id, field_name, currency, amount_pence, created_by
+            FROM omnixat.csv_expense_drafts WHERE tenant_id=%s
+        """, (self.a,)).fetchall(), [(first.id, scope[2], scope[3], scope[4].field_name,
+                                      "GBP", 1234, self.actor.user_id)])
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            changed = ExpenseDraftContext("GBP", date(2026, 11, 7), context.expense_account_id)
+            with self.assertRaises(ExpenseDraftConflict):
+                create_csv_expense_draft(writer, self.actor, *scope, context=changed, period_id=period)
+            with self.assertRaises(PermissionError):
+                create_csv_expense_draft(writer, self.other, *scope, context=context, period_id=period)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                writer.execute("SELECT * FROM omnixat.csv_expense_drafts")
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+        with psycopg.connect(self.expense_preview_dsn, autocommit=True) as reader:
+            with self.assertRaises(PermissionError):
+                create_csv_expense_draft(reader, self.actor, *scope, context=context, period_id=period)
+
+    def test_expense_write_refuses_fractional_pence_and_disabled_account(self):
+        scope, period, context = self.expense_write_fixture("12.341")
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            with self.assertRaisesRegex(ValueError, "exact to a penny"):
+                create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+            self.owner.execute("""UPDATE omnixat.expense_account_policy SET eligible_for_drafts=false
+                WHERE tenant_id=%s AND organisation_id=%s AND account_id=%s""",
+                               (self.a, self.org, context.expense_account_id))
+            with self.assertRaisesRegex(ValueError, "unavailable"):
+                create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.csv_expense_drafts WHERE tenant_id=%s",
+                                           (self.a,)).fetchone(), (0,))
+
+    def test_expense_write_holds_policy_and_scan_observations_until_commit(self):
+        scope, period, context = self.expense_write_fixture()
+        _, org, evidence, job, cell = scope
+        claim = """INSERT INTO omnixat.evidence_scan_claims
+            (tenant_id,evidence_id,policy_version,lease_token,expires_at)
+            VALUES (%s,%s,'fictional-v1',%s,clock_timestamp() + interval '1 minute')"""
+        claim_args = (self.a, evidence, uuid4())
+        self.owner.execute(claim, claim_args)
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            with self.assertRaises(EvidenceNotEligible):
+                create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+            self.owner.execute("DELETE FROM omnixat.evidence_scan_claims WHERE tenant_id=%s AND evidence_id=%s",
+                               (self.a, evidence))
+            with writer.transaction():
+                writer.execute("SELECT set_config('omnixat.tenant_id', %s, true)", (self.a,))
+                self.assertEqual(writer.execute("""
+                    SELECT outcome FROM omnixat_extraction.create_csv_expense_draft(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """, (org, evidence, job, cell.field_name, cell.row, cell.column, period,
+                      context.expense_account_id, context.accounting_date, context.currency,
+                      self.actor.user_id)).fetchone(), ("stored",))
+                for statement, args in (
+                    ("UPDATE omnixat_extraction.active_scan_policy SET policy_version='fictional-v2'", ()),
+                    ("UPDATE omnixat.expense_accounting_periods SET open_for_drafts=false WHERE tenant_id=%s", (self.a,)),
+                    ("UPDATE omnixat.expense_account_policy SET eligible_for_drafts=false WHERE tenant_id=%s", (self.a,)),
+                    (claim, claim_args),
+                    ("""INSERT INTO omnixat.evidence_scan_verdicts
+                        (tenant_id,evidence_id,content_sha256,byte_size,policy_version,verdict)
+                        VALUES (%s,%s,%s,%s,'fictional-v1','blocked')""",
+                     (self.a, evidence, sha256(self.original).digest(), len(self.original))),
+                ):
+                    with self.subTest(statement=statement), self.assertRaises(psycopg.errors.LockNotAvailable):
+                        with self.owner.transaction():
+                            self.owner.execute("SET LOCAL lock_timeout='100ms'")
+                            self.owner.execute(statement, args)
+            self.owner.execute(claim, claim_args)
+            with self.assertRaises(EvidenceNotEligible):
+                create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)

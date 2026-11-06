@@ -402,3 +402,12 @@ and source eligibility in one snapshot. **44 core, 21 identity and 187
 PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on Chromium
 socket permissions. Next: an idempotent expense draft write with fresh evidence
 and policy checks held through commit. No posting or deployment.
+
+## Latest transactional expense draft checkpoint
+
+Migration 0025 saves one GBP draft per eligible extraction job and amount
+field. It derives exact pence, holds evidence and accounting policy checks
+through commit, and replays the same receipt for identical eligible retries.
+**44 core, 21 identity and 190 PostgreSQL/HTTP tests pass**. The unchanged
+prototype browser test fails on Chromium socket permissions. Next: a scoped
+expense draft read with source provenance and current eligibility. No posting.

@@ -283,6 +283,30 @@ context for a non-bypass role. Keep policy writes off the preview login.
 For currency reference see the [ISO 4217 maintenance agency](https://www.six-group.com/en/products-services/financial-information/market-reference-data/data-standards.html).
 
 The preview has no durable effect and may become stale after it returns.
-A future expense draft write must independently recheck and hold evidence
-eligibility and the selected policy rows through commit. There is no
-ledger posting or tax treatment in this workflow.
+Use the separate write service below to save a draft.
+
+## Transactional GBP expense drafts
+
+Migration 0025 adds `create_csv_expense_draft` for interactive tenant
+owners and editors with evidence access. PostgreSQL derives pence from
+the exact eligible CSV draft amount, checks the selected period and
+account, and rejects zero, negative amounts and fractional pence. The
+caller supplies no money value and the saved draft links to the exact
+source amount. The active scanner policy, period and account rows stay
+locked through commit. The quarantine and claim locks prevent changes
+to current scan eligibility during the write.
+
+There is one draft per tenant, extraction job and amount field.
+Identical retries return the original ID, pence and timestamp while
+the source and context remain eligible. A different actor or accounting
+context conflicts for the same eligible source. This does not deduplicate
+separate extraction jobs or determine whether two documents describe
+the same expense. A transient database lock failure can be retried with
+the identical request.
+
+Give a separate non-owner, NOBYPASSRLS writer login USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.create_csv_expense_draft(uuid,uuid,uuid,text,integer,integer,uuid,uuid,date,text,text)`.
+Do not grant direct table access or combine it with preview, scan or
+extraction roles. The draft does not set VAT, payer or tax treatment,
+create a journal, or approve or submit any filing.

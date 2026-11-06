@@ -1161,3 +1161,33 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: add a transactional, idempotent expense draft write that derives the
 amount from eligible evidence and holds the selected accounting policy
 through commit. No ledger posting, tax rules, routes or deployment.
+
+## C4 transactional evidence expense drafts — completed
+
+Recovered clean bac66a5. Save one GBP draft per exact source amount, with
+server-derived pence, scope and provenance. Hold eligibility and selected
+accounting policy through commit, and handle identical retries and conflicts.
+No route, ledger posting or tax treatment.
+
+Migration 0025 adds a separate execute-only expense draft writer. PostgreSQL
+checks and locks the active scanner policy, quarantine/claim state, period and
+account before deriving exact pence and saving one draft per extraction job
+and amount field. Concurrent identical retries return one receipt; a changed
+actor or context conflicts while the source and context are eligible. This is
+not cross-job expense deduplication, an approval or a ledger effect.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **190 passed**, including
+  concurrent replay, changed context, stale policy, permission boundaries,
+  fractional pence, and held policy and scan locks.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: add a scoped expense draft read for review, with source provenance and
+current eligibility. Keep payer, tax treatment and journal preparation separate.
