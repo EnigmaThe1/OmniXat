@@ -354,3 +354,11 @@ eligibility and prepares focused questions for unresolved cells. **42 core,
 21 identity and 177 PostgreSQL/HTTP tests pass**. The unchanged demo browser
 fails on Chromium socket permissions. Next: persist authorised clarification
 answers with exact source binding and a write-time eligibility recheck.
+
+## Latest CSV clarification checkpoint
+
+Migration 0020 stores human answers bound to unresolved job cells with a
+write-time scanner policy recheck and safe replay. **42 core, 21 identity and
+179 PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on
+Chromium socket permissions. Next: show answers in review and suppress
+resolved prompts without rewriting extraction results.

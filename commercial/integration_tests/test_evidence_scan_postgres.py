@@ -22,7 +22,9 @@ from omnixat_core.evidence_extraction_postgres import (
 from omnixat_core.evidence_intake import stage_evidence
 from omnixat_core.evidence_postgres import register_evidence
 from omnixat_core.evidence_quarantine_postgres import store_quarantined_evidence
-from omnixat_core.evidence_review_postgres import read_csv_extraction_review
+from omnixat_core.evidence_review_postgres import (
+    CSVClarificationConflict, read_csv_extraction_review, store_csv_clarification,
+)
 from omnixat_core.evidence_scan_postgres import (
     EvidenceScanBusy, EvidenceScanError, scan_quarantined_evidence,
 )
@@ -89,6 +91,19 @@ class EvidenceScanTests(PostgresFixture):
         ).format(review))
         cls.review_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                        user=review_role, password=review_password)
+
+        answer_role = cls.role + "_answer"
+        answer = sql.Identifier(answer_role)
+        answer_password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(answer, sql.Literal(answer_password)))
+        cls.addClassCleanup(cls.drop_role, answer_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(answer))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.store_csv_answer(uuid,uuid,uuid,text,integer,integer,text,text) TO {}"
+        ).format(answer))
+        cls.answer_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                       user=answer_role, password=answer_password)
 
     @classmethod
     def drop_role(cls, role):
@@ -490,3 +505,52 @@ class EvidenceScanTests(PostgresFixture):
               self.a, job))
         with self.assertRaises(EvidenceNotEligible):
             read_csv_extraction_review(review, self.actor, self.a, self.org, self.registration.id, job)
+
+    def test_csv_clarifications_store_exact_answers_without_modifying_candidates(self):
+        _, review, job, selections = self.prepare_csv_review()
+        with psycopg.connect(self.answer_dsn, autocommit=True) as answer:
+            args = (answer, self.actor, self.a, self.org, self.registration.id, job)
+            receipt = store_csv_clarification(*args, selections[1], amount="0.00")
+            self.assertEqual(receipt, store_csv_clarification(*args, selections[1], amount="0.00"))
+            with self.assertRaises(CSVClarificationConflict):
+                store_csv_clarification(*args, selections[1], amount="1.00")
+            store_csv_clarification(*args, selections[2], amount=None)
+            for cell in (selections[0], AmountCell("vat", 2, 3)):
+                with self.assertRaises(EvidenceNotEligible):
+                    store_csv_clarification(*args, cell, amount="1")
+        rows = self.owner.execute("""
+            SELECT field_name, amount, answered_by FROM omnixat.csv_clarification_answers
+            WHERE tenant_id=%s AND job_id=%s ORDER BY field_name
+        """, (self.a, job)).fetchall()
+        self.assertEqual(rows, [("net", None, self.actor.user_id), ("vat", "0.00", self.actor.user_id)])
+        before = read_csv_extraction_review(review, self.actor, self.a, self.org, self.registration.id, job)
+        self.assertEqual([value.status for value in before.amounts], ["found", "blank", "ambiguous", "missing"])
+
+    def test_csv_clarifications_enforce_human_scope_grants_and_current_policy(self):
+        gate, review, job, selections = self.prepare_csv_review()
+        cell = selections[1]
+        with psycopg.connect(self.answer_dsn, autocommit=True) as answer:
+            scope = (self.a, self.org, self.registration.id, job, cell)
+            for actor in (
+                Principal("viewer", self.a, "viewer"),
+                Principal("agent", self.a, "editor", actor_kind="agent"),
+                Principal("bearer", self.a, "editor", api_scopes=frozenset({"evidence:clarify"})),
+                Principal("staff", self.a, "owner", staff_role="platform_owner"),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    store_csv_clarification(answer, actor, *scope, amount="1")
+            for db in (gate, review):
+                with self.assertRaises(PermissionError):
+                    store_csv_clarification(db, self.actor, *scope, amount="1")
+            with self.assertRaises(ValueError):
+                store_csv_clarification(answer, self.actor, *scope, amount="1e2")
+            with self.assertRaises(EvidenceNotEligible):
+                store_csv_clarification(answer, self.other, self.b, self.org, self.registration.id, job, cell, amount="1")
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                answer.execute("SELECT * FROM omnixat.csv_clarification_answers")
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                store_csv_clarification(answer, self.actor, *scope, amount="1")
+        self.assertEqual(self.owner.execute("""
+            SELECT count(*) FROM omnixat.csv_clarification_answers WHERE job_id=%s
+        """, (job,)).fetchone()[0], 0)

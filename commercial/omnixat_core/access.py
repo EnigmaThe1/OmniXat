@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 
 TENANT_PERMISSIONS = {
-    "owner": frozenset({"records:read", "records:write", "evidence:read", "evidence:register", "filings:approve", "billing:manage", "members:manage"}),
-    "editor": frozenset({"records:read", "records:write", "evidence:read", "evidence:register"}),
+    "owner": frozenset({"records:read", "records:write", "evidence:read", "evidence:register", "evidence:clarify", "filings:approve", "billing:manage", "members:manage"}),
+    "editor": frozenset({"records:read", "records:write", "evidence:read", "evidence:register", "evidence:clarify"}),
     "viewer": frozenset({"records:read", "evidence:read"}),
 }
 STAFF_PERMISSIONS = {
@@ -41,7 +41,7 @@ def require_tenant(principal: Principal, tenant_id: str, permission: str):
         raise PermissionError("Access denied")
     if principal.api_scopes is not None and permission not in principal.api_scopes:
         raise PermissionError("Access denied")
-    if principal.actor_kind == "agent" and permission in {"filings:approve", "billing:manage", "members:manage", "evidence:register"}:
+    if principal.actor_kind == "agent" and permission in {"filings:approve", "billing:manage", "members:manage", "evidence:register", "evidence:clarify"}:
         raise PermissionError("Human decision required")
     if permission == "filings:approve" and not principal.mfa_verified:
         raise PermissionError("Step-up authentication required")

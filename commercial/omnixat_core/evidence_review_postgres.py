@@ -93,3 +93,64 @@ def read_csv_extraction_review(connection, actor, tenant_id, organisation_id, ev
         raise EvidenceNotEligible("CSV review is unavailable")
     return CSVExtractionReview(job, evidence, row["policy_version"], row["extractor_version"],
                                row["content_sha256"].hex(), row["stored_at"], _decode_amounts(row["amounts"]))
+
+
+class CSVClarificationConflict(Exception):
+    """The cell already has a different recorded answer."""
+
+
+@dataclass(frozen=True)
+class CSVClarificationReceipt:
+    job_id: UUID
+    evidence_id: UUID
+    cell: AmountCell
+    answered_at: datetime
+
+
+def store_csv_clarification(
+    connection, actor, tenant_id, organisation_id, evidence_id, job_id, cell: AmountCell, *,
+    amount: str | None,
+) -> CSVClarificationReceipt:
+    """Record a human answer; explicit None marks the amount unavailable."""
+    tenant = _authorize(actor, tenant_id, "evidence:clarify")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant clarification required")
+    actor_id = actor.user_id
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
+        raise ValueError("Invalid answer attribution")
+    if (
+        type(cell) is not AmountCell or not isinstance(cell.field_name, str) or not _FIELD.fullmatch(cell.field_name)
+        or type(cell.row) is not int or not 1 <= cell.row <= _MAX_ROWS
+        or type(cell.column) is not int or not 1 <= cell.column <= _MAX_COLUMNS
+    ):
+        raise ValueError("Invalid clarification cell")
+    if amount is not None and (not isinstance(amount, str) or not _DECIMAL.fullmatch(amount)):
+        raise ValueError("Expected an exact decimal string or unavailable amount")
+
+    organisation, evidence, job = (UUID(str(value)) for value in (organisation_id, evidence_id, job_id))
+    tables = (*_TABLES, "csv_extraction_results", "csv_clarification_answers")
+    with _tenant_transaction(connection, tenant, write=True, tables_required=tables):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute("""
+                SELECT CASE WHEN has_schema_privilege('omnixat_extraction', 'USAGE') THEN
+                    has_function_privilege('omnixat_extraction.read_eligible_original(uuid,uuid)', 'EXECUTE')
+                    OR has_function_privilege('omnixat_extraction.store_csv_result(uuid,uuid,uuid,text,bytea,jsonb)', 'EXECUTE')
+                    OR has_function_privilege('omnixat_extraction.read_csv_review(uuid,uuid,uuid)', 'EXECUTE')
+                    ELSE false END
+                    OR has_schema_privilege('omnixat', 'USAGE,CREATE')
+                    OR has_schema_privilege('omnixat_extraction', 'CREATE')
+                    AS overprivileged
+            """)
+            if cursor.fetchone()["overprivileged"]:
+                raise PermissionError("Dedicated clarification grants required")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.store_csv_answer(%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (organisation, evidence, job, cell.field_name, cell.row, cell.column, amount, actor_id))
+            row = cursor.fetchone()
+            if row["outcome"] == "ineligible":
+                raise EvidenceNotEligible("CSV clarification is unavailable")
+            if row["outcome"] == "conflict":
+                raise CSVClarificationConflict("A different clarification answer already exists")
+            if row["outcome"] != "stored":
+                raise RuntimeError("Clarification receipt unavailable")
+            return CSVClarificationReceipt(job, evidence, cell, row["stored_at"])

@@ -993,3 +993,31 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: store authorised clarification answers linked to the exact job and
 cell with a write-time eligibility recheck. No public route or deployment.
+
+## C4 durable CSV clarification answers — completed
+
+Recovered clean 0dc314d. Store one attributed answer per unresolved extraction
+field and exact cell, with human write authority, repeatable retries and a
+write-time eligibility recheck. Preserve the original candidate. No public
+route, review overlay, ledger effects or deployment.
+
+Migration 0020 stores separately attributed answers for an unresolved job
+cell. The write gate rechecks source eligibility and holds the active
+policy through commit. Identical retries return the first receipt; different
+answers conflict. The source candidate remains unchanged.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **42 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **179 passed**. New cases cover
+  zero versus unavailable, retries, wrong coordinates, human authorisation,
+  role separation, tenant scope and stale policy.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch confirmed
+  socket permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: show attributed answers in scoped review and suppress answered prompts
+while preserving original values. No public route, ledger effect or deployment.

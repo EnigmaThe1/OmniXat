@@ -208,3 +208,19 @@ cells. It does not send, persist or resolve questions. A review is a
 point-in-time read; any future write must recheck eligibility. Next: store
 authorised, source-linked clarification answers without modifying extraction
 results or creating ledger entries.
+
+## Durable clarification answers
+
+Migration 0020 lets an interactive tenant owner or editor record one answer
+against an unresolved extraction field and its exact job and cell. An exact
+decimal string retains its scale; explicit null records that the amount is
+unavailable. The answer is attributed to the verified user. An identical
+retry by that user reuses the receipt, and a different answer conflicts.
+
+Grant the dedicated answer login USAGE on `omnixat_extraction` and EXECUTE on
+`omnixat_extraction.store_csv_answer(uuid,uuid,uuid,text,integer,integer,text,text)`
+only. Keep it separate from the review and extraction logins. The write
+function checks current eligibility and holds the active policy until commit.
+It does not modify extraction results. Answers are not yet shown in review
+or used for accounting; a future read can suppress answered prompts while
+showing the separately attributed decision.
