@@ -1421,3 +1421,32 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: attach a structured correction request to an exact changes-requested
 observation, without mutating the saved journal or granting approval.
+
+## C4 structured journal correction requests — completed
+
+Recovered clean 89f1222. Allow an interactive reviewer to attach one
+structured correction reason to their own changes-requested observation
+for the exact eligible snapshot. Keep the saved journal and observation
+unchanged; no free text, posting or approval.
+
+Migration 0034 stores one fixed-category reason on the reviewer's own
+changes-requested observation for an eligible journal snapshot. The
+database enforces the scoped parent and decision type. Identical eligible
+retries reuse the receipt; conflicting reasons are rejected. The draft
+and observation remain unchanged.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **208 passed**. New cases
+  cover concurrent replay, conflicts, exact snapshot binding, the parent
+  decision constraint, stale policy, tenant scope and restricted grants.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: show correction reasons alongside the corresponding current-snapshot
+observations through a scoped read. No correction resolution or posting.

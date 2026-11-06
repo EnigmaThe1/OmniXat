@@ -475,3 +475,11 @@ eligible journal snapshot and excludes older snapshots. **44 core,
 21 identity and 206 PostgreSQL/HTTP tests pass**. The unchanged prototype
 browser fails on Chromium socket permissions. Next: structured correction
 requests linked to changes-requested observations. No posting or approval.
+
+## Latest structured journal correction checkpoint
+
+Migration 0034 attaches a fixed correction reason to an exact
+changes-requested observation, with attribution and retry protection.
+**44 core, 21 identity and 208 PostgreSQL/HTTP tests pass**. The unchanged
+prototype browser fails on Chromium socket permissions. Next: show reasons
+in scoped review history. No mutation of journals, approval or posting.

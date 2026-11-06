@@ -489,3 +489,23 @@ Give a dedicated non-owner, NOBYPASSRLS reader USAGE on
 `omnixat_extraction` and EXECUTE only on
 `omnixat_extraction.read_expense_journal_decisions(uuid,uuid,bytea,text,integer)`.
 Keep it separate from direct table access and other journal roles.
+
+## Recording a structured journal correction request
+
+Migration 0034 lets an interactive tenant owner or editor with evidence
+access attach one correction reason to their own `changes_requested`
+observation for the currently eligible journal snapshot. The supported
+reasons are `amount`, `account`, `funding`, `accounting_date` and
+`source_evidence`. There is no free-text input. The reviewer identity
+comes from the trusted principal, and a scoped foreign key requires
+the matching changes-requested observation.
+
+An identical eligible retry returns the original receipt. A different
+reason conflicts; missing, stale and out-of-scope targets are unavailable.
+The record neither changes the journal nor replaces the decision. No
+correction read, resolution workflow, approval or posting is enabled.
+
+Give a dedicated non-owner, NOBYPASSRLS writer USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.record_expense_journal_correction(uuid,uuid,bytea,text,text)`.
+Keep direct table access and other journal grants separate.

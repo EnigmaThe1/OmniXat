@@ -238,3 +238,55 @@ def read_expense_journal_decisions(
     ) for row in rows[:page_size])
     next_cursor = decisions[-1].reviewer_id if len(rows) > page_size else None
     return ExpenseJournalDecisionPage(decisions, next_cursor)
+
+
+JournalCorrectionReason = Literal["amount", "account", "funding", "accounting_date", "source_evidence"]
+
+
+class ExpenseJournalCorrectionConflict(Exception):
+    """A different correction reason is already attached to the observation."""
+
+
+@dataclass(frozen=True)
+class ExpenseJournalCorrectionReceipt:
+    journal_id: UUID
+    snapshot_sha256: str
+    reason: JournalCorrectionReason
+    reviewer_id: str = field(repr=False)
+    recorded_at: datetime
+
+
+def record_expense_journal_correction(
+    connection, actor, tenant_id, organisation_id, journal_id, *,
+    snapshot_sha256: str, reason: JournalCorrectionReason,
+) -> ExpenseJournalCorrectionReceipt:
+    """Attach a structured reason to the caller's changes-requested observation."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal review required")
+    actor_id = actor.user_id
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
+        raise ValueError("Invalid journal reviewer")
+    if type(snapshot_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", snapshot_sha256):
+        raise ValueError("An exact journal snapshot digest is required")
+    if type(reason) is not str or reason not in ("amount", "account", "funding", "accounting_date", "source_evidence"):
+        raise ValueError("Unsupported journal correction reason")
+    organisation, journal = (UUID(str(value)) for value in (organisation_id, journal_id))
+
+    with _tenant_transaction(connection, tenant, write=True, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "record_expense_journal_correction")
+            cursor.execute("SELECT * FROM omnixat_extraction.record_expense_journal_correction(%s,%s,%s,%s,%s)",
+                           (organisation, journal, bytes.fromhex(snapshot_sha256), reason, actor_id))
+            row = cursor.fetchone()
+        if row["outcome"] == "unavailable":
+            raise EvidenceNotEligible("Journal correction target is unavailable")
+        if row["outcome"] == "conflict":
+            raise ExpenseJournalCorrectionConflict("A different correction reason already exists")
+        if row["outcome"] != "stored":
+            raise RuntimeError("Journal correction receipt unavailable")
+        return ExpenseJournalCorrectionReceipt(journal, snapshot_sha256, reason, actor_id,
+                                               row["correction_recorded_at"])
