@@ -1218,3 +1218,33 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 
 Next: record explicitly selected payer and funding context as a separate
 draft-only step before preparing a balanced journal. No route or ledger posting.
+
+## C4 explicit expense funding context — completed
+
+Recovered clean 2d4121a. Record an explicit payer and funding source for
+one eligible expense draft, from scoped operator configuration. Attribute
+the choice and make identical retries safe. No payment, accounting
+classification, journal, approval or posting.
+
+Migration 0027 stores one attributed choice of payer and funding source per
+draft. Operator-configured sources distinguish business from personal funds
+and default to disabled. The execute-only writer rechecks draft eligibility
+and locks the selected source. Identical eligible retries return one receipt;
+a changed eligible selection or actor conflicts.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **194 passed**. New cases
+  cover personal/business choices, concurrent replay, conflicts, payer mismatch,
+  scope, disabled sources, stale evidence policy and role separation.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: make funding context available in scoped review and validate an
+explicit eligible counterpart account before preparing a balanced journal.
+There is no funding correction, payment verification or ledger action.

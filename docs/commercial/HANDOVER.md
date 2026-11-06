@@ -419,3 +419,11 @@ accounting context, rechecking evidence, period and account eligibility.
 **44 core, 21 identity and 192 PostgreSQL/HTTP tests pass**. The unchanged
 prototype browser test fails on Chromium socket permissions. Next: explicit
 payer and funding context for draft preparation. No approval or posting.
+
+## Latest expense funding context checkpoint
+
+Migration 0027 records an explicitly selected payer and business or personal
+funding source against one eligible expense draft, with attributed replay.
+**44 core, 21 identity and 194 PostgreSQL/HTTP tests pass**. The unchanged
+prototype browser fails on Chromium socket permissions. Next: scoped funding
+review and counterpart account policy before journal preparation. No posting.

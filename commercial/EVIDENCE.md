@@ -330,3 +330,28 @@ Give a separate non-owner, NOBYPASSRLS reader USAGE on
 `omnixat_extraction` and EXECUTE only on
 `omnixat_extraction.read_csv_expense_draft(uuid,uuid)`.
 Keep direct table access and preview, writer or scanner grants separate.
+
+## Explicit payer and funding context
+
+Migration 0027 adds operator-provisioned funding source records scoped to
+a tenant and organisation. A source has an opaque payer UUID and a
+`business_funds` or `personal_funds` classification. Sources default to
+disabled. These identifiers do not verify a person's identity or a bank
+payment; no bank details are collected. Retire a source by disabling it
+and provision a new one if its payer or kind changes.
+
+`record_expense_funding_context` requires an interactive tenant editor
+or owner with evidence access to select both UUIDs for a saved expense
+draft. The service checks current expense eligibility and locks the
+selected funding row through commit. Identical eligible retries return
+the original timestamp; a changed eligible choice or actor conflicts.
+This records one selection and provides no correction or review endpoint.
+Draft eligibility is checked at write time; any later journal preparation
+must check it again and validate an explicit counterpart account.
+
+Give a dedicated non-owner, NOBYPASSRLS writer USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.record_expense_funding_context(uuid,uuid,uuid,uuid,text)`.
+Do not grant direct table access or combine this with other evidence roles.
+A funding choice does not infer reimbursement, a director's loan, tax
+treatment or a ledger account, and it cannot move funds or post a journal.
