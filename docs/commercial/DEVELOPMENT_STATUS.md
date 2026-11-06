@@ -1278,3 +1278,32 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: add tenant/organisation policy for an explicitly selected counterpart
 account tied to the saved funding source before preparing a balanced journal.
 No approval, posting or payment.
+
+## C4 scoped counterpart policy and journal preview — completed
+
+Recovered clean 93c4430. Add operator-configured counterpart eligibility
+per tenant, organisation and funding source. Validate an explicit account
+and prepare a balanced GBP preview from the currently eligible expense.
+No persistence of journal lines, approval, payment or posting.
+
+Migration 0029 adds an operator-managed, default-disabled counterpart
+allowlist tied to the saved funding source. The execute-only preview
+uses one read snapshot to validate evidence, expense, funding and
+counterpart policy, returning two opposing lines in exact pence with
+source provenance. It refuses the expense account as its own counterpart.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **44 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **198 passed**. New cases
+  cover exact balance and provenance, missing funding, default-disabled
+  policy, wrong source or scope, same-account rejection and role separation.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No prototype test changed or skipped.
+- `git diff --check`: passed.
+
+Next: persist a retry-safe, balanced journal draft and hold the relevant
+eligibility checks through commit. No ledger posting or approval.

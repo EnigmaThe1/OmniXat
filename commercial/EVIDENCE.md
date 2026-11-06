@@ -374,3 +374,27 @@ Give a dedicated non-owner, NOBYPASSRLS reader USAGE on
 `omnixat_extraction` and EXECUTE only on
 `omnixat_extraction.read_expense_funding_context(uuid,uuid)`.
 Keep it separate from writer and other evidence grants.
+
+## Counterpart policy and journal preview
+
+Migration 0029 adds an operator-managed allowlist of counterpart account
+UUIDs per tenant, organisation and funding source. Each entry defaults to
+disabled. It is a preparation policy, not a chart of accounts or a default
+mapping; the operator must validate account suitability before enabling it.
+
+`prepare_expense_journal_preview` requires an interactive tenant owner or
+editor with evidence access and an explicitly selected counterpart account.
+A single read rechecks the saved expense and its evidence, period, expense
+account, recorded funding source and counterpart policy. The counterpart
+must differ from the expense account. The preview uses the saved exact GBP
+pence for both lines, debiting the expense account and crediting the
+selected counterpart, and includes the draft, funding and evidence links.
+It is limited to a single amount and two lines. It neither verifies a
+payment nor decides reimbursement, account classification or tax treatment.
+
+Give a dedicated non-owner, NOBYPASSRLS preview login USAGE on
+`omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.read_expense_journal_preview(uuid,uuid,uuid)`.
+Keep direct table access and other evidence grants separate. This preview
+is not durable; a future journal draft writer must recheck all inputs
+inside its transaction. It cannot post or approve anything.

@@ -37,6 +37,7 @@ from omnixat_core.evidence_scan_postgres import (
 from omnixat_core.expense_funding_postgres import (
     ExpenseFundingConflict, read_expense_funding_context, record_expense_funding_context,
 )
+from omnixat_core.expense_journal_postgres import prepare_expense_journal_preview
 from test_postgres import PostgresFixture
 
 
@@ -207,6 +208,19 @@ class EvidenceScanTests(PostgresFixture):
         ).format(funding_reader))
         cls.funding_reader_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                               user=funding_reader_role, password=password)
+
+        journal_role = cls.role + "_journal_preview"
+        journal_reader = sql.Identifier(journal_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(journal_reader, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, journal_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(journal_reader))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_expense_journal_preview(uuid,uuid,uuid) TO {}"
+        ).format(journal_reader))
+        cls.journal_preview_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                               user=journal_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -1185,3 +1199,90 @@ class EvidenceScanTests(PostgresFixture):
                 record_expense_funding_context(reader, self.actor, self.a, self.org, draft.id, **selection)
             with self.assertRaises(psycopg.errors.InsufficientPrivilege):
                 reader.execute("SELECT * FROM omnixat.expense_funding_context")
+
+    def configure_counterpart(self, tenant, organisation, source, account, *, enable=False):
+        self.owner.execute("""INSERT INTO omnixat.expense_counterpart_policy
+            (tenant_id,organisation_id,funding_source_id,account_id) VALUES (%s,%s,%s,%s)""",
+                           (tenant, organisation, source, account))
+        if enable:
+            self.owner.execute("""UPDATE omnixat.expense_counterpart_policy SET eligible_for_drafts=true
+                WHERE tenant_id=%s AND organisation_id=%s AND funding_source_id=%s AND account_id=%s""",
+                               (tenant, organisation, source, account))
+
+    def test_journal_preview_balances_exact_source_amount_and_rechecks_policy(self):
+        scope, period, context = self.expense_write_fixture()
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            draft = create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+        selection = self.configure_funding_source(self.a, self.org, "personal_funds")
+        source = selection["funding_source_id"]
+        account = uuid4()
+        self.configure_counterpart(self.a, self.org, source, account)
+        with psycopg.connect(self.journal_preview_dsn, autocommit=True) as reader:
+            def preview():
+                return prepare_expense_journal_preview(reader, self.actor, self.a, self.org, draft.id,
+                                                       counterpart_account_id=account)
+            with self.assertRaises(EvidenceNotEligible):
+                preview()  # No recorded funding yet.
+            with psycopg.connect(self.funding_dsn, autocommit=True) as writer:
+                record_expense_funding_context(writer, self.actor, self.a, self.org, draft.id, **selection)
+            with self.assertRaises(EvidenceNotEligible):
+                preview()  # Counterpart policy defaults to disabled.
+            self.owner.execute("""UPDATE omnixat.expense_counterpart_policy SET eligible_for_drafts=true
+                WHERE tenant_id=%s AND organisation_id=%s AND funding_source_id=%s AND account_id=%s""",
+                               (self.a, self.org, source, account))
+            result = preview()
+            self.assertEqual((result.draft_id, result.funding_source_id, result.currency,
+                              result.accounting_date, result.period_id),
+                             (draft.id, source, "GBP", context.accounting_date, period))
+            self.assertEqual((result.evidence_id, result.extraction_job_id, result.source_cell), scope[2:])
+            self.assertEqual(result.content_sha256, sha256(self.original).hexdigest())
+            self.assertEqual(result.scan_policy_version, "fictional-v1")
+            self.assertEqual([(x.account_id, x.side, x.amount_pence) for x in result.lines],
+                             [(context.expense_account_id, "debit", 1234), (account, "credit", 1234)])
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                preview()
+            self.set_active_policy("fictional-v1")
+            self.owner.execute("""UPDATE omnixat.expense_funding_sources SET eligible_for_drafts=false
+                WHERE tenant_id=%s AND organisation_id=%s AND id=%s""", (self.a, self.org, source))
+            with self.assertRaises(EvidenceNotEligible):
+                preview()
+
+    def test_journal_preview_rejects_wrong_source_scope_same_account_and_roles(self):
+        scope, period, context = self.expense_write_fixture()
+        with psycopg.connect(self.expense_writer_dsn, autocommit=True) as writer:
+            draft = create_csv_expense_draft(writer, self.actor, *scope, context=context, period_id=period)
+        selection = self.configure_funding_source(self.a, self.org, "business_funds")
+        source = selection["funding_source_id"]
+        another = self.configure_funding_source(self.a, self.org, "business_funds")["funding_source_id"]
+        with psycopg.connect(self.funding_dsn, autocommit=True) as writer:
+            record_expense_funding_context(writer, self.actor, self.a, self.org, draft.id, **selection)
+        wrong_source, eligible = uuid4(), uuid4()
+        self.configure_counterpart(self.a, self.org, another, wrong_source, enable=True)
+        self.configure_counterpart(self.a, self.org, source, context.expense_account_id, enable=True)
+        self.configure_counterpart(self.a, self.org, source, eligible, enable=True)
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.configure_counterpart(self.b, self.org, source, eligible, enable=True)
+        with psycopg.connect(self.journal_preview_dsn, autocommit=True) as reader:
+            for actor, tenant, org, account in (
+                (self.actor, self.a, self.org, wrong_source),
+                (self.actor, self.a, self.org, context.expense_account_id),
+                (self.actor, self.a, uuid4(), eligible),
+                (self.other, self.b, self.org, eligible),
+            ):
+                with self.subTest(tenant=tenant, org=org, account=account), self.assertRaises(EvidenceNotEligible):
+                    prepare_expense_journal_preview(reader, actor, tenant, org, draft.id, counterpart_account_id=account)
+            for actor in (
+                Principal("viewer", self.a, "viewer"),
+                Principal("agent", self.a, "editor", actor_kind="agent"),
+                Principal("api", self.a, "editor", api_scopes=frozenset({"records:write", "evidence:read"})),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    prepare_expense_journal_preview(reader, actor, self.a, self.org, draft.id,
+                                                    counterpart_account_id=eligible)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                reader.execute("SELECT * FROM omnixat.expense_counterpart_policy")
+        with psycopg.connect(self.funding_dsn, autocommit=True) as writer:
+            with self.assertRaises(PermissionError):
+                prepare_expense_journal_preview(writer, self.actor, self.a, self.org, draft.id,
+                                                counterpart_account_id=eligible)

@@ -435,3 +435,11 @@ recorded payer and funding choice, distinguishing missing and disabled
 choices. **44 core, 21 identity and 196 PostgreSQL/HTTP tests pass**.
 The unchanged prototype browser fails on Chromium socket permissions.
 Next: explicit counterpart account policy for journal preparation. No posting.
+
+## Latest counterpart policy and journal preview checkpoint
+
+Migration 0029 checks an explicit counterpart account against the saved
+funding source and returns a balanced two-line GBP preview with evidence
+provenance. **44 core, 21 identity and 198 PostgreSQL/HTTP tests pass**.
+The unchanged prototype browser fails on Chromium socket permissions.
+Next: save an idempotent journal draft with commit-time eligibility checks.
