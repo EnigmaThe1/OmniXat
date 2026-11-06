@@ -346,3 +346,11 @@ that checks admission again and holds the active policy through commit.
 Identical retries return the original receipt. **42 core, 21 identity and
 174 PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on
 Chromium socket permissions. Next: scoped reads for review and clarification.
+
+## Latest CSV review checkpoint
+
+Migration 0019 adds a scoped, execute-only review read that rechecks source
+eligibility and prepares focused questions for unresolved cells. **42 core,
+21 identity and 177 PostgreSQL/HTTP tests pass**. The unchanged demo browser
+fails on Chromium socket permissions. Next: persist authorised clarification
+answers with exact source binding and a write-time eligibility recheck.

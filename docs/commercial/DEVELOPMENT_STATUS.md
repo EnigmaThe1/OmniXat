@@ -964,3 +964,32 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: a scoped review read service that rechecks current eligibility and
 exposes unresolved cells for clarification. No public route, live scanner,
 ledger effect or deployment.
+
+## C4 scoped CSV review and clarification — completed
+
+Recovered clean ad8119d. Add an internal read-only review service for
+authorised tenant users. Recheck source eligibility and expose focused
+clarification prompts for unresolved cells without exposing original bytes.
+No public route, notifications, answers or ledger effects.
+
+Migration 0019 adds an execute-only review read. A verified interactive
+tenant user can review one currently eligible extraction; the separate
+review login cannot read raw tables or call extraction functions. The
+service validates stored candidates and prepares focused prompts only
+for unresolved cells. It does not send questions or store answers.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **42 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **177 passed**. Three new
+  tests cover unresolved questions and zero, stale policy, tenant and
+  organisation scope, grants and rejection of malformed stored amounts.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: store authorised clarification answers linked to the exact job and
+cell with a write-time eligibility recheck. No public route or deployment.

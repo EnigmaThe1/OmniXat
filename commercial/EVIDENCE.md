@@ -191,3 +191,20 @@ different result. A new extraction under a changed policy needs a new job
 ID. Previously committed results remain historical; a future consumer must
 recheck eligibility before using them. No OCR, model, public route or ledger
 effect is wired.
+
+## Scoped CSV review
+
+Migration 0019 lets a dedicated review login read one result through
+`omnixat_extraction.read_csv_review(uuid,uuid,uuid)`. Grant that function
+and USAGE on `omnixat_extraction` only; keep this login separate from the
+extraction worker and give it no raw schema access. The application service
+requires a verified interactive tenant user with evidence read permission.
+The database checks tenant, organisation, evidence and job ID and reuses
+the active-policy gate at read time. It returns structured candidates and
+provenance without raw source bytes or original cell text.
+
+The service prepares fixed questions only for missing, blank and ambiguous
+cells. It does not send, persist or resolve questions. A review is a
+point-in-time read; any future write must recheck eligibility. Next: store
+authorised, source-linked clarification answers without modifying extraction
+results or creating ledger entries.

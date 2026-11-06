@@ -13,6 +13,7 @@ from psycopg.conninfo import make_conninfo
 from psycopg.pq import TransactionStatus
 from psycopg.types.json import Jsonb
 
+from omnixat_core.access import Principal
 from omnixat_core.evidence_csv import AmountCell
 from omnixat_core.evidence_extraction_postgres import (
     CSVExtractionConflict, EvidenceNotEligible, _store_csv_extraction,
@@ -21,6 +22,7 @@ from omnixat_core.evidence_extraction_postgres import (
 from omnixat_core.evidence_intake import stage_evidence
 from omnixat_core.evidence_postgres import register_evidence
 from omnixat_core.evidence_quarantine_postgres import store_quarantined_evidence
+from omnixat_core.evidence_review_postgres import read_csv_extraction_review
 from omnixat_core.evidence_scan_postgres import (
     EvidenceScanBusy, EvidenceScanError, scan_quarantined_evidence,
 )
@@ -28,7 +30,7 @@ from test_postgres import PostgresFixture
 
 
 class EvidenceScanTests(PostgresFixture):
-    original = b"Fictional heading,Amount\r\nFictional row,12\r\n"
+    original = b"Fictional heading,Amount\r\nFictional row,12\r\nOther row,0.00,,1e2\r\n"
     media_type = "text/csv"
 
     @classmethod
@@ -74,6 +76,19 @@ class EvidenceScanTests(PostgresFixture):
         ).format(gate))
         cls.gate_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                      user=gate_role, password=gate_password)
+
+        review_role = cls.role + "_review"
+        review = sql.Identifier(review_role)
+        review_password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(review, sql.Literal(review_password)))
+        cls.addClassCleanup(cls.drop_role, review_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(review))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_csv_review(uuid,uuid,uuid) TO {}"
+        ).format(review))
+        cls.review_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                       user=review_role, password=review_password)
 
     @classmethod
     def drop_role(cls, role):
@@ -412,3 +427,66 @@ class EvidenceScanTests(PostgresFixture):
         self.assertEqual(self.owner.execute("""
             SELECT policy_version FROM omnixat.csv_extraction_results WHERE tenant_id=%s AND job_id=%s
         """, (self.a, job)).fetchone(), ("fictional-v1",))
+
+    def prepare_csv_review(self):
+        gate = self.gate_connection()
+        self.addCleanup(self.owner.execute, "DELETE FROM omnixat_extraction.active_scan_policy")
+        self.set_active_policy("fictional-v1")
+        self.run_scan(lambda *_: "clean")
+        selections = (
+            AmountCell("total", 3, 2), AmountCell("vat", 3, 3),
+            AmountCell("net", 3, 4), AmountCell("fee", 3, 5),
+        )
+        job = uuid4()
+        extract_and_store_csv_amounts(gate, self.a, self.org, self.registration.id, job, selections)
+        review = psycopg.connect(self.review_dsn, autocommit=True)
+        self.addCleanup(review.close)
+        return gate, review, job, selections
+
+    def test_csv_review_returns_candidates_and_only_unresolved_questions(self):
+        _, review, job, selections = self.prepare_csv_review()
+        actor = Principal("fictional-viewer", self.a, "viewer")
+        result = read_csv_extraction_review(review, actor, self.a, self.org, self.registration.id, job)
+        self.assertEqual(result.job_id, job)
+        self.assertEqual(result.content_sha256, sha256(self.original).hexdigest())
+        self.assertEqual(result.amounts[0].amount.as_tuple(), Decimal("0.00").as_tuple())
+        self.assertEqual(tuple(prompt.cell for prompt in result.clarifications), selections[1:])
+        self.assertEqual([prompt.reason for prompt in result.clarifications], ["blank", "ambiguous", "missing"])
+        self.assertTrue(all(prompt.question.endswith("?") for prompt in result.clarifications))
+        self.assertNotIn("1e2", repr(result))
+        self.set_active_policy("fictional-v2")
+        with self.assertRaises(EvidenceNotEligible):
+            read_csv_extraction_review(review, actor, self.a, self.org, self.registration.id, job)
+
+    def test_csv_review_denies_wrong_scope_and_separates_database_roles(self):
+        gate, review, job, _ = self.prepare_csv_review()
+        for actor in (
+            Principal("fictional-other", self.b, "owner"),
+            Principal("fictional-agent", self.a, "owner", actor_kind="agent"),
+            Principal("fictional-api", self.a, "owner", api_scopes=frozenset({"evidence:read"})),
+            Principal("fictional-staff", self.a, "owner", staff_role="platform_owner"),
+        ):
+            with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                read_csv_extraction_review(review, actor, self.a, self.org, self.registration.id, job)
+        with self.assertRaises(EvidenceNotEligible):
+            read_csv_extraction_review(review, self.other, self.b, self.org, self.registration.id, job)
+        with self.assertRaises(EvidenceNotEligible):
+            read_csv_extraction_review(review, self.actor, self.a, uuid4(), self.registration.id, job)
+        with self.assertRaises(PermissionError):
+            read_csv_extraction_review(gate, self.actor, self.a, self.org, self.registration.id, job)
+        for query, params in (
+            ("SELECT original_bytes FROM omnixat.evidence_quarantine", ()),
+            ("SELECT * FROM omnixat.csv_extraction_results", ()),
+            ("SELECT * FROM omnixat_extraction.read_eligible_original(%s,%s)", (self.org, self.registration.id)),
+        ):
+            with self.subTest(query=query), self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                review.execute(query, params)
+
+    def test_csv_review_fails_closed_on_invalid_stored_amount(self):
+        _, review, job, _ = self.prepare_csv_review()
+        self.owner.execute("""
+            UPDATE omnixat.csv_extraction_results SET amounts=%s WHERE tenant_id=%s AND job_id=%s
+        """, (Jsonb([{"field_name": "total", "row": 3, "column": 2, "status": "found", "amount": "NaN"}]),
+              self.a, job))
+        with self.assertRaises(EvidenceNotEligible):
+            read_csv_extraction_review(review, self.actor, self.a, self.org, self.registration.id, job)
