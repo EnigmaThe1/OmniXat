@@ -224,3 +224,20 @@ It does not modify extraction results. Review shows each answer, its
 author and timestamp separately, without rewriting the original candidate.
 An unavailable answer suppresses the repeated question but supplies no
 amount for accounting. Neither the answer nor the review posts a ledger entry.
+
+## Source-linked accounting draft amounts
+
+Migration 0022 stores one draft amount for an exact extraction job and field.
+An interactive tenant user with evidence read and records write permission
+selects a cell. PostgreSQL derives the exact decimal from the extracted value
+or its attributed clarification; callers cannot supply an amount. Unanswered
+or unavailable cells are refused. The write checks current eligibility and
+holds the active policy until commit. An identical retry by the same actor
+returns the original receipt.
+
+Grant a dedicated draft login USAGE on `omnixat_extraction` and EXECUTE on
+`omnixat_extraction.create_csv_draft_amount(uuid,uuid,uuid,text,integer,integer,text)`
+only. The source link is the immutable extraction job and cell; the draft
+records whether its value was extracted or clarified. This stores an amount
+candidate only. It assigns no currency, accounting date, account or tax
+treatment and cannot post to the ledger.

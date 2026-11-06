@@ -370,3 +370,11 @@ and suppresses only answered prompts. **42 core, 21 identity and 180
 PostgreSQL/HTTP tests pass**. The unchanged demo browser fails on Chromium
 socket permissions. Next: source-linked draft mapping that refuses missing
 amounts and rechecks eligibility before a write.
+
+## Latest source-linked accounting draft checkpoint
+
+Migration 0022 stores an exact, eligible CSV draft amount derived from an
+extracted cell or attributed clarification. It refuses unresolved amounts
+and cannot post to the ledger. **42 core, 21 identity and 182 PostgreSQL/HTTP
+tests pass**. The unchanged demo browser fails on Chromium socket permissions.
+Next: scoped draft reads and explicit accounting context validation.

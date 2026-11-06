@@ -1050,3 +1050,31 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: a source-linked draft mapping for accounting preparation that refuses
 unavailable or unanswered amounts and rechecks eligibility before writing.
 No public route, ledger effect or deployment.
+
+## C4 source-linked accounting draft amounts — completed
+
+Recovered clean 94c6181. Persist a draft amount from one explicitly selected,
+eligible CSV cell or its exact clarification answer. Refuse unavailable
+values and recheck eligibility at write time. No currency inference, ledger
+posting, routes or deployment.
+
+Migration 0022 stores a draft amount and its source kind against the exact
+job and cell. PostgreSQL derives the value, refuses unavailable or unanswered
+cells, and holds the active policy through commit. Identical retries reuse
+the receipt. No currency, date, account or tax treatment is inferred.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **42 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **182 passed**. New cases
+  cover extracted and clarified amounts, scale, zero, exact cell matching,
+  unanswered and unavailable cells, retries, scope, roles and stale policy.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct launch confirmed
+  Chromium socket permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: scoped draft read and validation of explicitly supplied accounting
+context before creating expense or ledger drafts. No posting or deployment.
