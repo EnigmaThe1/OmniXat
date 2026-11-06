@@ -301,3 +301,59 @@ def record_expense_journal_correction(
             raise RuntimeError("Journal correction receipt unavailable")
         return ExpenseJournalCorrectionReceipt(journal, snapshot_sha256, reason, actor_id,
                                                row["correction_recorded_at"])
+
+
+class ExpenseJournalClarificationConflict(Exception):
+    """A different answer already exists for the snapshot and reason."""
+
+
+@dataclass(frozen=True)
+class ExpenseJournalClarificationReceipt:
+    journal_id: UUID
+    snapshot_sha256: str
+    reason: JournalCorrectionReason
+    correction_reviewer_id: str = field(repr=False)
+    answered_by: str = field(repr=False)
+    answered_at: datetime
+
+
+def record_expense_journal_clarification(
+    connection, actor, tenant_id, organisation_id, journal_id, *,
+    snapshot_sha256: str, reason: JournalCorrectionReason, correction_reviewer_id: str, answer: str,
+) -> ExpenseJournalClarificationReceipt:
+    """Save an attributed answer to a current correction question without editing the journal."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal clarification required")
+    actor_id = actor.user_id
+    for identity in (actor_id, correction_reviewer_id):
+        if not isinstance(identity, str) or not identity.strip() or len(identity) > 200 or "\0" in identity:
+            raise ValueError("Invalid journal clarification attribution")
+    if type(snapshot_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", snapshot_sha256):
+        raise ValueError("An exact journal snapshot digest is required")
+    if type(reason) is not str or reason not in ("amount", "account", "funding", "accounting_date", "source_evidence"):
+        raise ValueError("Unsupported journal correction reason")
+    if type(answer) is not str or not 1 <= len(answer) <= 1000 or not answer.strip() or not answer.isprintable():
+        raise ValueError("A single-line clarification of up to 1000 characters is required")
+    organisation, journal = (UUID(str(value)) for value in (organisation_id, journal_id))
+
+    with _tenant_transaction(connection, tenant, write=True, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "record_expense_journal_clarification")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.record_expense_journal_clarification(%s,%s,%s,%s,%s,%s,%s)
+            """, (organisation, journal, bytes.fromhex(snapshot_sha256), correction_reviewer_id, reason,
+                  answer, actor_id))
+            row = cursor.fetchone()
+        if row["outcome"] == "unavailable":
+            raise EvidenceNotEligible("Journal clarification target is unavailable")
+        if row["outcome"] == "conflict":
+            raise ExpenseJournalClarificationConflict("A different clarification already exists")
+        if row["outcome"] != "stored":
+            raise RuntimeError("Journal clarification receipt unavailable")
+        return ExpenseJournalClarificationReceipt(journal, snapshot_sha256, reason, row["correction_reviewer"],
+                                                  actor_id, row["recorded_at"])

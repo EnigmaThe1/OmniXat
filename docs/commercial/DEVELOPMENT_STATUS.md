@@ -1508,3 +1508,35 @@ Verification on 6 November 2026, Python 3.12:
 Next: rerun PostgreSQL integration tests, then record explicit clarification
 answers against the exact eligible snapshot and reason. Keep journal changes
 and any approval as separate actions.
+
+## C4 journal clarification answers — completed
+
+Recovered clean `1ff6e87`. Add an internal write for one attributed, bounded
+answer per correction reason on an eligible journal snapshot. Reference an
+actual correction request, preserve original observations and reject conflicting
+retries. Add no posting, approval or external transport.
+
+Migration 0036 and the internal service record one attributed answer per
+eligible snapshot and reason. A composite foreign key binds the answer to
+an actual correction. Identical retries by the same author reuse the first
+receipt, including when another reviewer requested the same reason.
+The receipt excludes answer text. No journal or review record is edited.
+
+Verification on 6 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+built from the checksum-verified upstream release, with the pure-Python
+psycopg adapter from the repository's pinned 3.3.8 upstream tag:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **210 passed**, including
+  the previously pending correction-question paging coverage. New cases
+  exercise concurrent retries, duplicate reasons, conflicts, cross-tenant
+  rejection, stale policy, human-editor authorization and dedicated grants.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: return attributed answers through the scoped journal decision read
+and suppress questions already answered for the eligible snapshot and reason.

@@ -501,3 +501,13 @@ runner could not install psycopg. The prototype ran 19 of 20 tests
 successfully, with the browser test blocked by Chromium socket permissions.
 Next, rerun PostgreSQL integration tests and add explicit clarification
 answers bound to the eligible snapshot and reason.
+
+## Latest journal clarification answer checkpoint
+
+Migration 0036 stores one attributed answer per eligible journal snapshot
+and correction reason through a dedicated writer. See EVIDENCE.md for
+the grant and retry contract. **46 core, 21 identity and 210 PostgreSQL/HTTP
+tests pass**, including the previously pending review-page verification.
+The unchanged prototype passes 19 of 20 tests with the known Chromium
+socket failure. Next: show answers in scoped review and suppress questions
+for answered reasons.

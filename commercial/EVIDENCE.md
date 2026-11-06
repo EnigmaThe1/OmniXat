@@ -526,3 +526,24 @@ Give a dedicated non-owner, NOBYPASSRLS writer USAGE on
 `omnixat_extraction` and EXECUTE only on
 `omnixat_extraction.record_expense_journal_correction(uuid,uuid,bytea,text,text)`.
 Keep direct table access and other journal grants separate.
+
+## Recording a journal clarification answer
+
+Migration 0036 adds `record_expense_journal_clarification`. An interactive
+tenant owner or editor with evidence read and records write permission can
+answer a question on the exact eligible journal snapshot. Pass the reason
+and the reviewer ID of a correction request carrying that reason. The
+answer is a single line of up to 1,000 printable characters and is stored
+with the authenticated author and timestamp.
+
+Each snapshot and reason accepts one answer, even if several reviewers
+requested the same correction. An identical retry by the original author
+returns the original receipt and correction reference. A different author
+or answer conflicts. Eligibility is checked on write and replay. The write
+holds the active scan policy through commit. Answer text is private tenant
+data and is absent from the receipt and existing decision page.
+
+Grant the dedicated writer USAGE on `omnixat_extraction` and EXECUTE on
+`omnixat_extraction.record_expense_journal_clarification(uuid,uuid,bytea,text,text,text,text)`
+only. The answer does not alter the journal, the correction request or
+the review decision, and carries no approval or posting authority.

@@ -38,7 +38,8 @@ from omnixat_core.expense_funding_postgres import (
     ExpenseFundingConflict, read_expense_funding_context, record_expense_funding_context,
 )
 from omnixat_core.expense_journal_postgres import (
-    ExpenseJournalConflict, ExpenseJournalDecisionConflict, create_expense_journal_draft,
+    ExpenseJournalClarificationConflict, ExpenseJournalConflict, ExpenseJournalDecisionConflict,
+    create_expense_journal_draft, record_expense_journal_clarification,
     prepare_expense_journal_preview, read_expense_journal_decisions, read_expense_journal_draft,
     ExpenseJournalCorrectionConflict, record_expense_journal_correction, record_expense_journal_decision,
 )
@@ -293,6 +294,20 @@ class EvidenceScanTests(PostgresFixture):
         ).format(correction_writer))
         cls.correction_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                           user=correction_role, password=password)
+
+        clarification_role = cls.role + "_clarification"
+        clarification_writer = sql.Identifier(clarification_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(clarification_writer, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, clarification_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(clarification_writer))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.record_expense_journal_clarification"
+            "(uuid,uuid,bytea,text,text,text,text) TO {}"
+        ).format(clarification_writer))
+        cls.clarification_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                             user=clarification_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -1761,4 +1776,102 @@ class EvidenceScanTests(PostgresFixture):
                 correct()
         self.assertEqual(self.owner.execute("""
             SELECT count(*) FROM omnixat.expense_journal_correction_requests WHERE tenant_id=%s
+        """, (self.a,)).fetchone(), (0,))
+
+    def journal_clarification_fixture(self):
+        review = self.journal_decision_fixture()
+        journal, digest = review.receipt.id, review.snapshot_sha256
+        with psycopg.connect(self.decision_writer_dsn, autocommit=True) as writer:
+            record_expense_journal_decision(writer, self.actor, self.a, self.org, journal,
+                                            snapshot_sha256=digest, decision="changes_requested")
+        with psycopg.connect(self.correction_dsn, autocommit=True) as writer:
+            record_expense_journal_correction(writer, self.actor, self.a, self.org, journal,
+                                              snapshot_sha256=digest, reason="source_evidence")
+        return review
+
+    def test_journal_clarification_concurrent_retry_and_conflicts(self):
+        review = self.journal_clarification_fixture()
+        journal, digest = review.receipt.id, review.snapshot_sha256
+        respondent = Principal("fictional-respondent", self.a, "editor")
+        answer = "See the fictional invoice, line two."
+        kwargs = dict(snapshot_sha256=digest, correction_reviewer_id=self.actor.user_id,
+                      reason="source_evidence", answer=answer)
+        barrier = Barrier(2)
+
+        def record():
+            with psycopg.connect(self.clarification_dsn, autocommit=True) as writer:
+                barrier.wait(timeout=5)
+                return record_expense_journal_clarification(writer, respondent, self.a, self.org, journal, **kwargs)
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(lambda _: record(), range(2)))
+        self.assertEqual(first, second)
+        self.assertEqual((first.journal_id, first.snapshot_sha256, first.reason,
+                          first.correction_reviewer_id, first.answered_by),
+                         (journal, digest, "source_evidence", self.actor.user_id, respondent.user_id))
+        self.assertEqual(self.owner.execute("""
+            SELECT answer, answered_at FROM omnixat.expense_journal_clarification_answers
+            WHERE tenant_id=%s AND journal_id=%s
+        """, (self.a, journal)).fetchall(), [(answer, first.answered_at)])
+        with psycopg.connect(self.clarification_dsn, autocommit=True) as writer:
+            with self.assertRaises(ExpenseJournalClarificationConflict):
+                record_expense_journal_clarification(writer, respondent, self.a, self.org, journal,
+                                                     **dict(kwargs, answer="A different fictional invoice."))
+            with self.assertRaises(ExpenseJournalClarificationConflict):
+                record_expense_journal_clarification(writer, self.actor, self.a, self.org, journal, **kwargs)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                writer.execute("SELECT * FROM omnixat.expense_journal_clarification_answers")
+            with self.assertRaises(PermissionError):
+                read_expense_journal_draft(writer, respondent, self.a, self.org, journal)
+        second_reviewer = Principal("fictional-second-reviewer", self.a, "editor")
+        with psycopg.connect(self.decision_writer_dsn, autocommit=True) as writer:
+            record_expense_journal_decision(writer, second_reviewer, self.a, self.org, journal,
+                                            snapshot_sha256=digest, decision="changes_requested")
+        with psycopg.connect(self.correction_dsn, autocommit=True) as writer:
+            record_expense_journal_correction(writer, second_reviewer, self.a, self.org, journal,
+                                              snapshot_sha256=digest, reason="source_evidence")
+        with psycopg.connect(self.clarification_dsn, autocommit=True) as writer:
+            self.assertEqual(record_expense_journal_clarification(
+                writer, respondent, self.a, self.org, journal,
+                **dict(kwargs, correction_reviewer_id=second_reviewer.user_id),
+            ), first)
+        with psycopg.connect(self.journal_review_dsn, autocommit=True) as reader:
+            self.assertEqual(read_expense_journal_draft(reader, self.actor, self.a, self.org, journal), review)
+        self.set_active_policy("fictional-v2")
+        with psycopg.connect(self.clarification_dsn, autocommit=True) as writer:
+            with self.assertRaises(EvidenceNotEligible):
+                record_expense_journal_clarification(writer, respondent, self.a, self.org, journal, **kwargs)
+
+    def test_journal_clarification_requires_current_scoped_correction_and_human_editor(self):
+        review = self.journal_clarification_fixture()
+        journal, digest = review.receipt.id, review.snapshot_sha256
+        kwargs = dict(snapshot_sha256=digest, correction_reviewer_id=self.actor.user_id,
+                      reason="source_evidence", answer="See the fictional invoice.")
+        with psycopg.connect(self.clarification_dsn, autocommit=True) as writer:
+            for overrides in (
+                {"snapshot_sha256": "0" * 64}, {"reason": "account"},
+                {"correction_reviewer_id": "fictional-missing-reviewer"},
+            ):
+                with self.subTest(overrides=overrides), self.assertRaises(EvidenceNotEligible):
+                    record_expense_journal_clarification(writer, self.actor, self.a, self.org, journal,
+                                                         **(kwargs | overrides))
+            for actor, tenant, organisation in ((self.other, self.b, self.org), (self.actor, self.a, uuid4())):
+                with self.subTest(tenant=tenant, organisation=organisation), self.assertRaises(EvidenceNotEligible):
+                    record_expense_journal_clarification(writer, actor, tenant, organisation, journal, **kwargs)
+            for actor in (
+                Principal("agent", self.a, "editor", actor_kind="agent"),
+                Principal("api", self.a, "editor", api_scopes=frozenset({"records:write", "evidence:read"})),
+                Principal("viewer", self.a, "viewer"),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    record_expense_journal_clarification(writer, actor, self.a, self.org, journal, **kwargs)
+            for answer in ("", " ", "a" * 1001, "first\nsecond", "first\0second"):
+                with self.subTest(answer_length=len(answer)), self.assertRaises(ValueError):
+                    record_expense_journal_clarification(writer, self.actor, self.a, self.org, journal,
+                                                         **dict(kwargs, answer=answer))
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                record_expense_journal_clarification(writer, self.actor, self.a, self.org, journal, **kwargs)
+        self.assertEqual(self.owner.execute("""
+            SELECT count(*) FROM omnixat.expense_journal_clarification_answers WHERE tenant_id=%s
         """, (self.a,)).fetchone(), (0,))
