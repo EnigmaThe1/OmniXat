@@ -107,4 +107,5 @@ metadata with organisation-scoped duplicate detection. An internal local
 quarantine spool computes fingerprints from bounded streams. The internal
 PostgreSQL quarantine can retain matching originals. A separate worker can record
 verdicts from a trusted scanner callback using recoverable PostgreSQL claims.
-No real scanner, upload route or extraction is wired.
+A separate read gate checks the active scan policy before releasing an original
+to trusted worker code. No real scanner, upload route or extractor is wired.

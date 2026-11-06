@@ -875,3 +875,35 @@ Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
 Next: a separate extraction boundary that checks active policy, no live
 claim, blocked precedence and exact byte binding. Scanner qualification,
 engine timeouts and production recovery remain open. No deployment.
+
+## C4 evidence extraction admission — completed
+
+Recovered clean 70a4f20. Add an internal read boundary with a separate,
+execute-only database role. Require a current configured policy, a clean
+verdict on exact bytes, no blocked observation and no live claim. Test with
+fictional evidence only; no parser, model, route or deployment.
+
+Migration 0017 adds an operator-owned active policy and an execute-only
+admission function. A read requires a clean observation on the exact
+quarantined original, no blocked observation or live claim for the same
+policy, and matching tenant and organisation. Empty configuration denies
+admission. The worker adapter also recomputes the digest and checks size.
+
+Verification on 6 November 2026, Python 3.12 / disposable PostgreSQL 16.2:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **38 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **169 passed**. Three new
+  cases cover policy absence/change, exact original, blocked precedence,
+  live claim, scope and execute-only privileges. The initial privilege
+  inspection was corrected to require no USAGE on the raw evidence schema.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch confirmed
+  socket permission failure. No demo test changed or skipped.
+- `git diff --check`: passed.
+
+Next: qualify a scanner and wire a bounded extraction worker with source
+provenance, retry controls and an active-policy recheck before storing
+results. The gate is a point-in-time read. No actual scanner, extraction,
+route, live records or deployment.

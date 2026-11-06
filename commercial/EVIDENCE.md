@@ -130,6 +130,29 @@ database connection is lost, retry can recover once the lease expires.
 This is an on-demand claim, not a scheduler or exactly-once execution. The
 engine must have its own deadline shorter than the lease; expiration does not
 stop a running engine, and two executions can overlap after expiration. No
-real scanner is qualified. Next: enforce the active policy, absence of a live
-claim, blocked precedence and an exact-byte check at the extraction boundary.
-A deployment still needs worker isolation, bounded retries and monitoring.
+real scanner is qualified. A deployment still needs worker isolation,
+bounded retries and monitoring.
+
+## Extraction admission
+
+Migration 0017 creates a private active-policy table and an execute-only read
+function. The policy table starts empty, which disables admission. A trusted
+operator configures the singleton policy after qualification; no worker or
+customer selects a policy on a read. In one database statement the function
+requires a clean observation for the exact bytes under that policy, no
+blocked observation for the same policy and no live claim. Old policies do
+not authorise a read. The Python adapter also verifies SHA-256 and byte
+length before handing the original to trusted worker code.
+
+Give the gate login USAGE on `omnixat_extraction` and EXECUTE on
+`omnixat_extraction.read_eligible_original(uuid, uuid)` only. Do not grant
+raw table access or expose the login to an extractor, model or HTTP client.
+Use a trusted job's tenant, organisation and evidence IDs. The function
+checks tenant context explicitly but does not authenticate it; the worker
+that establishes context must enforce job authorisation. Keep the function
+owner and policy administration separate from worker logins.
+
+Admission is a point-in-time read, not a revocation mechanism for bytes
+already handed to a worker. No extractor runs. Next: qualify a scanner
+and wire a bounded, isolated extraction worker with source provenance,
+retry controls and an active-policy recheck before persisting results.

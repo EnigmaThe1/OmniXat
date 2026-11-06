@@ -320,3 +320,12 @@ verdicts. Completion clears the claim and records the verdict atomically.
 demo browser fails on Chromium socket permissions. Next: a separate
 extraction gate that checks active policy, claim state and exact bytes.
 No real scanner, extraction or deployment.
+
+## Latest extraction admission checkpoint
+
+Migration 0017 admits only a tenant/organisation's exact original with a
+clean verdict under the operator-configured active policy and no blocking
+verdict or live claim. It starts disabled and uses an execute-only login.
+**38 core, 21 identity and 169 PostgreSQL/HTTP tests pass**. The unchanged
+demo browser fails on Chromium socket permissions. Next: qualify a scanner
+and wire isolated extraction with provenance, retry and policy rechecks.
