@@ -2296,3 +2296,50 @@ with the bounded decimal reader and current scan gate, committing an extraction
 result/receipt under live job fencing and retry reconciliation. Scheduling,
 providers, ledger posting, human final approval and production qualification remain
 unfinished. No commercial UI work was started.
+
+## C1 fenced CSV extraction execution — completed
+
+Recovered clean `527bf7f`; checkpoint reports no divergence or dirty work.
+Connect immutable saved CSV plans to the bounded reader and current scan gate.
+Commit result and attributed job-effect receipt together under a locked live worker
+lease; reject cancellation, stale inputs and expired workers. Preserve original
+results on retries and keep figures outside job progress. No UI or live integration.
+
+
+Migration 0057 and `execute_preparation_csv` connect exact saved plans to the bounded
+CSV decimal reader and current evidence gate. The execute-only effect function
+locks the job, verifies worker/token/lease, exact evidence ID/fingerprint and plan,
+then commits the existing extraction result with first-worker attribution receipt.
+It checks the database clock again after insertion. Retries preserve result,
+provenance and original actor, including after worker recovery. Job progress stays
+unchanged and the job remains running. Apply the additional function grant in
+JOBS_POSTGRES.md; no direct extraction-table grants are needed.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2,
+psycopg 3.3.8 binary adapter and dependencies pinned in requirements-http.txt:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **312 passed**.
+  Ten new tests cover exact decimal/source provenance, unchanged progress,
+  restart/reclaim attribution, concurrent retry receipts, current scope/revocation,
+  tenant and lease rejection, cancellation/expiry/reclaim during reads, gate changes,
+  conflicting results, corrupt plans, exact evidence IDs and atomic rollback on
+  receipt failure, commit deadline and real lease expiry during result insertion.
+  The existing upgrade test confirms no effect receipts are invented.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**.
+  The unchanged browser test reports Chromium unavailable (503). No test was skipped
+  or removed; no prototype or commercial UI files were changed.
+- `git diff --check`: passed.
+
+Identity resolution, byte admission and effect entry are separate transactions;
+revocation cannot cancel already-admitted work or retract bytes. Current eligibility
+uses the existing gate's snapshot boundary. The final lease check precedes commit;
+it does not promise that commit itself happens before lease expiry. The internal
+result writer trusts deterministic worker output and is not a model-facing endpoint.
+No scheduler, OCR, model, ledger posting or live integration was enabled.
+Next: recover a job-linked extraction receipt and unresolved-question summary through
+current identity and evidence eligibility checks, then connect bounded clarification
+and expense preparation. Production qualification and final human approval remain
+unfinished. No active implementation remains in this increment.

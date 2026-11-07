@@ -37,3 +37,25 @@ def inspect_preparation_evidence(jobs, gate_connection, access_token, tenant, jo
     jobs.checkpoint(access_token, tenant, job_id, lease_token,
                     {"step": "evidence_inspected", "inspection": asdict(result)}, expected_progress=previous)
     return result
+
+
+def execute_preparation_csv(jobs, gate_connection, access_token, tenant, job_id, lease_token):
+    """Run one saved plan; result and attribution commit together, job stays running.
+
+    No figures enter progress or the returned receipt. Retry rechecks current source
+    eligibility and live worker authority, even when the result already exists.
+    """
+    from .evidence_csv import EvidenceCSVError, read_csv_amounts
+    from .evidence_extraction_postgres import CSVAmountExtraction
+
+    claimed = jobs.get_claimed_evidence_task(access_token, tenant, job_id, lease_token)
+    task = claimed.task
+    plan = jobs.get_csv_plan(access_token, tenant, job_id).plan
+    admitted = read_evidence_for_extraction(gate_connection, tenant, task.organisation_id, task.evidence_id)
+    if admitted.evidence_id != task.evidence_id or admitted.content_sha256 != task.content_sha256.hex():
+        raise EvidenceNotEligible('Evidence does not match the pinned task source')
+    if admitted.media_type != 'text/csv':
+        raise EvidenceCSVError('CSV extraction requires text/csv evidence')
+    result = CSVAmountExtraction(admitted.evidence_id, admitted.policy_version, admitted.content_sha256,
+                                 read_csv_amounts(admitted.original_bytes, plan.selections))
+    return jobs.store_csv_effect(gate_connection, access_token, tenant, job_id, lease_token, plan, result)

@@ -758,3 +758,21 @@ No active implementation remains in this increment.
 The old personal-demo screens are obsolete as a commercial design reference.
 A4O is a workflow starting point, not a layout to reproduce. Defer commercial UI
 implementation until the owner reviews and decides the design.
+
+
+## Latest fenced CSV execution checkpoint
+
+Migration 0057 and `execute_preparation_csv` run a saved plan through the current
+source gate and bounded decimal reader. An execute-only function locks the job,
+checks worker/token/lease, exact source ID/fingerprint and plan, then commits result
+and first-worker receipt atomically. Retries preserve original attribution after
+reclaim; failures and post-write lease expiry roll back both. Progress is unchanged;
+the job stays running. Apply the function grant in JOBS_POSTGRES.md.
+**46 core, 21 identity and 312 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with Chromium unavailable. Identity and gate observations are
+separate transactions; an admitted call is not revoked retroactively. The last
+lease check precedes commit. This trusted worker writer is not a model-facing tool.
+Next: recover a job-linked extraction receipt/unresolved-question summary under fresh
+identity and evidence eligibility, then connect bounded clarification and expense
+preparation. No scheduler, provider, posting, final approval, UI or live integration
+is activated. No active implementation remains in this increment.

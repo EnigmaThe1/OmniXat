@@ -61,3 +61,8 @@ class AuthenticatedJobStore:
     def create_note_effect(self, token, tenant, job_id, lease_token, operation_key, organisation_id, body):
         actor = self._actor(token, tenant, write=True)
         return self._jobs.create_note_effect(actor, tenant, job_id, lease_token, operation_key, organisation_id, body)
+
+    def store_csv_effect(self, gate_connection, token, tenant, job_id, lease_token, plan, result):
+        from .job_csv_effects_postgres import store_job_csv_effect
+        actor = self._actor(token, tenant, write=True)
+        return store_job_csv_effect(gate_connection, actor, tenant, job_id, lease_token, plan, result)

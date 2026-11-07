@@ -17,7 +17,7 @@ from omnixat_core.jobs_identity_postgres import AuthenticatedJobStore
 from omnixat_core.job_tasks import EvidencePreparationTask, CSVExtractionPlan
 from omnixat_core.evidence_csv import AmountCell
 from omnixat_core.postgres import CreationConflict
-from omnixat_core.preparation_postgres import inspect_preparation_evidence
+from omnixat_core.preparation_postgres import inspect_preparation_evidence, execute_preparation_csv
 from omnixat_core.evidence_extraction_postgres import EvidenceNotEligible, read_evidence_for_extraction
 from test_identity_postgres import MembershipFixture
 
@@ -28,7 +28,8 @@ class AuthenticatedJobsTests(MembershipFixture):
         super().setUpClass()
         for suffix, grants in {
             'job_gate': ['USAGE ON SCHEMA omnixat_extraction',
-                         'EXECUTE ON FUNCTION omnixat_extraction.read_eligible_original(uuid,uuid)'],
+                         'EXECUTE ON FUNCTION omnixat_extraction.read_eligible_original(uuid,uuid)',
+                         'EXECUTE ON FUNCTION omnixat_extraction.store_job_csv_result(uuid,text,uuid,uuid,bytea,text,bytea,jsonb)'],
             'job_auth': ['USAGE ON SCHEMA omnixat', 'SELECT ON omnixat.identities,omnixat.memberships'],
             'job_data': ['USAGE ON SCHEMA omnixat',
                          'SELECT,INSERT,UPDATE ON omnixat.agent_jobs',
@@ -569,3 +570,208 @@ class AuthenticatedJobsTests(MembershipFixture):
             self.jobs.get_csv_plan(token, self.a, job)
         with self.assertRaises(CreationConflict):
             self.jobs.save_csv_plan(token, self.a, job, lease, plan)
+
+
+    def csv_execution(self):
+        self.admitted_source()
+        token, job = self.token(), self.create()
+        lease = self.jobs.claim(token, self.a, job)
+        self.jobs.save_csv_plan(token, self.a, job, lease, self.csv_plan())
+        return token, job, lease
+
+    def execute_csv(self, token, job, lease):
+        return execute_preparation_csv(self.jobs, self.gate_connection, token, self.a, job, lease)
+
+    def assert_no_csv_effect(self, job):
+        for table in ['csv_extraction_results', 'agent_job_csv_effects']:
+            self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.' + table + ' WHERE job_id=%s', (job,)).fetchone(), (0,))
+
+    def test_csv_execution_preserves_decimal_provenance_and_replays_after_worker_recovery(self):
+        token, job, lease = self.csv_execution()
+        self.jobs.checkpoint(token, self.a, job, lease, {'step': 'other-progress'})
+        first = self.execute_csv(token, job, lease)
+        self.assertEqual(first.created_by, str(self.user))
+        self.assertEqual(self.execute_csv(token, job, lease), first)
+        amounts, digest = self.owner.execute('SELECT amounts,content_sha256 FROM omnixat.csv_extraction_results WHERE job_id=%s', (job,)).fetchone()
+        self.assertEqual(amounts, [{'field_name':'gross','row':1,'column':2,'status':'found','amount':'12.34'},
+                                   {'field_name':'net','row':2,'column':2,'status':'missing','amount':None}])
+        self.assertEqual(digest, self.task.content_sha256)
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s", (job,))
+        second_user = uuid4()
+        self.owner.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,'csv-recovery','agent')", (second_user,self.issuer))
+        self.owner.execute("INSERT INTO omnixat.memberships(tenant_id,user_id,role) VALUES (%s,%s,'editor')", (self.a,second_user))
+        with psycopg.connect(self.job_auth_dsn, autocommit=True) as auth, psycopg.connect(self.job_data_dsn, autocommit=True) as data:
+            recovered = AuthenticatedJobStore(auth,data,self.verifier)
+            token2 = self.token(sub='csv-recovery')
+            lease2 = recovered.claim(token2,self.a,job)
+            self.assertEqual(execute_preparation_csv(recovered,self.gate_connection,token2,self.a,job,lease2),first)
+        self.assertEqual(self.jobs.get(token,self.a,job)['checkpoint'], {'step':'other-progress'})
+        self.assertEqual(self.jobs.get(token,self.a,job)['status'], 'running')
+        self.assertNotIn('12.34', repr(first))
+
+    def test_csv_execution_rechecks_authority_after_read_and_stops_before_effect(self):
+        from omnixat_core import preparation_postgres
+        token, job, lease = self.csv_execution()
+        original = preparation_postgres.read_evidence_for_extraction
+        def revoked(*args):
+            result = original(*args)
+            self.owner.execute('UPDATE omnixat.memberships SET revoked_at=now() WHERE user_id=%s', (self.user,))
+            return result
+        with patch.object(preparation_postgres,'read_evidence_for_extraction',side_effect=revoked):
+            with self.assertRaises(AuthenticationError):
+                self.execute_csv(token,job,lease)
+        self.assert_no_csv_effect(job)
+
+    def test_csv_execution_rejects_cancellation_expiry_and_reclaim_during_read(self):
+        from omnixat_core import preparation_postgres
+        original = preparation_postgres.read_evidence_for_extraction
+        for mode in ['cancel','expire','reclaim']:
+            with self.subTest(mode=mode):
+                # Each task uses a fresh request key and the same pinned original.
+                if mode == 'cancel':
+                    token, job, lease = self.csv_execution()
+                else:
+                    job = self.jobs.create_evidence_task(token,self.a,'csv-'+mode,self.task)
+                    lease = self.jobs.claim(token,self.a,job)
+                    self.jobs.save_csv_plan(token,self.a,job,lease,self.csv_plan())
+                def changed(*args):
+                    result = original(*args)
+                    if mode == 'cancel':
+                        self.jobs.cancel(token,self.a,job)
+                    else:
+                        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s", (job,))
+                        if mode == 'reclaim':
+                            self.jobs.claim(token,self.a,job)
+                    return result
+                with patch.object(preparation_postgres,'read_evidence_for_extraction',side_effect=changed):
+                    with self.assertRaises(ValueError):
+                        self.execute_csv(token,job,lease)
+                self.assert_no_csv_effect(job)
+
+    def test_csv_execution_rechecks_scan_gate_at_write_and_on_receipt_replay(self):
+        from omnixat_core import preparation_postgres
+        token, job, lease = self.csv_execution()
+        original = preparation_postgres.read_evidence_for_extraction
+        def disabled(*args):
+            result = original(*args)
+            self.owner.execute('DELETE FROM omnixat_extraction.active_scan_policy')
+            return result
+        with patch.object(preparation_postgres,'read_evidence_for_extraction',side_effect=disabled):
+            with self.assertRaises(ValueError):
+                self.execute_csv(token,job,lease)
+        self.assert_no_csv_effect(job)
+        self.owner.execute("INSERT INTO omnixat_extraction.active_scan_policy VALUES (true,'fictional-v1')")
+        first = self.execute_csv(token,job,lease)
+        self.owner.execute('DELETE FROM omnixat_extraction.active_scan_policy')
+        with self.assertRaises(EvidenceNotEligible):
+            self.execute_csv(token,job,lease)
+        self.assertEqual(self.owner.execute('SELECT created_at FROM omnixat.agent_job_csv_effects WHERE job_id=%s',(job,)).fetchone(), (first.created_at,))
+
+    def test_csv_effect_rolls_back_result_and_receipt_on_deadline_or_real_lease_expiry(self):
+        token, job, lease = self.csv_execution()
+        from omnixat_core.evidence_extraction_postgres import extract_csv_amounts
+        result = extract_csv_amounts(self.gate_connection,self.a,self.org,self.task.evidence_id,self.csv_plan().selections)
+        with patch('omnixat_core.postgres.monotonic', side_effect=(0,0,0,11)):
+            with self.assertRaises(TimeoutError):
+                self.jobs.store_csv_effect(self.gate_connection,token,self.a,job,lease,self.csv_plan(),result)
+        self.assert_no_csv_effect(job)
+        # Delay inside the result insertion so the SQL post-write lease check must roll it back.
+        self.owner.execute("""CREATE FUNCTION public.slow_csv_effect() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN PERFORM pg_sleep(1.1); RETURN NEW; END $$""")
+        self.owner.execute('CREATE TRIGGER slow_csv BEFORE INSERT ON omnixat.csv_extraction_results FOR EACH ROW EXECUTE FUNCTION public.slow_csv_effect()')
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()+interval '1 second' WHERE id=%s", (job,))
+        try:
+            with self.assertRaises(ValueError):
+                self.execute_csv(token,job,lease)
+        finally:
+            self.owner.execute('DROP TRIGGER slow_csv ON omnixat.csv_extraction_results')
+            self.owner.execute('DROP FUNCTION public.slow_csv_effect()')
+        self.assert_no_csv_effect(job)
+
+    def test_csv_effect_rejects_changed_saved_plan_and_wrong_source(self):
+        from omnixat_core import preparation_postgres
+        from omnixat_core.evidence_extraction_postgres import extract_csv_amounts
+        token, job, lease = self.csv_execution()
+        result = extract_csv_amounts(self.gate_connection,self.a,self.org,self.task.evidence_id,self.csv_plan().selections)
+        changed = CSVExtractionPlan((AmountCell('other',1,2),))
+        with self.assertRaises(ValueError):
+            self.jobs.store_csv_effect(self.gate_connection,token,self.a,job,lease,changed,result)
+        with self.assertRaises(ValueError):
+            self.jobs.store_csv_effect(self.gate_connection,token,self.a,job,lease,self.csv_plan(),replace(result,content_sha256='ff'*32))
+        with self.assertRaises(ValueError):
+            self.jobs.store_csv_effect(self.gate_connection,token,self.a,job,lease,self.csv_plan(),replace(result,evidence_id=uuid4()))
+        original = preparation_postgres.read_evidence_for_extraction
+        def wrong(*args):
+            return replace(original(*args),evidence_id=uuid4())
+        with patch.object(preparation_postgres,'read_evidence_for_extraction',side_effect=wrong):
+            with self.assertRaises(EvidenceNotEligible):
+                self.execute_csv(token,job,lease)
+        self.assert_no_csv_effect(job)
+
+    def test_csv_effect_exec_only_grants_and_concurrent_retry_receipts(self):
+        token, job, lease = self.csv_execution()
+        start = Barrier(2)
+        def execute(_):
+            with psycopg.connect(self.job_auth_dsn,autocommit=True) as auth, psycopg.connect(self.job_data_dsn,autocommit=True) as data, psycopg.connect(self.job_gate_dsn,autocommit=True) as gate:
+                start.wait(timeout=5)
+                return execute_preparation_csv(AuthenticatedJobStore(auth,data,self.verifier),gate,token,self.a,job,lease)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first,second = list(pool.map(execute,range(2)))
+        self.assertEqual(first,second)
+        for table in ['agent_job_csv_effects','csv_extraction_results','agent_jobs']:
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                self.gate_connection.execute('SELECT * FROM omnixat.'+table)
+        with self.assertRaises(PermissionError):
+            execute_preparation_csv(self.jobs,self.owner,token,self.a,job,lease)
+        self.assertEqual(self.gate_connection.execute("SELECT NULLIF(current_setting('omnixat.tenant_id',true),'')").fetchone(), (None,))
+
+    def test_csv_effect_replays_require_current_scope_worker_and_tenant(self):
+        from omnixat_core.evidence_extraction_postgres import extract_csv_amounts
+        token, job, lease = self.csv_execution()
+        result = extract_csv_amounts(self.gate_connection,self.a,self.org,self.task.evidence_id,self.csv_plan().selections)
+        for invalid in [self.token(scope='records:read'), self.token(scope='records:write')]:
+            with self.assertRaises(PermissionError):
+                self.jobs.store_csv_effect(self.gate_connection,invalid,self.a,job,lease,self.csv_plan(),result)
+        with self.assertRaises(AuthenticationError):
+            self.jobs.store_csv_effect(self.gate_connection,token,self.b,job,lease,self.csv_plan(),result)
+        with self.assertRaises(ValueError):
+            self.jobs.store_csv_effect(self.gate_connection,token,self.a,job,uuid4(),self.csv_plan(),result)
+        self.assert_no_csv_effect(job)
+        first = self.execute_csv(token,job,lease)
+        self.jobs.cancel(token,self.a,job)
+        with self.assertRaises(ValueError):
+            self.jobs.store_csv_effect(self.gate_connection,token,self.a,job,lease,self.csv_plan(),result)
+        self.owner.execute('UPDATE omnixat.memberships SET revoked_at=now() WHERE user_id=%s',(self.user,))
+        with self.assertRaises(AuthenticationError):
+            self.execute_csv(token,job,lease)
+        self.assertEqual(self.owner.execute('SELECT created_at FROM omnixat.agent_job_csv_effects WHERE job_id=%s',(job,)).fetchone(), (first.created_at,))
+
+    def test_csv_effect_conflicting_result_preserves_original_and_corrupt_plan_is_rejected(self):
+        from decimal import Decimal
+        from omnixat_core.evidence_extraction_postgres import extract_csv_amounts
+        token, job, lease = self.csv_execution()
+        result = extract_csv_amounts(self.gate_connection,self.a,self.org,self.task.evidence_id,self.csv_plan().selections)
+        first = self.execute_csv(token,job,lease)
+        changed = replace(result,amounts=(replace(result.amounts[0],amount=Decimal('99.99')),result.amounts[1]))
+        with self.assertRaises(ValueError):
+            self.jobs.store_csv_effect(self.gate_connection,token,self.a,job,lease,self.csv_plan(),changed)
+        self.assertEqual(self.execute_csv(token,job,lease),first)
+        self.owner.execute('UPDATE omnixat.agent_job_csv_plans SET plan_digest=%s WHERE job_id=%s',(b'x'*32,job))
+        with self.assertRaises(ValueError):
+            self.jobs.store_csv_effect(self.gate_connection,token,self.a,job,lease,self.csv_plan(),result)
+        with self.assertRaises(CreationConflict):
+            self.execute_csv(token,job,lease)
+
+    def test_csv_effect_receipt_insert_failure_rolls_back_new_result(self):
+        token, job, lease = self.csv_execution()
+        self.owner.execute("""CREATE FUNCTION public.reject_csv_effect() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN RAISE EXCEPTION 'fictional receipt interruption'; END $$""")
+        self.owner.execute('CREATE TRIGGER reject_csv BEFORE INSERT ON omnixat.agent_job_csv_effects FOR EACH ROW EXECUTE FUNCTION public.reject_csv_effect()')
+        try:
+            with self.assertRaises(psycopg.errors.RaiseException):
+                self.execute_csv(token,job,lease)
+        finally:
+            self.owner.execute('DROP TRIGGER reject_csv ON omnixat.agent_job_csv_effects')
+            self.owner.execute('DROP FUNCTION public.reject_csv_effect()')
+        self.assert_no_csv_effect(job)
+        self.execute_csv(token,job,lease)

@@ -364,3 +364,47 @@ service, complete jobs, post ledger entries or approve any package.
 Retry and row-lock semantics rechecked on 7 November 2026 against PostgreSQL 16
 [INSERT](https://www.postgresql.org/docs/16/sql-insert.html) and
 [explicit locking](https://www.postgresql.org/docs/16/explicit-locking.html).
+
+## Saved-plan CSV execution
+
+Migration 0057 adds an immutable tenant-scoped effect receipt linked to both the
+saved plan and the existing extraction result. `execute_preparation_csv` recovers
+the task and saved plan under fresh signed identity, admits the exact original
+through the current scan gate and runs the existing bounded decimal reader.
+It returns only a receipt; figures remain in the extraction/review service.
+It preserves current progress and leaves the job running for subsequent preparation.
+
+On the **dedicated extraction gate login**, additionally grant:
+
+```sql
+GRANT EXECUTE ON FUNCTION omnixat_extraction.store_job_csv_result(uuid,text,uuid,uuid,bytea,text,bytea,jsonb) TO extraction_runtime;
+```
+
+No direct table grants or access to the older unfenced `store_csv_result` function
+are needed on this job gate login. Keep the migration owner, scanner, identity,
+job-data and gate roles separate. Do not expose `store_csv_effect` as an HTTP or
+model-facing endpoint: its result input is trusted deterministic worker output.
+Like other repository services, database credentials alone do not authenticate
+end users; fresh signed identity is established by `AuthenticatedJobStore`.
+
+The function locks the job before checking current worker/token/lease, exact task
+fingerprint and ordered plan digest/coordinates. It reuses the existing current
+policy/eligibility result writer. Result and first-worker attribution receipt commit
+in one transaction; retries retain both originals, including after worker recovery.
+Conflicting results, cancellation, missing plans, changed source and lease expiry
+roll back new effects. A second database-clock check after insertion catches leases
+that expire during the write. This is an admission check before commit, not a
+claim that a lease cannot expire in the following commit interval.
+
+Identity, byte admission and effect commit are separate transactions. Membership
+revocation is checked again before effect entry; it cannot retract already-read
+bytes or stop an already-admitted transaction. Scan eligibility is observed again
+by the existing result writer; concurrent scanner changes follow that gate's
+snapshot boundary. Retries require current eligibility and a current running lease,
+even for an existing receipt. Changed active policies can conflict with a stored
+result and require a new reviewed task, rather than silently replacing provenance.
+No scheduler, OCR, model, posting, final approval or live integration is enabled.
+
+Technical references rechecked 7 November 2026: PostgreSQL 16
+[row locks](https://www.postgresql.org/docs/16/explicit-locking.html) and
+[function security](https://www.postgresql.org/docs/16/sql-createfunction.html).

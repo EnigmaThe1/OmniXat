@@ -392,6 +392,7 @@ class PostgresJobsTests(PostgresFixture):
             after = db.execute("SELECT * FROM omnixat.agent_jobs ORDER BY request_key").fetchall()
             self.assertEqual(db.execute("SELECT count(*) FROM omnixat.agent_job_evidence_tasks").fetchone(), (0,))
             self.assertEqual(db.execute("SELECT count(*) FROM omnixat.agent_job_csv_plans").fetchone(), (0,))
+            self.assertEqual(db.execute('SELECT count(*) FROM omnixat.agent_job_csv_effects').fetchone(), (0,))
             previous_columns = len(before[0])
             self.assertEqual([row[:previous_columns] for row in after], before)
             self.assertTrue(all(row[previous_columns:previous_columns + 2] == (None, None) for row in after))
