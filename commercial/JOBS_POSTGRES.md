@@ -316,3 +316,51 @@ internal preparation step, with no provider, posting, approval or HTTP route.
 Checkpoint visibility and database-clock semantics rechecked on 7 November 2026:
 PostgreSQL 16 [transaction isolation](https://www.postgresql.org/docs/16/transaction-iso.html)
 and [time functions](https://www.postgresql.org/docs/16/functions-datetime.html).
+
+## Immutable saved CSV extraction plans
+
+Migration 0056 adds one version-1 `CSVExtractionPlan` per existing evidence task.
+Construct it with a tuple of `AmountCell(field_name, row, column)` values and call
+`save_csv_plan(access_token, tenant, job_id, lease_token, plan)` on the authenticated
+store. The internal store has the corresponding trusted-principal method.
+
+Validation is shared with `read_csv_amounts`: 1–32 selections, unique bounded field
+names, one-based logical CSV rows 1–5,000 and columns 1–64. Boolean coordinates,
+arbitrary extra fields and unsupported names are rejected. The plan stores only
+ordered field/coordinate references. It contains no extracted amounts, document
+bytes, prompts, URLs or credentials. Coordinate selection does not establish that
+an amount exists or that a particular accounting treatment is correct.
+
+Saving requires current records read/write authority and a live running claim for
+that same verified worker. The job row is locked against cancellation, completion
+and reclaim. The source must be an exact `text/csv` evidence task. The receipt is
+inserted/read and the lease checked again within the same transaction. Identical
+concurrent retries return the original plan, creator and database timestamp;
+different coordinates, field names or ordering raise `CreationConflict`. Recovery
+under a new valid claim can replay the original receipt without changing its author.
+Progress and the job lease are not renewed by plan saving.
+
+`get_csv_plan(access_token, tenant, job_id)` requires records read and recovers the
+validated, digest-checked `JobCSVPlanReceipt`. Reads remain available for historical
+terminal jobs; save/replay requires a current live claim. No plan is backfilled for
+legacy jobs, and hash-only jobs cannot acquire a plan without a typed evidence task.
+Saved plans are immutable under runtime grants. Create a new job to use a different
+plan. Their foreign key retains the task and therefore its exact source binding.
+
+Add SELECT, INSERT on `omnixat.agent_job_csv_plans` to the existing job login.
+Do not grant UPDATE or DELETE. Existing identity/task/source grants are unchanged.
+The schema forces tenant RLS and enforces one bounded versioned plan per task.
+Application validation enforces the full cell schema; reads verify the saved
+canonical SHA-256 and refuse invalid/corrupted plans. Raw runtime SQL retains the
+existing trusted-application boundary.
+
+A plan is recoverable input, not extraction or evidence admission. Neither save
+nor read releases original bytes or runs a provider. A future execution effect must
+recheck identity, current worker lease and current-policy evidence eligibility, use
+the exact saved plan, and commit its result/receipt under its own fencing contract.
+This increment does not wire saved plans to the standalone decimal extraction
+service, complete jobs, post ledger entries or approve any package.
+
+Retry and row-lock semantics rechecked on 7 November 2026 against PostgreSQL 16
+[INSERT](https://www.postgresql.org/docs/16/sql-insert.html) and
+[explicit locking](https://www.postgresql.org/docs/16/explicit-locking.html).

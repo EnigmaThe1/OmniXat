@@ -150,6 +150,14 @@ class PostgresJobStore:
                     raise KeyError("Task specification unavailable")
                 return EvidencePreparationTask(**row)
 
+    def save_csv_plan(self, actor, tenant, job_id, token, plan):
+        from .job_csv_plans_postgres import save_csv_plan
+        return save_csv_plan(self, actor, tenant, job_id, token, plan)
+
+    def get_csv_plan(self, actor, tenant, job_id):
+        from .job_csv_plans_postgres import get_csv_plan
+        return get_csv_plan(self, actor, tenant, job_id)
+
     def get_claimed_evidence_task(self, actor, tenant, job_id, token) -> ClaimedEvidenceTask:
         """Read task/progress together only for the current live verified worker."""
         scope = self._scope(actor, tenant, "records:write")

@@ -2255,3 +2255,44 @@ is executed. Next: persist a validated source-specific extraction plan and conne
 the existing bounded decimal extraction service to a fenced retry-safe job effect.
 Scheduling, providers, ledger posting, final approval and production qualification
 remain unfinished.
+
+## C1 saved CSV extraction plans — completed
+
+Recovered clean `b5451f0`; no unfinished implementation or competing writer found.
+Persist one immutable, validated, bounded CSV cell-selection plan per exact evidence
+task. Save/replay under fresh identity and live worker lease, preserve first actor,
+reject changed inputs and retain plans for restart recovery. Reuse the existing CSV
+selection validation. This increment prepares durable inputs; execution remains next.
+
+
+Migration 0056 stores one immutable versioned plan per exact evidence task with
+forced RLS, task foreign keys and an ordered canonical digest. `save_csv_plan`
+checks fresh authority and current worker/lease, locks the job, serializes retry
+and cancellation, preserves first attribution and rolls back on expiry/failure.
+`get_csv_plan` validates/digest-checks inputs after restart. Shared coordinate
+validation keeps the existing CSV extractor and saved plan contract aligned.
+Apply the additional SELECT, INSERT plan grant in JOBS_POSTGRES.md.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **302 passed**.
+  Eight new tests cover restart/reclaim attribution, concurrent same/competing
+  plans, bounded validation, scopes/revocation/tenant isolation, stale or wrong
+  workers, non-CSV/legacy rejection, insert rollback, real lease expiry during
+  preparation, database constraints, runtime immutability and corrupt digests.
+  The existing upgrade case also verifies that migration invents no plan inputs.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**, with the unchanged browser test
+  reporting Chromium unavailable (503). No test was skipped or removed.
+- `git diff --check`: passed.
+
+Saved plans contain field names and coordinates only. They do not establish source
+eligibility, extracted figures or accounting treatment. Next: use the saved plan
+with the bounded decimal reader and current scan gate, committing an extraction
+result/receipt under live job fencing and retry reconciliation. Scheduling,
+providers, ledger posting, human final approval and production qualification remain
+unfinished. No commercial UI work was started.

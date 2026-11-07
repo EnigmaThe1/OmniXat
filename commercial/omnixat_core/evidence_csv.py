@@ -34,12 +34,11 @@ class CellAmount:
     amount: Decimal | None = field(default=None, repr=False)
 
 
-def read_csv_amounts(original: bytes, selections: tuple[AmountCell, ...]) -> tuple[CellAmount, ...]:
-    """Use one-based logical CSV record and column numbers, including header rows."""
+def validate_amount_cells(selections: tuple[AmountCell, ...]) -> tuple[AmountCell, ...]:
+    """Validate a bounded reference-only selection without reading a document."""
     if not isinstance(selections, tuple) or not 1 <= len(selections) <= _MAX_SELECTIONS:
         raise EvidenceCSVError("Expected a bounded tuple of amount cells")
     names = set()
-    by_row = {}
     for cell in selections:
         if (
             type(cell) is not AmountCell
@@ -50,6 +49,14 @@ def read_csv_amounts(original: bytes, selections: tuple[AmountCell, ...]) -> tup
         ):
             raise EvidenceCSVError("Invalid or duplicate amount cell selection")
         names.add(cell.field_name)
+    return selections
+
+
+def read_csv_amounts(original: bytes, selections: tuple[AmountCell, ...]) -> tuple[CellAmount, ...]:
+    """Use one-based logical CSV record and column numbers, including header rows."""
+    selections = validate_amount_cells(selections)
+    by_row = {}
+    for cell in selections:
         by_row.setdefault(cell.row, []).append(cell)
 
     if not isinstance(original, bytes) or not 1 <= len(original) <= _MAX_BYTES:

@@ -14,7 +14,9 @@ from psycopg.conninfo import make_conninfo
 
 from omnixat_core.identity import AuthenticationError
 from omnixat_core.jobs_identity_postgres import AuthenticatedJobStore
-from omnixat_core.job_tasks import EvidencePreparationTask
+from omnixat_core.job_tasks import EvidencePreparationTask, CSVExtractionPlan
+from omnixat_core.evidence_csv import AmountCell
+from omnixat_core.postgres import CreationConflict
 from omnixat_core.preparation_postgres import inspect_preparation_evidence
 from omnixat_core.evidence_extraction_postgres import EvidenceNotEligible, read_evidence_for_extraction
 from test_identity_postgres import MembershipFixture
@@ -32,7 +34,7 @@ class AuthenticatedJobsTests(MembershipFixture):
                          'SELECT,INSERT,UPDATE ON omnixat.agent_jobs',
                          'SELECT ON omnixat.tenants,omnixat.organisations,omnixat.evidence_registrations',
                          'SELECT,INSERT ON omnixat.notes,omnixat.record_creations,omnixat.agent_job_note_effects,'
-                         'omnixat.agent_job_failures,omnixat.agent_job_evidence_tasks'],
+                         'omnixat.agent_job_failures,omnixat.agent_job_evidence_tasks,omnixat.agent_job_csv_plans'],
         }.items():
             name, password = cls.role + '_' + suffix, uuid4().hex
             role = sql.Identifier(name)
@@ -405,3 +407,165 @@ class AuthenticatedJobsTests(MembershipFixture):
         winners = [outcome for outcome in outcomes if outcome is not None]
         self.assertEqual(len(winners), 1)
         self.assertEqual(self.jobs.get(token, self.a, job)['checkpoint'], {'winner': winners[0]})
+
+    def csv_plan(self):
+        return CSVExtractionPlan((AmountCell('gross', 1, 2), AmountCell('net', 2, 2)))
+
+    def test_saved_csv_plan_survives_restart_reclaim_and_retains_first_actor(self):
+        token, job, plan = self.token(), self.create(), self.csv_plan()
+        lease = self.jobs.claim(token, self.a, job)
+        receipt = self.jobs.save_csv_plan(token, self.a, job, lease, plan)
+        self.assertEqual(receipt.plan, plan)
+        self.assertEqual(receipt.created_by, str(self.user))
+        self.assertEqual(self.jobs.get(token, self.a, job)['checkpoint'], {})
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s", (job,))
+        other = uuid4()
+        self.owner.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,'plan-recovery','agent')", (other, self.issuer))
+        self.owner.execute("INSERT INTO omnixat.memberships(tenant_id,user_id,role) VALUES (%s,%s,'editor')", (self.a, other))
+        current_token = self.token(sub='plan-recovery')
+        with psycopg.connect(self.job_auth_dsn, autocommit=True) as auth, psycopg.connect(self.job_data_dsn, autocommit=True) as data:
+            recovered = AuthenticatedJobStore(auth, data, self.verifier)
+            current_lease = recovered.claim(current_token, self.a, job)
+            self.assertEqual(recovered.get_csv_plan(current_token, self.a, job), receipt)
+            self.assertEqual(recovered.save_csv_plan(current_token, self.a, job, current_lease, plan), receipt)
+            recovered.cancel(current_token, self.a, job)
+        self.assertEqual(self.jobs.get_csv_plan(token, self.a, job), receipt)
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(current_token, self.a, job, current_lease, plan)
+
+    def test_saved_csv_plan_concurrent_retries_and_competing_plans(self):
+        token, plan = self.token(), self.csv_plan()
+        for same in [True, False]:
+            job = self.jobs.create_evidence_task(token, self.a, 'plan-race-' + str(same), self.task)
+            lease = self.jobs.claim(token, self.a, job)
+            start = Barrier(2)
+            def save(index):
+                candidate = plan if same or index == 0 else CSVExtractionPlan((AmountCell('gross', 3, 2),))
+                with psycopg.connect(self.job_auth_dsn, autocommit=True) as auth, psycopg.connect(self.job_data_dsn, autocommit=True) as data:
+                    jobs = AuthenticatedJobStore(auth, data, self.verifier)
+                    start.wait(timeout=5)
+                    try:
+                        return jobs.save_csv_plan(token, self.a, job, lease, candidate)
+                    except CreationConflict:
+                        return None
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                outcomes = list(workers.map(save, range(2)))
+            if same:
+                self.assertEqual(outcomes[0], outcomes[1])
+            else:
+                self.assertEqual(sum(outcome is not None for outcome in outcomes), 1)
+            self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_csv_plans WHERE job_id=%s', (job,)).fetchone(), (1,))
+
+    def test_csv_plan_validation_rejects_unbounded_or_content_bearing_inputs(self):
+        for cells in [[], (), (AmountCell('gross', True, 2),), (AmountCell('gross', 5001, 2),),
+                      (AmountCell('gross', 1, 65),), (AmountCell('unsafe prompt', 1, 1),),
+                      (AmountCell('gross', 1, 1), AmountCell('gross', 2, 2)),
+                      tuple(AmountCell('field_'+str(index), 1, 1) for index in range(33))]:
+            with self.subTest(cells_kind=type(cells).__name__), self.assertRaises(ValueError):
+                CSVExtractionPlan(cells)
+        with self.assertRaises(ValueError):
+            CSVExtractionPlan.from_payload([{'field_name': 'gross', 'row': 1, 'column': 1, 'body': 'not plan data'}])
+        token, job = self.token(), self.create()
+        lease = self.jobs.claim(token, self.a, job)
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(token, self.a, job, lease, {'text': 'not plan data'})
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_csv_plans WHERE tenant_id=%s', (self.a,)).fetchone(), (0,))
+
+    def test_saved_csv_plan_checks_current_scopes_membership_and_tenant(self):
+        token, job, plan = self.token(), self.create(), self.csv_plan()
+        lease = self.jobs.claim(token, self.a, job)
+        receipt = self.jobs.save_csv_plan(token, self.a, job, lease, plan)
+        for limited in [self.token(scope='records:read'), self.token(scope='records:write')]:
+            with self.assertRaises(PermissionError):
+                self.jobs.save_csv_plan(limited, self.a, job, lease, plan)
+        self.owner.execute("UPDATE omnixat.memberships SET role='viewer' WHERE user_id=%s", (self.user,))
+        self.assertEqual(self.jobs.get_csv_plan(token, self.a, job), receipt)
+        with self.assertRaises(PermissionError):
+            self.jobs.save_csv_plan(token, self.a, job, lease, plan)
+        self.owner.execute('UPDATE omnixat.memberships SET revoked_at=now() WHERE user_id=%s', (self.user,))
+        for call in [lambda: self.jobs.get_csv_plan(token, self.a, job),
+                     lambda: self.jobs.save_csv_plan(token, self.a, job, lease, plan)]:
+            with self.assertRaises(AuthenticationError):
+                call()
+        self.owner.execute("UPDATE omnixat.memberships SET revoked_at=NULL,role='editor' WHERE user_id=%s", (self.user,))
+        self.owner.execute("INSERT INTO omnixat.memberships(tenant_id,user_id,role) VALUES (%s,%s,'editor')", (self.b, self.user))
+        with self.assertRaises(KeyError):
+            self.jobs.get_csv_plan(token, self.b, job)
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(token, self.b, job, lease, plan)
+        self.assertEqual(self.jobs.get_csv_plan(token, self.a, job), receipt)
+
+    def test_csv_plan_requires_running_current_worker_and_rejects_terminal_or_stale_leases(self):
+        token, job, plan = self.token(), self.create(), self.csv_plan()
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(token, self.a, job, str(uuid4()), plan)
+        first = self.jobs.claim(token, self.a, job)
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s", (job,))
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(token, self.a, job, first, plan)
+        current = self.jobs.claim(token, self.a, job)
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(token, self.a, job, first, plan)
+        # Even another valid member cannot save using this worker's lease.
+        other = uuid4()
+        self.owner.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,'other-plan-worker','agent')", (other, self.issuer))
+        self.owner.execute("INSERT INTO omnixat.memberships(tenant_id,user_id,role) VALUES (%s,%s,'editor')", (self.a, other))
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(self.token(sub='other-plan-worker'), self.a, job, current, plan)
+        self.jobs.checkpoint(token, self.a, job, current, {}, complete=True)
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(token, self.a, job, current, plan)
+
+    def test_csv_plan_requires_csv_task_and_does_not_retrofit_hash_only_jobs(self):
+        token, plan = self.token(), self.csv_plan()
+        actor = self.jobs._actor(token, self.a, write=True)
+        legacy = self.jobs._jobs.create(actor, self.a, 'legacy-plan', {'reference': 'fictional'})
+        lease = self.jobs.claim(token, self.a, legacy)
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(token, self.a, legacy, lease, plan)
+        job = self.create(token)
+        lease = self.jobs.claim(token, self.a, job)
+        self.owner.execute("UPDATE omnixat.evidence_registrations SET media_type='application/pdf' WHERE tenant_id=%s AND id=%s",
+                           (self.a, self.task.evidence_id))
+        with self.assertRaises(ValueError):
+            self.jobs.save_csv_plan(token, self.a, job, lease, plan)
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_csv_plans WHERE tenant_id=%s', (self.a,)).fetchone(), (0,))
+
+    def test_csv_plan_insert_rolls_back_on_failure_and_lease_expiry_before_return(self):
+        from omnixat_core import job_csv_plans_postgres
+        token, job, plan = self.token(), self.create(), self.csv_plan()
+        lease = self.jobs.claim(token, self.a, job, lease_seconds=1)
+        with patch.object(job_csv_plans_postgres, '_receipt', side_effect=RuntimeError('fictional interruption')):
+            with self.assertRaises(RuntimeError):
+                self.jobs.save_csv_plan(token, self.a, job, lease, plan)
+        original = job_csv_plans_postgres._receipt
+        def after_expiry(*args):
+            receipt = original(*args)
+            self.job_connection.execute('SELECT pg_sleep(1.1)')
+            return receipt
+        with patch.object(job_csv_plans_postgres, '_receipt', side_effect=after_expiry):
+            with self.assertRaises(ValueError):
+                self.jobs.save_csv_plan(token, self.a, job, lease, plan)
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_csv_plans WHERE job_id=%s', (job,)).fetchone(), (0,))
+        lease = self.jobs.claim(token, self.a, job)
+        self.jobs.save_csv_plan(token, self.a, job, lease, plan)
+
+    def test_csv_plan_database_scope_immutability_constraints_and_digest_validation(self):
+        token, job, plan = self.token(), self.create(), self.csv_plan()
+        lease = self.jobs.claim(token, self.a, job)
+        self.jobs.save_csv_plan(token, self.a, job, lease, plan)
+        self.assertEqual(self.job_connection.execute('SELECT count(*) FROM omnixat.agent_job_csv_plans').fetchone(), (0,))
+        for statement in ['UPDATE omnixat.agent_job_csv_plans SET format_version=1', 'DELETE FROM omnixat.agent_job_csv_plans']:
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                self.job_connection.execute(statement)
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.owner.execute("UPDATE omnixat.agent_job_csv_plans SET selections='[]'::jsonb WHERE job_id=%s", (job,))
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.owner.execute('UPDATE omnixat.agent_job_csv_plans SET format_version=2 WHERE job_id=%s', (job,))
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.owner.execute('UPDATE omnixat.agent_job_csv_plans SET tenant_id=%s WHERE job_id=%s', (self.b, job))
+        self.owner.execute('UPDATE omnixat.agent_job_csv_plans SET plan_digest=%s WHERE job_id=%s', (b'x'*32, job))
+        with self.assertRaises(CreationConflict):
+            self.jobs.get_csv_plan(token, self.a, job)
+        with self.assertRaises(CreationConflict):
+            self.jobs.save_csv_plan(token, self.a, job, lease, plan)

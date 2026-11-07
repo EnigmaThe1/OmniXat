@@ -27,6 +27,13 @@ class AuthenticatedJobStore:
     def get_evidence_task(self, token, tenant, job_id):
         return self._jobs.get_evidence_task(self._actor(token, tenant), tenant, job_id)
 
+    def save_csv_plan(self, token, tenant, job_id, lease_token, plan):
+        actor = self._actor(token, tenant, write=True)
+        return self._jobs.save_csv_plan(actor, tenant, job_id, lease_token, plan)
+
+    def get_csv_plan(self, token, tenant, job_id):
+        return self._jobs.get_csv_plan(self._actor(token, tenant), tenant, job_id)
+
     def get_claimed_evidence_task(self, token, tenant, job_id, lease_token):
         actor = self._actor(token, tenant, write=True)
         return self._jobs.get_claimed_evidence_task(actor, tenant, job_id, lease_token)

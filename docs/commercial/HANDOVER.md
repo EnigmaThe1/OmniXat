@@ -738,3 +738,23 @@ bounded decimal extractor to a fenced, retry-safe job effect. A saved inspection
 is not current eligibility; later work must recheck the gate, identity and lease.
 No scheduler, provider, UI, ledger posting or filing is wired. No active
 implementation remains in this increment.
+
+## Latest saved CSV plan checkpoint
+
+Migration 0056 and `CSVExtractionPlan` persist one immutable ordered cell plan per
+exact evidence task. Saves/replays require fresh identity and current worker/lease,
+serialize on the job and preserve first attribution. Read recovery validates the
+canonical digest. Apply the plan-table grants in JOBS_POSTGRES.md.
+**46 core, 21 identity and 302 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with Chromium unavailable. Saving a plan does not read evidence,
+change progress, renew a lease, execute extraction or establish current eligibility.
+Next: connect saved plans to the existing decimal reader/current evidence gate and
+commit the extraction effect/result receipt under live job fencing. Scheduling,
+providers, ledger posting, final approval and production qualification remain open.
+No active implementation remains in this increment.
+
+## Future commercial interface direction
+
+The old personal-demo screens are obsolete as a commercial design reference.
+A4O is a workflow starting point, not a layout to reproduce. Defer commercial UI
+implementation until the owner reviews and decides the design.
