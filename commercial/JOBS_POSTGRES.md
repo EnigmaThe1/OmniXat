@@ -168,3 +168,43 @@ separate qualification.
 Lock and database-clock semantics rechecked on 7 November 2026 against PostgreSQL 16
 [explicit locking](https://www.postgresql.org/docs/16/explicit-locking.html) and
 [time functions](https://www.postgresql.org/docs/16/functions-datetime.html).
+
+## Recoverable evidence task specifications
+
+Migration 0055 adds `EvidencePreparationTask` in `omnixat_core.job_tasks` and
+`create_evidence_task(actor, tenant, request_key, task, max_attempts=3)` on the
+PostgreSQL store. Construct the frozen task using organisation/evidence UUIDs and
+32 fingerprint bytes. Its only supported kind/version is `prepare_evidence`/1.
+No free text, document bytes, prompts, URLs or credentials are task inputs.
+
+Creation requires records read and write permissions, including matching API
+scopes. The registered evidence must match the exact tenant, organisation, ID and
+SHA-256. Composite foreign keys maintain that binding. The job and specification
+commit or roll back together. The existing creation-key digest and attempt-limit
+checks cover the canonical typed payload. Identical concurrent retries return the
+original job and creator; changed references or attempt limits conflict.
+
+`get_evidence_task(actor, tenant, job_id)` requires records read and returns the
+frozen specification after reconnect, reclaim or a terminal transition. It returns
+references only, without evidence availability or processing-success claims.
+Document execution must still use the current-policy scan/read gate, resolve fresh
+membership/revocation and acquire a live worker lease. Merely recovering a task
+cannot authorise processing or a domain effect. No worker starts automatically.
+
+Add SELECT on `omnixat.evidence_registrations` and SELECT, INSERT on
+`omnixat.agent_job_evidence_tasks` to the existing job role. Do not grant UPDATE or
+DELETE on task specifications. All participating tables require active forced RLS
+and a safe non-owner runtime. The existing application SQL trust boundary remains.
+References retain their evidence registration; evidence deletion/retention must
+account for dependent tasks rather than silently cascading their history away.
+
+Legacy `create` remains hash-only and has no recoverable specification. Migration
+preserves such jobs and does not invent inputs. Even a legacy hash matching the
+new canonical payload cannot be retrofitted by replaying typed creation; use a new
+request key for a new task. This slice does not wire tasks to providers, note
+execution, posting, scheduling or approval. The next increment should connect a
+bounded executor to fresh identity, lease and evidence-read checks.
+
+Composite-reference and retry semantics rechecked on 7 November 2026 against
+PostgreSQL 16 [constraints](https://www.postgresql.org/docs/16/ddl-constraints.html)
+and [INSERT](https://www.postgresql.org/docs/16/sql-insert.html).

@@ -2127,3 +2127,42 @@ Current identity resolution, provider execution and autonomous workers remain
 unfinished. Job creation currently stores a payload hash. Next: persist validated,
 tenant/organisation-bound, reference-only preparation task inputs so a restarted
 worker can recover its specification before adding orchestration.
+
+## C1 recoverable evidence task specifications — completed
+
+Recovered clean `2e8fd3d`; no unfinished task or competing writer found.
+Persist version-1 reference-only evidence preparation specifications with exact
+organisation/evidence/fingerprint binding, atomic job creation and immutable retry
+inputs. Preserve hash-only legacy jobs without inventing recoverable inputs.
+Task recovery does not release document bytes or bypass the existing scan gate.
+
+
+Migration 0055 and `EvidencePreparationTask` persist one version-1 reference-only
+specification per new typed job. Exact tenant/organisation/evidence/fingerprint
+foreign keys retain source binding. Creation and specification commit atomically;
+concurrent replay preserves original attribution and pinned attempt limits.
+`get_evidence_task` recovers immutable inputs after reconnect/reclaim. Existing
+hash-only jobs remain unchanged and cannot acquire invented specifications.
+See JOBS_POSTGRES.md for grants, retention dependencies and execution boundaries.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **276 passed**.
+  Seven new tests cover exact-input recovery, concurrent replay, changed limits
+  and references, wrong tenant/organisation/fingerprint, permissions, legacy
+  behaviour, atomic rollback, schema constraints and immutable runtime grants.
+  The existing upgrade test also checks that migration invents no task inputs.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed** with Chromium unavailable. The
+  unchanged browser test returns 503; no test was skipped or removed.
+- `git diff --check`: passed.
+
+Task recovery returns references only. It does not bypass the current scan/read
+gate or grant execution authority. No provider, autonomous worker or UI is wired.
+Next: a bounded preparation executor using recovered inputs, fresh membership,
+worker/lease checks and the existing evidence gate, with restart-safe domain effects.
+Ledger posting, external providers and production qualification remain unfinished.

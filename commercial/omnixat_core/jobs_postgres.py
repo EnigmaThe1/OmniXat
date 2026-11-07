@@ -66,25 +66,84 @@ class PostgresJobStore:
 
     def create(self, actor, tenant, request_key, payload, *, max_attempts=3):
         scope = self._scope(actor, tenant, "records:write")
+        self._validate_creation(request_key, max_attempts)
+        with _tenant_transaction(self.connection, scope, write=True, tables_required=("agent_jobs",)):
+            return self._insert_job(actor, scope, request_key, payload, max_attempts)[0]
+
+    @staticmethod
+    def _validate_creation(request_key, max_attempts):
         if not isinstance(request_key, str) or not request_key.strip() or len(request_key) > 200 or "\0" in request_key:
             raise ValueError("Bounded idempotency key required")
         if type(max_attempts) is not int or not 1 <= max_attempts <= 20:
             raise ValueError("Attempt limit must be between 1 and 20")
+
+    def _insert_job(self, actor, scope, request_key, payload, max_attempts):
+        """Internal insertion; caller owns the authorised write transaction."""
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         digest = sha256(encoded).digest()
-        with _tenant_transaction(self.connection, scope, write=True, tables_required=("agent_jobs",)):
+        with self.connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute("""
+                INSERT INTO omnixat.agent_jobs (tenant_id,request_key,payload_hash,created_by,attempt_limit)
+                VALUES (%s,%s,%s,%s,%s) ON CONFLICT (tenant_id,request_key) DO NOTHING RETURNING id
+            """, (scope, request_key, digest, actor.user_id, max_attempts))
+            inserted = cursor.fetchone() is not None
+            cursor.execute("""
+                SELECT id,payload_hash,attempt_limit FROM omnixat.agent_jobs WHERE tenant_id=%s AND request_key=%s
+            """, (scope, request_key))
+            row = cursor.fetchone()
+            if row["payload_hash"] != digest or row["attempt_limit"] != max_attempts:
+                raise ValueError("Idempotency key reused with different payload")
+            return str(row["id"]), inserted
+
+    def create_evidence_task(self, actor, tenant, request_key, task, *, max_attempts=3):
+        """Persist reference-only inputs and the job atomically; no evidence is read."""
+        from .job_tasks import EvidencePreparationTask
+        scope = self._scope(actor, tenant, "records:write")
+        require_tenant(actor, tenant, "records:read")
+        self._validate_creation(request_key, max_attempts)
+        if type(task) is not EvidencePreparationTask:
+            raise ValueError("A validated evidence preparation task is required")
+        with _tenant_transaction(self.connection, scope, write=True, tables_required=(
+            "agent_jobs", "agent_job_evidence_tasks", "evidence_registrations",
+        )):
             with self.connection.cursor(row_factory=dict_row) as cursor:
                 cursor.execute("""
-                    INSERT INTO omnixat.agent_jobs (tenant_id,request_key,payload_hash,created_by,attempt_limit)
-                    VALUES (%s,%s,%s,%s,%s) ON CONFLICT (tenant_id,request_key) DO NOTHING
-                """, (scope, request_key, digest, actor.user_id, max_attempts))
+                    SELECT 1 FROM omnixat.evidence_registrations
+                    WHERE tenant_id=%s AND organisation_id=%s AND id=%s AND content_sha256=%s
+                """, (scope, task.organisation_id, task.evidence_id, task.content_sha256))
+                if cursor.fetchone() is None:
+                    raise KeyError("Evidence reference unavailable")
+                job, inserted = self._insert_job(actor, scope, request_key, task.payload(), max_attempts)
+                if inserted:
+                    cursor.execute("""
+                        INSERT INTO omnixat.agent_job_evidence_tasks
+                            (tenant_id,job_id,organisation_id,evidence_id,content_sha256)
+                        VALUES (%s,%s,%s,%s,%s)
+                    """, (scope, job, task.organisation_id, task.evidence_id, task.content_sha256))
                 cursor.execute("""
-                    SELECT id,payload_hash,attempt_limit FROM omnixat.agent_jobs WHERE tenant_id=%s AND request_key=%s
-                """, (scope, request_key))
+                    SELECT organisation_id,evidence_id,content_sha256 FROM omnixat.agent_job_evidence_tasks
+                    WHERE tenant_id=%s AND job_id=%s
+                """, (scope, job))
                 row = cursor.fetchone()
-                if row["payload_hash"] != digest or row["attempt_limit"] != max_attempts:
-                    raise ValueError("Idempotency key reused with different payload")
-                return str(row["id"])
+                if row is None or EvidencePreparationTask(**row) != task:
+                    raise ValueError("Saved task specification unavailable or changed")
+                return job
+
+    def get_evidence_task(self, actor, tenant, job_id):
+        """Recover immutable inputs only. Execution must use the evidence read gate."""
+        from .job_tasks import EvidencePreparationTask
+        scope = self._scope(actor, tenant, "records:read")
+        job = UUID(str(job_id))
+        with _tenant_transaction(self.connection, scope, tables_required=("agent_job_evidence_tasks",)):
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute("""
+                    SELECT organisation_id,evidence_id,content_sha256 FROM omnixat.agent_job_evidence_tasks
+                    WHERE tenant_id=%s AND job_id=%s
+                """, (scope, job))
+                row = cursor.fetchone()
+                if row is None:
+                    raise KeyError("Task specification unavailable")
+                return EvidencePreparationTask(**row)
 
     def get(self, actor, tenant, job_id):
         scope = self._scope(actor, tenant, "records:read")

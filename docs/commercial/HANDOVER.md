@@ -694,3 +694,17 @@ migration time while preserving their prior state/progress/leases.
 Next: validated reference-only task specifications with tenant/organisation binding,
 so restarted workers can recover inputs. Current identity wiring, autonomous workers
 and provider/ledger integrations remain unfinished.
+
+## Latest recoverable task checkpoint
+
+Migration 0055 and `EvidencePreparationTask` persist exact version-1 reference-only
+inputs with tenant/organisation/evidence/fingerprint binding. Typed creation is
+atomic with its job and preserves retry attribution and limits. Recovery survives
+worker restart/reclaim. Legacy hash-only jobs remain unchanged with no invented
+specifications. Apply the additional grants in JOBS_POSTGRES.md.
+**46 core, 21 identity and 276 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with Chromium unavailable. Task reads release references
+only; current identity, live leases and the existing scan/read gate remain required.
+Next: connect a bounded preparation executor to these checks and restart-safe
+shared-service effects. Providers, ledger posting and production qualification remain
+unfinished. No active implementation remains in this increment.

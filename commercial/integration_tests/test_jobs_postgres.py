@@ -13,6 +13,7 @@ from psycopg.conninfo import make_conninfo
 
 from omnixat_core.access import Principal
 from omnixat_core.jobs_postgres import PostgresJobStore
+from omnixat_core.job_tasks import EvidencePreparationTask
 from omnixat_core.postgres import CreationConflict, TenantRecords, tenant_records
 from omnixat_core.postgres import MIGRATIONS, migrate
 from test_postgres import PostgresFixture
@@ -34,6 +35,8 @@ class PostgresJobsTests(PostgresFixture):
         cls.owner.execute(sql.SQL(
             "GRANT SELECT,INSERT ON omnixat.notes,omnixat.record_creations,omnixat.agent_job_note_effects,omnixat.agent_job_failures TO {}"
         ).format(role))
+        cls.owner.execute(sql.SQL("GRANT SELECT ON omnixat.evidence_registrations TO {}").format(role))
+        cls.owner.execute(sql.SQL("GRANT SELECT,INSERT ON omnixat.agent_job_evidence_tasks TO {}").format(role))
         cls.job_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database, user=cls.job_role, password=password)
 
     @classmethod
@@ -387,6 +390,7 @@ class PostgresJobsTests(PostgresFixture):
             before = db.execute("SELECT * FROM omnixat.agent_jobs ORDER BY request_key").fetchall()
             migrate(db)
             after = db.execute("SELECT * FROM omnixat.agent_jobs ORDER BY request_key").fetchall()
+            self.assertEqual(db.execute("SELECT count(*) FROM omnixat.agent_job_evidence_tasks").fetchone(), (0,))
             previous_columns = len(before[0])
             self.assertEqual([row[:previous_columns] for row in after], before)
             self.assertTrue(all(row[previous_columns:previous_columns + 2] == (None, None) for row in after))
@@ -707,3 +711,132 @@ class PostgresJobsTests(PostgresFixture):
         self.assertEqual(self.store.fail(self.worker, self.a, job, token, 'temporary_dependency', retryable=True), receipt)
         with self.assertRaises(ValueError):
             self.store.claim(self.worker, self.a, job)
+
+    def evidence_task(self):
+        evidence, digest = uuid4(), b'a' * 32
+        self.owner.execute("""INSERT INTO omnixat.evidence_registrations
+            (tenant_id,id,organisation_id,content_sha256,media_type,byte_size,registered_by)
+            VALUES (%s,%s,%s,%s,'text/csv',12,'fictional-register')
+        """, (self.a, evidence, self.org, digest))
+        return EvidencePreparationTask(self.org, evidence, digest)
+
+    def test_evidence_task_recovers_exact_inputs_after_restart_and_reclaim(self):
+        task = self.evidence_task()
+        job = self.store.create_evidence_task(self.worker, self.a, 'task', task)
+        token = self.store.claim(self.worker, self.a, job)
+        self.store.checkpoint(self.worker, self.a, job, token, {'step': 'registered'})
+        self.expire(job)
+        with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+            recovered = PostgresJobStore(connection)
+            self.assertNotEqual(token, recovered.claim(self.actor, self.a, job))
+            self.assertEqual(recovered.get_evidence_task(self.actor, self.a, job), task)
+            self.assertEqual(recovered.get(self.actor, self.a, job)['checkpoint'], {'step': 'registered'})
+            self.assertEqual(recovered.create_evidence_task(self.actor, self.a, 'task', task), job)
+        self.assertEqual(self.owner.execute('SELECT created_by FROM omnixat.agent_jobs WHERE id=%s', (job,)).fetchone(),
+                         (self.worker.user_id,))
+        self.store.cancel(self.actor, self.a, job)
+        self.assertEqual(self.store.get_evidence_task(self.actor, self.a, job), task)
+
+    def test_evidence_task_concurrent_replay_and_changed_limit_conflict(self):
+        task = self.evidence_task()
+        start = Barrier(2)
+        def create():
+            with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                start.wait(timeout=5)
+                return PostgresJobStore(connection).create_evidence_task(self.worker, self.a, 'task-race', task)
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(lambda _: create(), range(2)))
+        self.assertEqual(first, second)
+        with self.assertRaisesRegex(ValueError, 'Idempotency key reused'):
+            self.store.create_evidence_task(self.worker, self.a, 'task-race', task, max_attempts=4)
+        # Same tenant, different valid evidence under the same creation key conflicts.
+        self.owner.execute("""INSERT INTO omnixat.evidence_registrations
+            (tenant_id,id,organisation_id,content_sha256,media_type,byte_size,registered_by)
+            VALUES (%s,%s,%s,%s,'text/csv',12,'fictional-register')
+        """, (self.a, uuid4(), self.org, b'b'*32))
+        evidence = self.owner.execute('SELECT id FROM omnixat.evidence_registrations WHERE tenant_id=%s AND content_sha256=%s',
+                                      (self.a, b'b'*32)).fetchone()[0]
+        with self.assertRaisesRegex(ValueError, 'Idempotency key reused'):
+            self.store.create_evidence_task(self.worker, self.a, 'task-race', EvidencePreparationTask(self.org, evidence, b'b'*32))
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_evidence_tasks WHERE tenant_id=%s',
+                                           (self.a,)).fetchone(), (1,))
+
+    def test_evidence_task_rejects_wrong_scope_parent_and_fingerprint(self):
+        task = self.evidence_task()
+        for invalid in [EvidencePreparationTask(uuid4(), task.evidence_id, task.content_sha256),
+                        EvidencePreparationTask(task.organisation_id, uuid4(), task.content_sha256),
+                        EvidencePreparationTask(task.organisation_id, task.evidence_id, b'x'*32)]:
+            with self.assertRaises(KeyError):
+                self.store.create_evidence_task(self.worker, self.a, 'bad', invalid)
+        with self.assertRaises(KeyError):
+            self.store.create_evidence_task(self.other, self.b, 'foreign', task)
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_jobs WHERE tenant_id IN (%s,%s)',
+                                           (self.a, self.b)).fetchone(), (0,))
+
+    def test_evidence_task_permissions_and_hash_only_legacy_jobs(self):
+        task = self.evidence_task()
+        job = self.store.create_evidence_task(self.worker, self.a, 'access', task)
+        viewer = Principal('viewer', self.a, 'viewer')
+        self.assertEqual(self.store.get_evidence_task(viewer, self.a, job), task)
+        for actor in [viewer, self.other,
+                      Principal('api', self.a, 'editor', api_scopes=frozenset({'records:write'})),
+                      Principal('staff', None, staff_role='platform_owner', mfa_verified=True)]:
+            with self.assertRaises(PermissionError):
+                self.store.create_evidence_task(actor, self.a, 'denied', task)
+        with self.assertRaises(KeyError):
+            self.store.get_evidence_task(self.other, self.b, job)
+        with self.assertRaises(PermissionError):
+            self.store.get_evidence_task(self.other, self.a, job)
+        legacy = self.store.create(self.worker, self.a, 'legacy', task.payload())
+        with self.assertRaises(KeyError):
+            self.store.get_evidence_task(self.worker, self.a, legacy)
+        with self.assertRaisesRegex(ValueError, 'Saved task specification unavailable'):
+            self.store.create_evidence_task(self.worker, self.a, 'legacy', task)
+        self.assertEqual(self.store.get(self.worker, self.a, legacy)['status'], 'queued')
+
+    def test_evidence_task_and_job_roll_back_together(self):
+        task = self.evidence_task()
+        original = self.store._insert_job
+        def interrupt(*args):
+            original(*args)
+            raise RuntimeError('fictional interruption')
+        with patch.object(self.store, '_insert_job', side_effect=interrupt), self.assertRaises(RuntimeError):
+            self.store.create_evidence_task(self.worker, self.a, 'rollback', task)
+        # Also fail after both inserts, at the transaction's final deadline check.
+        from omnixat_core import postgres
+        with patch.object(postgres, 'monotonic', side_effect=[0, 11]), self.assertRaises(TimeoutError):
+            self.store.create_evidence_task(self.worker, self.a, 'rollback', task)
+        for table in ['agent_jobs', 'agent_job_evidence_tasks']:
+            self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.' + table + ' WHERE tenant_id=%s',
+                                               (self.a,)).fetchone(), (0,))
+        self.store.create_evidence_task(self.worker, self.a, 'rollback', task)
+
+    def test_evidence_task_database_constraints_and_runtime_immutability(self):
+        task = self.evidence_task()
+        job = self.store.create_evidence_task(self.worker, self.a, 'constraints', task)
+        self.assertEqual(self.job_connection.execute('SELECT count(*) FROM omnixat.agent_job_evidence_tasks').fetchone(), (0,))
+        for statement in ['UPDATE omnixat.agent_job_evidence_tasks SET version=1', 'DELETE FROM omnixat.agent_job_evidence_tasks']:
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                self.job_connection.execute(statement)
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.owner.execute('UPDATE omnixat.agent_job_evidence_tasks SET version=2 WHERE job_id=%s', (job,))
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.owner.execute('UPDATE omnixat.agent_job_evidence_tasks SET content_sha256=%s WHERE job_id=%s', (b'z'*32, job))
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.owner.execute('UPDATE omnixat.agent_job_evidence_tasks SET tenant_id=%s WHERE job_id=%s', (self.b, job))
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.owner.execute('UPDATE omnixat.agent_job_evidence_tasks SET organisation_id=%s WHERE job_id=%s', (uuid4(), job))
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.owner.execute('UPDATE omnixat.agent_job_evidence_tasks SET job_id=%s WHERE job_id=%s', (uuid4(), job))
+
+    def test_evidence_task_validation_rejects_arbitrary_inputs(self):
+        for organisation, evidence, digest in [('bad', uuid4(), b'x'*32), (uuid4(), 'bad', b'x'*32),
+                                                (uuid4(), uuid4(), b'short'), (uuid4(), uuid4(), 'a'*64)]:
+            with self.assertRaises(ValueError):
+                EvidencePreparationTask(organisation, evidence, digest)
+        with self.assertRaises(ValueError):
+            self.store.create_evidence_task(self.worker, self.a, 'bad', {'body': 'not task data'})
+        task = self.evidence_task()
+        for key, limit in [('', 3), ('valid', True), ('valid', 21)]:
+            with self.assertRaises(ValueError):
+                self.store.create_evidence_task(self.worker, self.a, key, task, max_attempts=limit)
