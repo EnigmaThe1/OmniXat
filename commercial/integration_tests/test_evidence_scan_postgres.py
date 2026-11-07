@@ -48,6 +48,7 @@ from omnixat_core.expense_journal_postgres import (
     record_expense_journal_amount_correction_decision, ExpenseJournalAmountCorrectionDecisionConflict,
     read_expense_journal_amount_correction_decisions, preview_expense_journal_replacement,
     create_expense_journal_replacement, ExpenseJournalReplacementConflict, read_expense_journal_replacement,
+    select_expense_journal_replacement, ExpenseJournalSelectionConflict,
     ExpenseJournalCorrectionConflict, record_expense_journal_correction, record_expense_journal_decision,
 )
 from test_postgres import PostgresFixture
@@ -441,6 +442,20 @@ class EvidenceScanTests(PostgresFixture):
         ).format(replacement_reader))
         cls.replacement_reader_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                                    user=replacement_reader_role, password=password)
+
+        selection_role = cls.role + "_replacement_selector"
+        selector = sql.Identifier(selection_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(selector, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, selection_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(selector))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.select_expense_journal_replacement"
+            "(uuid,uuid,uuid,bytea,text) TO {}"
+        ).format(selector))
+        cls.replacement_selector_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                                     user=selection_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -2974,3 +2989,144 @@ class EvidenceScanTests(PostgresFixture):
                                (self.a, journal.receipt.id))
             with self.assertRaises(EvidenceNotEligible):
                 review()
+
+
+    def test_replacement_selection_preserves_lineage_and_replays_concurrently(self):
+        journal, _, _, correction, _, author, replacement = self.saved_replacement_fixture()
+        selector = Principal("fictional-selector", self.a, "editor")
+        start = Barrier(2)
+
+        def choose():
+            with psycopg.connect(self.replacement_selector_dsn, autocommit=True) as writer:
+                start.wait(timeout=5)
+                return select_expense_journal_replacement(
+                    writer, selector, self.a, self.org, journal.receipt.id, replacement.id,
+                    proposal_sha256=correction.proposal_sha256,
+                )
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(lambda _: choose(), range(2)))
+        self.assertEqual(first, second)
+        self.assertEqual((first.original_journal_id, first.replacement_id, first.original_snapshot_sha256,
+                          first.proposal_sha256, first.selected_by),
+                         (journal.receipt.id, replacement.id, journal.snapshot_sha256,
+                          correction.proposal_sha256, selector.user_id))
+        self.assertEqual(self.owner.execute("""
+            SELECT original_journal_id,replacement_id,original_snapshot_sha256,proposal_sha256,selected_by,selected_at
+            FROM omnixat.expense_journal_replacement_selections WHERE tenant_id=%s
+        """, (self.a,)).fetchall(), [(journal.receipt.id, replacement.id, bytes.fromhex(journal.snapshot_sha256),
+                                     bytes.fromhex(correction.proposal_sha256), selector.user_id, first.selected_at)])
+        with psycopg.connect(self.replacement_selector_dsn, autocommit=True) as fresh:
+            self.assertEqual(fresh.execute("""
+                SELECT outcome FROM omnixat_extraction.select_expense_journal_replacement(%s,%s,%s,%s,%s)
+            """, (self.org, journal.receipt.id, replacement.id, bytes.fromhex(correction.proposal_sha256),
+                  selector.user_id)).fetchone(), ("unavailable",))
+            self.assertEqual(select_expense_journal_replacement(
+                fresh, selector, self.a, self.org, journal.receipt.id, replacement.id,
+                proposal_sha256=correction.proposal_sha256,
+            ), first)
+            with self.assertRaises(ExpenseJournalSelectionConflict):
+                select_expense_journal_replacement(
+                    fresh, self.actor, self.a, self.org, journal.receipt.id, replacement.id,
+                    proposal_sha256=correction.proposal_sha256,
+                )
+            for query in ("SELECT * FROM omnixat.expense_journal_replacement_selections",
+                          "SELECT * FROM omnixat.expense_journal_replacements"):
+                with self.subTest(query=query), self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    fresh.execute(query)
+        for field, changed in (("tenant_id", self.b), ("organisation_id", uuid4()),
+                               ("original_journal_id", uuid4()), ("replacement_id", uuid4())):
+            with self.subTest(field=field), self.assertRaises(psycopg.errors.ForeignKeyViolation):
+                self.owner.execute(sql.SQL(
+                    "UPDATE omnixat.expense_journal_replacement_selections SET {}=%s WHERE tenant_id=%s"
+                ).format(sql.Identifier(field)), (changed, self.a))
+        with psycopg.connect(self.replacement_reader_dsn, autocommit=True) as reader:
+            saved = read_expense_journal_replacement(reader, self.actor, self.a, self.org, replacement.id)
+            self.assertEqual((saved.receipt, saved.created_by), (replacement, author.user_id))
+        with psycopg.connect(self.journal_review_dsn, autocommit=True) as reader:
+            self.assertEqual(read_expense_journal_draft(reader, self.actor, self.a, self.org, journal.receipt.id), journal)
+
+    def test_replacement_selection_checks_scope_actor_digest_and_current_eligibility(self):
+        journal, supporting, _, correction, _, _, replacement = self.saved_replacement_fixture()
+        with psycopg.connect(self.replacement_selector_dsn, autocommit=True) as writer:
+            def choose(*, actor=self.actor, tenant=self.a, org=self.org, original=journal.receipt.id,
+                       selected=replacement.id, digest=correction.proposal_sha256, connection=writer):
+                return select_expense_journal_replacement(
+                    connection, actor, tenant, org, original, selected, proposal_sha256=digest,
+                )
+            for overrides in (
+                {"actor": self.other, "tenant": self.b}, {"org": uuid4()}, {"original": uuid4()},
+                {"selected": uuid4()}, {"digest": "00" * 32},
+            ):
+                with self.subTest(overrides=overrides), self.assertRaises(EvidenceNotEligible):
+                    choose(**overrides)
+            for actor in (
+                self.other, Principal("viewer", self.a, "viewer"),
+                Principal("agent", self.a, "editor", actor_kind="agent"),
+                Principal("api", self.a, "editor", api_scopes=frozenset({"records:write", "evidence:read"})),
+                Principal("owner", None, staff_role="platform_owner", mfa_verified=True),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    choose(actor=actor)
+            for overrides in ({"digest": "bad"}, {"actor": Principal(" ", self.a, "editor")}):
+                with self.subTest(overrides=overrides), self.assertRaises(ValueError):
+                    choose(**overrides)
+            with psycopg.connect(self.replacement_reader_dsn, autocommit=True) as reader:
+                with self.assertRaises(PermissionError):
+                    choose(connection=reader)
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                choose()
+            self.set_active_policy("fictional-v1")
+            self.owner.execute("UPDATE omnixat.expense_journal_replacements SET amount_pence=999 WHERE tenant_id=%s",
+                               (self.a,))
+            with self.assertRaises(EvidenceNotEligible):
+                choose()
+            self.owner.execute("UPDATE omnixat.expense_journal_replacements SET amount_pence=%s WHERE tenant_id=%s",
+                               (correction.proposal.proposed_lines[0].amount_pence, self.a))
+            receipt = choose()
+            self.owner.execute("""INSERT INTO omnixat.evidence_scan_verdicts
+                (tenant_id,evidence_id,content_sha256,byte_size,policy_version,verdict)
+                SELECT tenant_id,evidence_id,content_sha256,byte_size,policy_version,'blocked'
+                FROM omnixat.evidence_scan_verdicts WHERE tenant_id=%s AND evidence_id=%s AND verdict='clean'
+            """, (self.a, supporting.id))
+            with self.assertRaises(EvidenceNotEligible):
+                choose()
+            self.assertEqual(self.owner.execute("""
+                SELECT selected_at FROM omnixat.expense_journal_replacement_selections WHERE tenant_id=%s
+            """, (self.a,)).fetchall(), [(receipt.selected_at,)])
+
+    def test_replacement_selection_locks_eligibility_through_commit_and_rolls_back(self):
+        journal, supporting, job, correction, _, _, replacement = self.saved_replacement_fixture()
+        with psycopg.connect(self.replacement_selector_dsn, autocommit=True) as writer:
+            with self.assertRaisesRegex(RuntimeError, "fictional rollback"), writer.transaction():
+                writer.execute("SELECT set_config('omnixat.tenant_id',%s,true)", (self.a,))
+                self.assertEqual(writer.execute("""
+                    SELECT outcome FROM omnixat_extraction.select_expense_journal_replacement(%s,%s,%s,%s,%s)
+                """, (self.org, journal.receipt.id, replacement.id, bytes.fromhex(correction.proposal_sha256),
+                      self.actor.user_id)).fetchone(), ("stored",))
+                for statement, args in (
+                    ("UPDATE omnixat_extraction.active_scan_policy SET policy_version='fictional-v2'", ()),
+                    ("UPDATE omnixat.expense_journal_drafts SET created_by='fictional-changed' WHERE id=%s", (journal.receipt.id,)),
+                    ("UPDATE omnixat.expense_journal_replacements SET amount_pence=999 WHERE id=%s", (replacement.id,)),
+                    ("UPDATE omnixat.expense_journal_amount_correction_decisions SET recorded_at=clock_timestamp() WHERE proposal_id=%s",
+                     (correction.receipt.id,)),
+                    ("UPDATE omnixat.csv_extraction_results SET extractor_version='fictional-changed' WHERE job_id=%s", (job,)),
+                ):
+                    with self.subTest(statement=statement), self.assertRaises(psycopg.errors.LockNotAvailable):
+                        with self.owner.transaction():
+                            self.owner.execute("SET LOCAL lock_timeout='30ms'")
+                            self.owner.execute(statement, args)
+                with self.assertRaises(psycopg.errors.LockNotAvailable), self.owner.transaction():
+                    self.owner.execute("SET LOCAL lock_timeout='30ms'")
+                    self.owner.execute("""INSERT INTO omnixat.evidence_scan_verdicts
+                        (tenant_id,evidence_id,content_sha256,byte_size,policy_version,verdict)
+                        SELECT tenant_id,evidence_id,content_sha256,byte_size,policy_version,'blocked'
+                        FROM omnixat.evidence_scan_verdicts WHERE tenant_id=%s AND evidence_id=%s AND verdict='clean'
+                    """, (self.a, supporting.id))
+                raise RuntimeError("fictional rollback")
+        self.assertEqual(self.owner.execute("""
+            SELECT count(*) FROM omnixat.expense_journal_replacement_selections WHERE tenant_id=%s
+        """, (self.a,)).fetchone(), (0,))
+        self.assertEqual(self.owner.execute("""
+            SELECT id FROM omnixat.expense_journal_replacements WHERE tenant_id=%s
+        """, (self.a,)).fetchall(), [(replacement.id,)])

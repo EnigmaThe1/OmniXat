@@ -1890,3 +1890,40 @@ This increment provides saved-draft review. Production web/API integration,
 identity-provider provisioning and final-package human approval remain open.
 Next: design and implement an explicit, retry-safe choice of the current
 replacement draft while preserving original lineage and review history.
+
+## C4 explicit replacement selection — completed
+
+Recovered clean `4d776d5` with no active task or competing writer found.
+Add an attributed, retry-safe selection of one saved replacement for its
+original journal and exact proposal digest. Reuse existing write-time
+eligibility locks, preserve all originals and review records, and return
+an immutable selection receipt. This is a draft preparation choice.
+
+
+Migration 0049 and the shared Python selection service persist one attributed
+choice per original journal with exact original/proposal digests. Composite
+references and forced RLS preserve tenant, organisation and original lineage.
+Existing replacement replay holds source, policy, journal and review eligibility
+through commit. The saved replacement is also locked and rechecked. Identical
+eligible retries return the original receipt and competing attribution conflicts.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **234 passed**.
+  Added coverage for concurrent replay, exact selection attribution, preservation
+  of originals, database access boundaries, composite lineage, wrong scope and
+  digest, stale or changed sources, commit-time locks and rollback.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch reproduced
+  the socket permission error. The browser test remains unchanged.
+- `git diff --check`: passed.
+
+This is a durable draft preparation choice. The receipt remains historical when
+eligibility changes. Production transport, ledger posting and final-package
+approval remain separate unfinished work.
+Next: add a unified current-draft reader that resolves the selected replacement,
+rechecks its exact snapshot and current eligibility, and preserves lineage.

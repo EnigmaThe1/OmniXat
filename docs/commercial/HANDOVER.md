@@ -613,3 +613,16 @@ The unchanged prototype passes 19 of 20 tests with the Chromium socket
 permission failure. Next: an explicit, retry-safe current replacement choice
 that preserves original lineage and review history. Shared production web/API
 integration and final-package human approval remain open.
+
+
+## Latest explicit replacement selection checkpoint
+
+Migration 0049 records one attributed replacement choice per original journal,
+with exact snapshot/proposal digests and retry protection. The service rechecks
+source and review eligibility under locks through commit. Use the dedicated
+selector grant in EVIDENCE.md. **46 core, 21 identity and 234 PostgreSQL/HTTP
+tests pass**. The unchanged prototype passes 19 of 20 tests, with the Chromium
+socket permission failure. This historical choice has draft preparation scope.
+Next: a unified current-draft reader resolving the selection with fresh
+eligibility checks and original lineage. Posting and final-package approval
+remain unfinished.

@@ -826,3 +826,58 @@ def read_expense_journal_replacement(
         row["replacement_id"], row["journal_id"], row["replacement_created_at"],
     )
     return ExpenseJournalReplacementReview(receipt, row["replacement_created_by"], _replacement_preview_details(row))
+
+
+class ExpenseJournalSelectionConflict(Exception):
+    """The original journal already has a different attributed selection."""
+
+
+@dataclass(frozen=True)
+class ExpenseJournalReplacementSelection:
+    original_journal_id: UUID
+    replacement_id: UUID
+    original_snapshot_sha256: str
+    proposal_sha256: str
+    selected_by: str = field(repr=False)
+    selected_at: datetime
+
+
+def select_expense_journal_replacement(
+    connection, actor, tenant_id, organisation_id, original_journal_id, replacement_id, *,
+    proposal_sha256: str,
+) -> ExpenseJournalReplacementSelection:
+    """Choose an exact eligible saved replacement and preserve the preparation history."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal preparation required")
+    if type(proposal_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", proposal_sha256):
+        raise ValueError("An exact proposal digest is required")
+    actor_id = actor.user_id
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
+        raise ValueError("Invalid replacement selection attribution")
+    organisation, original, replacement = (
+        UUID(str(value)) for value in (organisation_id, original_journal_id, replacement_id)
+    )
+    with _tenant_transaction(connection, tenant, write=True, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+        "expense_journal_amount_corrections", "expense_journal_amount_correction_decisions",
+        "expense_journal_replacements", "expense_journal_replacement_selections",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "select_expense_journal_replacement")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.select_expense_journal_replacement(%s,%s,%s,%s,%s)
+            """, (organisation, original, replacement, bytes.fromhex(proposal_sha256), actor_id))
+            row = cursor.fetchone()
+        if row["outcome"] == "unavailable":
+            raise EvidenceNotEligible("Saved journal replacement is unavailable")
+        if row["outcome"] == "conflict":
+            raise ExpenseJournalSelectionConflict("A different attributed replacement selection already exists")
+        if row["outcome"] != "stored":
+            raise RuntimeError("Replacement selection receipt unavailable")
+        return ExpenseJournalReplacementSelection(
+            row["original_journal"], row["replacement_id"], row["snapshot_sha256"].hex(),
+            row["proposal_sha256"].hex(), row["selected_by"], row["selected_at"],
+        )

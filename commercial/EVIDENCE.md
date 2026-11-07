@@ -737,3 +737,29 @@ ineligible inputs make the saved draft unavailable to this read.
 Grant the dedicated reader USAGE on `omnixat_extraction` and EXECUTE only on
 `omnixat_extraction.read_saved_expense_journal_replacement(uuid,uuid)`.
 The operation is read-only and retains the original and replacement records.
+
+## Selecting a saved replacement draft
+
+Migration 0049 adds `select_expense_journal_replacement`. An interactive tenant
+editor with records write and evidence read permission explicitly chooses the
+original journal, saved replacement receipt and exact proposal digest.
+
+The service reuses replacement replay and source locks, then locks and rechecks
+the saved replacement before storing the selection. One immutable selection per
+original journal records the original snapshot, exact proposal digest, selector
+and timestamp. Identical eligible retries return that receipt. A different
+selector conflicts with the saved attribution. Original journals, proposals,
+review observations and replacement records are retained.
+
+Grant a dedicated selector USAGE on `omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.select_expense_journal_replacement(uuid,uuid,uuid,bytea,text)`.
+The role has no direct table access. Apply all migrations before using it.
+
+A selection records a draft preparation choice. It carries no posting or
+statutory approval authority. Its receipt records a historical choice, so future
+consumers must recheck current source and review eligibility. A unified reader
+resolving the selected draft remains the next implementation step.
+
+PostgreSQL 16 locking and RLS semantics rechecked on 7 November 2026 against
+[explicit locking](https://www.postgresql.org/docs/16/explicit-locking.html) and
+[row security](https://www.postgresql.org/docs/16/ddl-rowsecurity.html).
