@@ -529,3 +529,13 @@ fingerprint and scan policy through a dedicated grant. See EVIDENCE.md.
 **46 core, 21 identity and 213 PostgreSQL/HTTP tests pass**. The unchanged
 prototype passes 19 of 20 tests with the known Chromium socket failure.
 Next: show eligible evidence links in the scoped review page.
+
+## Latest journal supporting evidence review checkpoint
+
+Migration 0039 returns supporting evidence receipts and current scan
+eligibility on the scoped decision page. Replace the dedicated reader
+grant as documented in EVIDENCE.md. Migration 0040 fixes concurrent
+decision, correction and clarification retries. **46 core, 21 identity,
+213 PostgreSQL/HTTP and 60 repeated concurrency checks pass**. The
+unchanged prototype passes 19 of 20 tests with the known Chromium socket
+failure. Next: preview a correction from a verified CSV amount.

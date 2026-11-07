@@ -1603,3 +1603,39 @@ with the pinned psycopg 3.3.8 source adapter:
 Next: show supporting evidence references in the scoped decision page,
 with current eligibility and no original bytes. Keep historical links
 separate from any later correction or posting decision.
+
+## C4 journal supporting evidence review — completed
+
+Recovered clean `68e7997`. Return the attributed supporting evidence reference
+alongside its clarification answer, restricted to the eligible journal snapshot
+and visible reasons. Recheck the linked fingerprint against the current scan
+gate and keep historical attribution even when the link is no longer eligible.
+
+Migration 0039 returns supporting evidence metadata beside its answer.
+It distinguishes missing links from links whose exact fingerprint is no
+longer eligible and leaves original bytes behind the scan gate. Replace
+the dedicated decision reader grant as documented in EVIDENCE.md.
+Migration 0040 fixes concurrent replay collisions across the overlapping
+unique indexes used by the decision, correction and answer writers.
+Applied migration files, scoped foreign keys and grants are preserved.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **213 passed** after
+  correcting the pre-existing duplicate-index retry errors. Coverage
+  includes current and blocked links, lookahead exclusion and denied
+  access to original bytes from the decision reader.
+- Ran the existing concurrent decision, correction and answer test methods
+  20 times each in a single unittest suite: **60 passed**.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: preview an amount correction from an explicitly selected verified
+CSV amount in linked supporting evidence. Keep the original journal and
+answer intact and leave posting to a separate action.

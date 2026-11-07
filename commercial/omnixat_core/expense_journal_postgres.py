@@ -223,9 +223,28 @@ class ExpenseJournalClarificationReceipt:
 
 
 @dataclass(frozen=True)
+class ExpenseJournalEvidenceLink:
+    journal_id: UUID
+    snapshot_sha256: str
+    reason: JournalCorrectionReason
+    evidence_id: UUID
+    content_sha256: str = field(repr=False)
+    scan_policy_version: str
+    linked_by: str = field(repr=False)
+    linked_at: datetime
+
+
+@dataclass(frozen=True)
+class ExpenseJournalSupportingEvidence:
+    link: ExpenseJournalEvidenceLink
+    is_eligible: bool
+
+
+@dataclass(frozen=True)
 class ExpenseJournalClarification:
     receipt: ExpenseJournalClarificationReceipt
     answer: str = field(repr=False)
+    supporting_evidence: ExpenseJournalSupportingEvidence | None = None
 
 
 @dataclass(frozen=True)
@@ -247,7 +266,7 @@ def read_expense_journal_decisions(
     connection, actor, tenant_id, organisation_id, journal_id, *,
     snapshot_sha256: str, page_size: int = 25, after_reviewer: str | None = None,
 ) -> ExpenseJournalDecisionPage:
-    """Read observations, corrections and answers for one eligible snapshot."""
+    """Read observations, answers and supporting evidence for one eligible snapshot."""
     tenant = _authorize(actor, tenant_id, "records:read")
     _authorize(actor, tenant_id, "evidence:read")
     if actor.actor_kind != "human" or actor.api_scopes is not None:
@@ -266,11 +285,12 @@ def read_expense_journal_decisions(
     with _tenant_transaction(connection, tenant,
                              tables_required=(*_DRAFT_TABLES, "expense_journal_review_decisions",
                                               "expense_journal_correction_requests",
-                                              "expense_journal_clarification_answers")):
+                                              "expense_journal_clarification_answers",
+                                              "expense_journal_clarification_evidence")):
         with connection.cursor(row_factory=dict_row) as cursor:
-            _require_draft_role(cursor, "read_expense_journal_decisions_with_answers")
+            _require_draft_role(cursor, "read_expense_journal_decisions_with_evidence")
             cursor.execute("""
-                SELECT * FROM omnixat_extraction.read_expense_journal_decisions_with_answers(%s,%s,%s,%s,%s)
+                SELECT * FROM omnixat_extraction.read_expense_journal_decisions_with_evidence(%s,%s,%s,%s,%s)
             """,
                            (organisation, journal, bytes.fromhex(snapshot_sha256), after_reviewer, page_size))
             rows = cursor.fetchall()
@@ -286,13 +306,20 @@ def read_expense_journal_decisions(
         journal, snapshot_sha256, row["correction_reason"], row["reviewer_id"], row["correction_recorded_at"],
     ) for row in rows[:page_size] if row["correction_reason"] is not None)
     answer_rows = {row["correction_reason"]: row for row in rows[:page_size] if row["answered_at"] is not None}
-    answers = tuple(ExpenseJournalClarification(
-        ExpenseJournalClarificationReceipt(
+    answers = []
+    for reason, row in answer_rows.items():
+        receipt = ExpenseJournalClarificationReceipt(
             journal, snapshot_sha256, reason, row["answer_reviewer_id"], row["answered_by"], row["answered_at"],
-        ),
-        row["answer"],
-    ) for reason, row in answer_rows.items())
-    return ExpenseJournalDecisionPage(decisions, next_cursor, corrections, answers)
+        )
+        supporting_evidence = None
+        if row["evidence_id"] is not None:
+            link = ExpenseJournalEvidenceLink(
+                journal, snapshot_sha256, reason, row["evidence_id"], row["evidence_fingerprint"].hex(),
+                row["evidence_scan_policy"], row["evidence_linked_by"], row["evidence_linked_at"],
+            )
+            supporting_evidence = ExpenseJournalSupportingEvidence(link, row["evidence_is_eligible"])
+        answers.append(ExpenseJournalClarification(receipt, row["answer"], supporting_evidence))
+    return ExpenseJournalDecisionPage(decisions, next_cursor, corrections, tuple(answers))
 
 
 def record_expense_journal_correction(
@@ -379,18 +406,6 @@ def record_expense_journal_clarification(
 
 class ExpenseJournalEvidenceLinkConflict(Exception):
     """A different evidence link already exists for this clarification."""
-
-
-@dataclass(frozen=True)
-class ExpenseJournalEvidenceLink:
-    journal_id: UUID
-    snapshot_sha256: str
-    reason: JournalCorrectionReason
-    evidence_id: UUID
-    content_sha256: str = field(repr=False)
-    scan_policy_version: str
-    linked_by: str = field(repr=False)
-    linked_at: datetime
 
 
 def link_expense_journal_clarification_evidence(

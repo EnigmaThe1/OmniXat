@@ -501,10 +501,10 @@ has no database writes or delivery side effects.
 
 Give a dedicated non-owner, NOBYPASSRLS reader USAGE on
 `omnixat_extraction` and EXECUTE only on
-`omnixat_extraction.read_expense_journal_decisions_with_answers(uuid,uuid,bytea,text,integer)`.
+`omnixat_extraction.read_expense_journal_decisions_with_evidence(uuid,uuid,bytea,text,integer)`.
 When upgrading, revoke the reader's previous EXECUTE grant on the decision
-reader from migration 0033 or the reader with corrections from migration 0035.
-Migration 0037 leaves existing ACLs unchanged. Keep direct table access and
+reader from migration 0033, 0035 or 0037. Migration 0039 leaves existing
+ACLs unchanged. Keep direct table access and
 other journal grants separate.
 
 Migration 0037 adds `page.answers`. Each entry includes the answer text and
@@ -571,5 +571,15 @@ reference for review. Bookkeeping treatment remains a separate decision.
 
 Grant the dedicated writer USAGE on `omnixat_extraction` and EXECUTE on
 `omnixat_extraction.link_expense_journal_clarification_evidence(uuid,uuid,bytea,text,uuid,text)`
-only. The receipt carries no original bytes or answer text. Displaying
-the link in the scoped review is a separate read increment.
+only. The write receipt carries no original bytes or answer text.
+
+Migration 0039 adds `supporting_evidence` to each answer in the scoped
+decision page. An answer with a link shows the original receipt and a
+boolean indicating whether the linked fingerprint is currently admitted
+by the scan gate. This distinguishes a link that has become ineligible
+from an answer with no link. The page returns metadata only for the exact
+snapshot and visible reasons. Access to original bytes remains separate.
+
+Migration 0040 keeps decision, correction and answer writes retry-safe
+when concurrent inserts collide on either index for the same record.
+Existing receipts, scoped foreign keys and grants are preserved.
