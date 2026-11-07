@@ -553,3 +553,49 @@ Scheduler, providers, posting and final approval remain separate unfinished work
 Technical references rechecked 7 November 2026: PostgreSQL 16
 [row locks](https://www.postgresql.org/docs/16/explicit-locking.html) and
 [security-definer functions](https://www.postgresql.org/docs/16/sql-createfunction.html).
+
+## Metadata-only expense recovery
+
+Migration 0061 and `AuthenticatedJobStore.get_expense_summary` recover the saved
+expense-effect receipt, validated plan, source identity/fingerprint, source kind,
+scan-policy version and expense creation time. No monetary value or document bytes
+leave the database through this surface. Use a **separate summary-only login**:
+
+```sql
+GRANT USAGE ON SCHEMA omnixat_extraction TO expense_summary_runtime;
+GRANT EXECUTE ON FUNCTION omnixat_extraction.read_job_expense_summary(uuid,text,uuid,bytea,bytea) TO expense_summary_runtime;
+```
+
+Alongside CONNECT, these are its only required grants. No direct table access,
+full human expense review, original-byte read, clarification or draft-write
+privilege is needed. The adapter rejects migration owners and other extraction
+function grants. It uses read-only transactions and clears tenant context on exit.
+
+After recovering both canonical saved plans, the service resolves signed current
+identity again and requires both record scopes. A single stable function snapshot
+checks the current running worker/token/lease and job-backed extraction, expense
+effect and plan digests. It reuses the existing CSV summary and expense-draft read
+gates to check source fingerprint, current scan policy, resolved source amount and
+current period/account eligibility. The saved expense must match this exact job,
+source cell, context and original creator; the source-amount creator must match as
+well. Changed pence/context/attribution or a receipt pointing at another job's draft
+cannot appear as valid recovery metadata. The database returns only the redacted
+fields; Python attaches the already validated intent, never an amount.
+
+The original first-worker receipt survives reconnect/reclaim, while current worker
+authority is checked independently. Human clarification is labelled `clarified`,
+not filing approval. Missing receipts, closed periods/accounts, changed scan policy,
+blocked/live scans and cancelled/completed/failed jobs with no live claim are
+unavailable. Recovery changes no row, progress, lease, funding choice or approval.
+
+This is a statement-snapshot observation, not a reservation through future work.
+Identity revocation after admission and source/policy/job changes after the snapshot
+cannot retract metadata already returned. Later effects must recheck current
+identity, worker lease and eligibility. The existing interactive human expense
+review remains separate and continues to require its human principal and grants.
+Next: explicit funding and counterpart intent before journal preparation; no
+scheduler, provider, posting or statutory transport is activated.
+
+Technical references rechecked 7 November 2026: PostgreSQL 16
+[function snapshots](https://www.postgresql.org/docs/16/xfunc-volatility.html) and
+[security-definer functions](https://www.postgresql.org/docs/16/sql-createfunction.html).

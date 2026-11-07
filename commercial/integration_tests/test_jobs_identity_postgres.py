@@ -30,6 +30,8 @@ class AuthenticatedJobsTests(MembershipFixture):
             'job_gate': ['USAGE ON SCHEMA omnixat_extraction',
                          'EXECUTE ON FUNCTION omnixat_extraction.read_eligible_original(uuid,uuid)',
                          'EXECUTE ON FUNCTION omnixat_extraction.store_job_csv_result(uuid,text,uuid,uuid,bytea,text,bytea,jsonb)'],
+            'job_expense_summary': ['USAGE ON SCHEMA omnixat_extraction',
+                            'EXECUTE ON FUNCTION omnixat_extraction.read_job_expense_summary(uuid,text,uuid,bytea,bytea)'],
             'job_expense': ['USAGE ON SCHEMA omnixat_extraction',
                             'EXECUTE ON FUNCTION omnixat_extraction.create_job_expense_draft(uuid,text,uuid,bytea,bytea)'],
             'job_summary': ['USAGE ON SCHEMA omnixat_extraction',
@@ -76,6 +78,8 @@ class AuthenticatedJobsTests(MembershipFixture):
         self.addCleanup(self.clarify_connection.close)
         self.expense_connection = psycopg.connect(self.job_expense_dsn, autocommit=True)
         self.addCleanup(self.expense_connection.close)
+        self.expense_summary_connection = psycopg.connect(self.job_expense_summary_dsn, autocommit=True)
+        self.addCleanup(self.expense_summary_connection.close)
         self.owner.execute("DELETE FROM omnixat_extraction.active_scan_policy")
         self.original = b'Fictional document,12.34\r\n'
         evidence = uuid4()
@@ -1360,3 +1364,174 @@ class AuthenticatedJobsTests(MembershipFixture):
                 self.jobs.get_csv_summary(self.expense_connection,token,self.a,job,lease)
         finally:
             self.owner.execute(sql.SQL('REVOKE EXECUTE ON FUNCTION omnixat_extraction.read_job_csv_summary(uuid,text,uuid,bytea) FROM {}').format(sql.Identifier(self.job_expense_role)))
+
+
+    def expense_summary(self, token, job, lease):
+        return self.jobs.get_expense_summary(self.expense_summary_connection,token,self.a,job,lease)
+
+    def test_expense_summary_recovers_exact_receipt_and_context_after_worker_restart(self):
+        from dataclasses import asdict
+        token,job,lease,plan = self.expense_execution_setup()
+        receipt = self.execute_expense(token,job,lease)
+        first = self.expense_summary(token,job,lease)
+        self.assertEqual(first.receipt,receipt)
+        self.assertEqual(first.plan,plan)
+        self.assertEqual((first.organisation_id,first.evidence_id,first.content_sha256,first.policy_version,first.source_kind),
+                         (self.org,self.task.evidence_id,self.task.content_sha256.hex(),'fictional-v1','extracted'))
+        self.assertNotIn('12.34',str(asdict(first)))
+        before = self.owner.execute('SELECT * FROM omnixat.agent_jobs WHERE id=%s',(job,)).fetchone()
+        self.assertEqual(self.expense_summary(token,job,lease),first)
+        self.assertEqual(self.owner.execute('SELECT * FROM omnixat.agent_jobs WHERE id=%s',(job,)).fetchone(),before)
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s",(job,))
+        second = uuid4()
+        self.owner.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,'expense-summary-recovery','agent')",(second,self.issuer))
+        self.owner.execute("INSERT INTO omnixat.memberships(tenant_id,user_id,role) VALUES (%s,%s,'editor')",(self.a,second))
+        with psycopg.connect(self.job_auth_dsn,autocommit=True) as auth, psycopg.connect(self.job_data_dsn,autocommit=True) as data:
+            restored = AuthenticatedJobStore(auth,data,self.verifier)
+            token2 = self.token(sub='expense-summary-recovery')
+            new = restored.claim(token2,self.a,job)
+            self.assertEqual(restored.get_expense_summary(self.expense_summary_connection,token2,self.a,job,new),first)
+
+    def test_expense_summary_checks_current_scan_and_bookkeeping_policy(self):
+        token,job,lease,plan = self.expense_execution_setup()
+        self.execute_expense(token,job,lease)
+        for table,flag in [('expense_accounting_periods','open_for_drafts'),('expense_account_policy','eligible_for_drafts')]:
+            self.owner.execute('UPDATE omnixat.'+table+' SET '+flag+'=false WHERE tenant_id=%s',(self.a,))
+            with self.assertRaises(EvidenceNotEligible):
+                self.expense_summary(token,job,lease)
+            self.owner.execute('UPDATE omnixat.'+table+' SET '+flag+'=true WHERE tenant_id=%s',(self.a,))
+        self.owner.execute("UPDATE omnixat_extraction.active_scan_policy SET policy_version='fictional-v2'")
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,lease)
+        self.owner.execute("UPDATE omnixat_extraction.active_scan_policy SET policy_version='fictional-v1'")
+        self.owner.execute("""INSERT INTO omnixat.evidence_scan_claims
+            (tenant_id,evidence_id,policy_version,lease_token,expires_at)
+            VALUES (%s,%s,'fictional-v1',%s,clock_timestamp()+interval '60 seconds')""",(self.a,self.task.evidence_id,uuid4()))
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,lease)
+        self.owner.execute('DELETE FROM omnixat.evidence_scan_claims WHERE tenant_id=%s',(self.a,))
+        self.owner.execute("""INSERT INTO omnixat.evidence_scan_verdicts
+            (tenant_id,evidence_id,content_sha256,byte_size,policy_version,verdict)
+            VALUES (%s,%s,%s,%s,'fictional-v1','blocked')""",
+            (self.a,self.task.evidence_id,self.task.content_sha256,len(self.original)))
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,lease)
+
+    def test_expense_summary_scope_revocation_role_and_tenant_boundaries(self):
+        token,job,lease,plan = self.expense_execution_setup()
+        self.execute_expense(token,job,lease)
+        for invalid in [self.token(scope='records:read'),self.token(scope='records:write')]:
+            with self.assertRaises(PermissionError):
+                self.expense_summary(invalid,job,lease)
+        with self.assertRaises(AuthenticationError):
+            self.jobs.get_expense_summary(self.expense_summary_connection,token,self.b,job,lease)
+        self.owner.execute("INSERT INTO omnixat.memberships(tenant_id,user_id,role) VALUES (%s,%s,'editor')",(self.b,self.user))
+        with self.assertRaises(KeyError):
+            self.jobs.get_expense_summary(self.expense_summary_connection,token,self.b,job,lease)
+        self.owner.execute("UPDATE omnixat.memberships SET role='viewer' WHERE tenant_id=%s AND user_id=%s",(self.a,self.user))
+        with self.assertRaises(PermissionError):
+            self.expense_summary(token,job,lease)
+        self.owner.execute('UPDATE omnixat.memberships SET revoked_at=now() WHERE tenant_id=%s AND user_id=%s',(self.a,self.user))
+        with self.assertRaises(AuthenticationError):
+            self.expense_summary(token,job,lease)
+
+    def test_expense_summary_expired_wrong_replaced_and_cancelled_claims_are_rejected(self):
+        token,job,lease,plan = self.expense_execution_setup()
+        self.execute_expense(token,job,lease)
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,uuid4())
+        self.owner.execute("UPDATE omnixat.agent_jobs SET claimed_by='different-worker' WHERE id=%s",(job,))
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,lease)
+        self.owner.execute("UPDATE omnixat.agent_jobs SET claimed_by=%s,lease_until=clock_timestamp()-interval '1 second' WHERE id=%s",(str(self.user),job))
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,lease)
+        new = self.jobs.claim(token,self.a,job)
+        self.expense_summary(token,job,new)
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,lease)
+        self.jobs.cancel(token,self.a,job)
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,new)
+
+    def test_expense_summary_requires_effect_and_rejects_changed_amount_context_actor_or_digest(self):
+        from datetime import date
+        token,job,lease,plan = self.expense_execution_setup()
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,lease)
+        receipt = self.execute_expense(token,job,lease)
+        for column,value,original in [('amount_pence',1235,1234),
+                                      ('accounting_date',date(2026,11,8),plan.context.accounting_date),
+                                      ('created_by','fictional-other',str(self.user))]:
+            self.owner.execute(sql.SQL('UPDATE omnixat.csv_expense_drafts SET {}=%s WHERE id=%s').format(sql.Identifier(column)),(value,receipt.expense_id))
+            with self.assertRaises(EvidenceNotEligible):
+                self.expense_summary(token,job,lease)
+            self.owner.execute(sql.SQL('UPDATE omnixat.csv_expense_drafts SET {}=%s WHERE id=%s').format(sql.Identifier(column)),(original,receipt.expense_id))
+        self.owner.execute('UPDATE omnixat.agent_job_expense_effects SET expense_plan_digest=%s WHERE job_id=%s',(b'x'*32,job))
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,lease)
+
+    def test_expense_summary_metadata_only_database_output_and_dedicated_read_role(self):
+        from omnixat_core.job_csv_plans_postgres import _digest as csv_digest
+        from omnixat_core.job_expense_plans_postgres import _digest as expense_digest
+        from omnixat_core.postgres import _tenant_transaction
+        from uuid import UUID
+        token,job,lease,plan = self.expense_execution_setup()
+        self.execute_expense(token,job,lease)
+        with _tenant_transaction(self.expense_summary_connection,UUID(self.a),tables_required=('agent_jobs',)):
+            self.assertEqual(self.expense_summary_connection.execute('SHOW transaction_read_only').fetchone(),('on',))
+            cursor = self.expense_summary_connection.execute('SELECT * FROM omnixat_extraction.read_job_expense_summary(%s,%s,%s,%s,%s)',
+                (job,str(self.user),lease,csv_digest(self.csv_plan()),expense_digest(plan)))
+            self.assertEqual({column.name for column in cursor.description},
+                {'expense_id','created_by','created_at','expense_created_at','organisation_id','evidence_id','content_sha256','policy_version','source_kind'})
+            self.assertNotIn('12.34',str(cursor.fetchone()))
+        for table in ['csv_expense_drafts','evidence_draft_amounts','agent_job_expense_effects']:
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                self.expense_summary_connection.execute('SELECT * FROM omnixat.'+table)
+        for function in ['read_csv_expense_draft(NULL,NULL)','read_eligible_original(NULL,NULL)',
+                         'create_job_expense_draft(NULL,NULL,NULL,NULL,NULL)']:
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                self.expense_summary_connection.execute('SELECT * FROM omnixat_extraction.'+function)
+        for connection in [self.owner,self.expense_connection,self.gate_connection]:
+            with self.assertRaises(PermissionError):
+                self.jobs.get_expense_summary(connection,token,self.a,job,lease)
+        self.assertEqual(self.expense_summary_connection.execute("SELECT NULLIF(current_setting('omnixat.tenant_id',true),'')").fetchone(),(None,))
+
+    def test_expense_summary_clarified_source_and_fresh_identity_after_plan_recovery(self):
+        from omnixat_core.access import Principal
+        from omnixat_core.evidence_review_postgres import store_csv_clarification
+        token,job,lease,plan = self.expense_execution_setup(source_cell=self.csv_plan().selections[1])
+        store_csv_clarification(self.clarify_connection,Principal('fictional-human',self.a,'editor'),
+            self.a,self.org,self.task.evidence_id,job,plan.source_cell,amount='7.00')
+        receipt = self.execute_expense(token,job,lease)
+        self.assertEqual(self.expense_summary(token,job,lease).source_kind,'clarified')
+        original = self.jobs.get_expense_plan
+        def revoke_after_plan(*args):
+            saved = original(*args)
+            self.owner.execute('UPDATE omnixat.memberships SET revoked_at=now() WHERE tenant_id=%s AND user_id=%s',(self.a,self.user))
+            return saved
+        with patch.object(self.jobs,'get_expense_plan',side_effect=revoke_after_plan):
+            with self.assertRaises(AuthenticationError):
+                self.expense_summary(token,job,lease)
+        self.assertEqual(self.owner.execute('SELECT expense_id FROM omnixat.agent_job_expense_effects WHERE job_id=%s',(job,)).fetchone(),(receipt.expense_id,))
+
+    def test_expense_summary_rejects_receipt_linked_to_another_jobs_draft(self):
+        token,job,lease,plan = self.expense_execution_setup()
+        first = self.execute_expense(token,job,lease)
+        second_job = self.jobs.create_evidence_task(token,self.a,'expense-summary-other-job',self.task)
+        second_lease = self.jobs.claim(token,self.a,second_job)
+        self.jobs.save_csv_plan(token,self.a,second_job,second_lease,self.csv_plan())
+        self.jobs.save_expense_plan(token,self.a,second_job,second_lease,plan)
+        self.execute_csv(token,second_job,second_lease)
+        with self.owner.transaction():
+            self.owner.execute("SELECT set_config('omnixat.tenant_id',%s,true)",(self.a,))
+            self.owner.execute('SELECT * FROM omnixat_extraction.create_csv_draft_amount(%s,%s,%s,%s,%s,%s,%s)',
+                (self.org,self.task.evidence_id,second_job,plan.source_cell.field_name,plan.source_cell.row,plan.source_cell.column,str(self.user)))
+            second_expense = self.owner.execute('SELECT * FROM omnixat_extraction.create_csv_expense_draft(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                (self.org,self.task.evidence_id,second_job,plan.source_cell.field_name,plan.source_cell.row,plan.source_cell.column,
+                 plan.period_id,plan.context.expense_account_id,plan.context.accounting_date,'GBP',str(self.user))).fetchone()[1]
+        self.owner.execute('UPDATE omnixat.agent_job_expense_effects SET expense_id=%s WHERE job_id=%s',(second_expense,job))
+        with self.assertRaises(EvidenceNotEligible):
+            self.expense_summary(token,job,lease)
+        self.owner.execute('UPDATE omnixat.agent_job_expense_effects SET expense_id=%s WHERE job_id=%s',(first.expense_id,job))
+        self.assertEqual(self.expense_summary(token,job,lease).receipt,first)

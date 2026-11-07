@@ -835,3 +835,21 @@ and review under fresh eligibility, then persist explicit funding/counterpart
 intent before journal work. Human handoff, providers, scheduling, posting, final
 approval and production qualification remain unfinished. No UI/live integration
 or active increment remains.
+
+
+## Latest expense recovery checkpoint
+
+Migration 0061 and `AuthenticatedJobStore.get_expense_summary` recover original
+expense receipts, canonical context and source metadata under current identity,
+live worker/lease and existing CSV/expense eligibility gates. A separate execute-only
+summary login returns no monetary values or original bytes; SQL checks the exact
+job, source, plan digests, context and first-actor attribution before redaction.
+Read-only recovery changes no row or progress. Apply grants in JOBS_POSTGRES.md.
+**47 core, 21 identity and 349 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with Chromium unavailable. One statement snapshot covers the
+job, source and accounting checks; identity is admitted separately. Later changes
+cannot retract metadata and later effects must recheck eligibility. Full human
+expense review and statutory approval remain separate. Next: validated explicit
+funding/counterpart intent, then job-backed shared journal preparation. Human
+handoff, providers, scheduling, posting, final approval and production qualification
+remain unfinished. No UI/live integration or active increment remains.

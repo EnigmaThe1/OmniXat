@@ -2500,3 +2500,52 @@ Next: recover job-linked expense receipts/review under fresh eligibility, then s
 explicit funding/counterpart intent before journal preparation. Human handoff,
 scheduling, providers, ledger posting, final-package approval and production
 qualification remain unfinished. No active implementation remains in this increment.
+
+## C1 job-linked expense recovery summary — completed
+
+Recovered clean `f487932`; no unfinished increment or competing writer recorded.
+Recover the exact saved expense effect/plan through the shared current expense
+read gate, with fresh identity, live worker lease and original receipt/digest/source
+binding. Return metadata only; do not expose monetary values, mutate progress,
+choose funding or record approval. Keep human review and write roles separate.
+
+
+Migration 0061 and `AuthenticatedJobStore.get_expense_summary` recover the original
+expense-effect receipt, canonical saved plan, source references/fingerprint,
+scan-policy version, source kind and expense creation time. A separate execute-only
+summary login uses a read-only transaction and one stable statement snapshot.
+Existing CSV/expense read gates check live worker/lease, exact extraction/expense
+effect and plan digests, resolved source, current scan and accounting policy. The
+saved expense must match the job, selected source cell, context and original
+expense/source creators. Amounts are checked inside PostgreSQL and redacted before
+return; no monetary values or document bytes leave this function. No progress or
+other record is changed. Apply the summary-only grant in JOBS_POSTGRES.md.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2,
+psycopg 3.3.8 binary adapter and requirements-http.txt dependencies:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **47 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **349 passed**.
+  Eight new tests cover receipt/context recovery after different-worker reclaim,
+  unchanged job rows, current scan/period/account gates, scope/role/revocation and
+  tenant restrictions, wrong/expired/replaced/cancelled claims, missing effect and
+  changed pence/context/creator/digest rejection, metadata-only SQL output, read-only
+  transactions, dedicated grants/context cleanup, clarified sources and revocation
+  during input recovery, and a receipt linked to another job's draft. Upgrade
+  preserves existing records and verifies the new function is installed.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**;
+  unchanged browser case reports Chromium unavailable (503). No tests skipped or
+  removed; no prototype or commercial UI code changed.
+- `git diff --check`: passed.
+
+Recovery is a snapshot observation, not continuing eligibility, a lease reservation,
+funding choice, human bookkeeping review decision, posting authority or approval.
+Identity admission precedes the read; subsequent membership/source/policy/job changes
+cannot retract already-returned metadata. Later effects must recheck current
+identity, worker lease and eligibility. Existing human-only full expense review
+remains separate. Next: persist explicit validated funding/counterpart intent before
+connecting shared journal preparation to job-effect receipts. Human handoff,
+scheduling, providers, posting, final-package approval and production qualification
+remain unfinished. No active implementation remains in this increment.
