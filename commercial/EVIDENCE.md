@@ -662,3 +662,22 @@ replacement, ledger posting and statutory approval remain separate actions.
 Grant the dedicated decision writer USAGE on `omnixat_extraction` and
 EXECUTE only on
 `omnixat_extraction.record_expense_journal_amount_correction_decision(uuid,uuid,bytea,text,text)`.
+
+## Reading proposal review decisions
+
+Migration 0045 adds `read_expense_journal_amount_correction_decisions`.
+An interactive tenant reader with records read and evidence read permission
+can read observations for the exact eligible proposal digest. Each page
+contains up to 100 decisions (default 25) in reviewer-ID order. Continue
+with the same digest and the returned `next_after_reviewer` cursor.
+
+An eligible empty page is distinct from an unavailable proposal. Older
+digests remain historical records and are excluded. Each page rechecks
+eligibility. Restart at the first page to include new reviewers sorting
+before the current cursor. A list of observations provides no aggregate
+verdict or authority to replace a journal or post ledger entries.
+
+Grant the dedicated history reader USAGE on `omnixat_extraction` and EXECUTE
+only on
+`omnixat_extraction.read_expense_journal_amount_correction_decisions(uuid,uuid,bytea,text,integer)`.
+Keep original-document, proposal-detail and write grants separate.

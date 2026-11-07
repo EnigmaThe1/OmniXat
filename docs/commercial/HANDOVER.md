@@ -575,3 +575,11 @@ reader grant as documented in EVIDENCE.md. **46 core, 21 identity and 222
 PostgreSQL/HTTP tests pass**. The unchanged prototype passes 19 of 20
 tests with the known Chromium socket failure. Next: scoped decision
 history for the exact eligible proposal digest.
+
+## Latest correction proposal decision history checkpoint
+
+Migration 0045 reads bounded decision pages for the exact eligible proposal
+digest through a dedicated grant documented in EVIDENCE.md. **46 core,
+21 identity and 224 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with the known Chromium socket failure. Next: preview
+a replacement draft linked to the exact proposal and reviewed observation.

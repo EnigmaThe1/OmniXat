@@ -643,3 +643,50 @@ def record_expense_journal_amount_correction_decision(
         return ExpenseJournalAmountCorrectionDecisionReceipt(
             proposal, proposal_sha256, decision, actor_id, row["decision_recorded_at"],
         )
+
+
+@dataclass(frozen=True)
+class ExpenseJournalAmountCorrectionDecisionPage:
+    decisions: tuple[ExpenseJournalAmountCorrectionDecisionReceipt, ...]
+    next_after_reviewer: str | None = field(repr=False)
+
+
+def read_expense_journal_amount_correction_decisions(
+    connection, actor, tenant_id, organisation_id, proposal_id, *,
+    proposal_sha256: str, page_size: int = 25, after_reviewer: str | None = None,
+) -> ExpenseJournalAmountCorrectionDecisionPage:
+    """Read a bounded history of observations against the exact eligible proposal."""
+    tenant = _authorize(actor, tenant_id, "records:read")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal review required")
+    if type(proposal_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", proposal_sha256):
+        raise ValueError("An exact proposal digest is required")
+    if type(page_size) is not int or not 1 <= page_size <= 100:
+        raise ValueError("Proposal decision page size must be between 1 and 100")
+    if after_reviewer is not None and (
+        type(after_reviewer) is not str or not after_reviewer.strip()
+        or len(after_reviewer) > 200 or "\0" in after_reviewer
+    ):
+        raise ValueError("Invalid proposal decision cursor")
+    organisation, proposal = (UUID(str(value)) for value in (organisation_id, proposal_id))
+    with _tenant_transaction(connection, tenant, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+        "expense_journal_amount_corrections", "expense_journal_amount_correction_decisions",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_expense_journal_amount_correction_decisions")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.read_expense_journal_amount_correction_decisions(%s,%s,%s,%s,%s)
+            """, (organisation, proposal, bytes.fromhex(proposal_sha256), after_reviewer, page_size))
+            rows = cursor.fetchall()
+    if not rows:
+        raise EvidenceNotEligible("Journal correction proposal is unavailable")
+    if rows[0]["reviewer_id"] is None:
+        return ExpenseJournalAmountCorrectionDecisionPage((), None)
+    decisions = tuple(ExpenseJournalAmountCorrectionDecisionReceipt(
+        proposal, proposal_sha256, row["decision"], row["reviewer_id"], row["recorded_at"],
+    ) for row in rows[:page_size])
+    next_cursor = decisions[-1].reviewer_id if len(rows) > page_size else None
+    return ExpenseJournalAmountCorrectionDecisionPage(decisions, next_cursor)

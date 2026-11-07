@@ -1761,3 +1761,32 @@ with the pinned psycopg 3.3.8 source adapter:
 
 Next: return a bounded, scoped history of review decisions for the exact
 eligible proposal digest. Journal replacement and posting remain separate.
+
+## C4 correction proposal decision history — completed
+
+Recovered clean `2d8d12f`. Return a bounded page of attributed decisions
+for the exact eligible proposal digest. Preserve reviewer ordering and
+exclude observations against older digests or other tenant scopes.
+
+Migration 0045 returns a bounded page of attributed decisions for the
+exact eligible proposal digest. Cursor ordering is by reviewer ID and
+stale digests fail closed. Empty eligible pages remain distinguishable
+from unavailable proposals. Older observations remain stored separately.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **224 passed**.
+  New cases cover paging and empty pages, history exclusion, stale cursors,
+  scope, malformed pagination, restricted grants and blocked source evidence.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: preview an explicit replacement journal draft linked to the exact
+proposal and an attributed reviewed observation. Preserve the original
+journal and keep posting as a separate operation.
