@@ -15,6 +15,37 @@ from .postgres import _tenant_transaction, TenantRecords
 RECORD_SCOPES = frozenset({'records:read', 'records:write'})
 
 
+def _resolve_record_principal(connection, identity, tenant, *, write):
+    with connection.cursor(row_factory=dict_row) as cursor:
+        cursor.execute("""SELECT set_config('omnixat.issuer', %s, true),
+                                 set_config('omnixat.subject', %s, true)""",
+                       (identity.issuer, identity.subject))
+        cursor.execute("""SELECT i.id, i.actor_kind, m.role
+            FROM omnixat.identities i JOIN omnixat.memberships m ON m.user_id=i.id
+            WHERE i.issuer=%s AND i.subject=%s AND m.tenant_id=%s
+                AND i.disabled_at IS NULL AND m.revoked_at IS NULL
+                AND %s > i.tokens_valid_after""",
+            (identity.issuer, identity.subject, tenant, identity.issued_at))
+        member = cursor.fetchone()
+        if member is None:
+            raise AuthenticationError("Workspace access denied")
+    actor = Principal(str(member['id']), str(tenant), member['role'],
+                      api_scopes=identity.scopes & RECORD_SCOPES,
+                      actor_kind=member['actor_kind'])
+    require_tenant(actor, str(tenant), 'records:write' if write else 'records:read')
+    return actor
+
+
+def resolve_record_principal(connection, verifier, token, tenant_id, *, write=False):
+    """Resolve authority for one immediate service call; do not cache the result."""
+    identity = verifier.verify(token)
+    if type(write) is not bool:
+        raise ValueError("Explicit write flag required")
+    tenant = UUID(str(tenant_id))
+    with _tenant_transaction(connection, tenant, tables_required=("identities", "memberships")):
+        return _resolve_record_principal(connection, identity, tenant, write=write)
+
+
 @contextmanager
 def authenticated_records(connection, verifier, token, tenant_id, *, write=False):
     identity = verifier.verify(token)
@@ -22,23 +53,7 @@ def authenticated_records(connection, verifier, token, tenant_id, *, write=False
         raise ValueError("Explicit write flag required")
     tenant = UUID(str(tenant_id))
     with _tenant_transaction(connection, tenant, write=write, identity_tables=True):
-        with connection.cursor(row_factory=dict_row) as cursor:
-            cursor.execute("""SELECT set_config('omnixat.issuer', %s, true),
-                                     set_config('omnixat.subject', %s, true)""",
-                           (identity.issuer, identity.subject))
-            cursor.execute("""SELECT i.id, i.actor_kind, m.role
-                FROM omnixat.identities i JOIN omnixat.memberships m ON m.user_id=i.id
-                WHERE i.issuer=%s AND i.subject=%s AND m.tenant_id=%s
-                    AND i.disabled_at IS NULL AND m.revoked_at IS NULL
-                    AND %s > i.tokens_valid_after""",
-                (identity.issuer, identity.subject, tenant, identity.issued_at))
-            member = cursor.fetchone()
-            if member is None:
-                raise AuthenticationError("Workspace access denied")
-        actor = Principal(str(member['id']), str(tenant), member['role'],
-                          api_scopes=identity.scopes & RECORD_SCOPES,
-                          actor_kind=member['actor_kind'])
-        require_tenant(actor, str(tenant), 'records:write' if write else 'records:read')
+        actor = _resolve_record_principal(connection, identity, tenant, write=write)
         records = TenantRecords(connection, actor, tenant, write)
         try:
             yield records

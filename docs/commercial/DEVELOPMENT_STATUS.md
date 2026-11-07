@@ -2166,3 +2166,47 @@ gate or grant execution authority. No provider, autonomous worker or UI is wired
 Next: a bounded preparation executor using recovered inputs, fresh membership,
 worker/lease checks and the existing evidence gate, with restart-safe domain effects.
 Ledger posting, external providers and production qualification remain unfinished.
+
+## C1 authenticated preparation job boundary — completed
+
+Recovered clean `ae98077`; no active implementation or competing writer found.
+Connect the existing signed access-token verifier and persisted membership checks
+to typed job creation, recovery, claims, progress, failure, cancellation and note
+effects. Resolve current authority for every call without caching principals or
+retaining bearer tokens. Preserve the records identity behaviour and job fencing.
+This is the identity prerequisite for a bounded executor; no scheduler starts.
+
+
+`AuthenticatedJobStore` resolves a fresh signed-token identity and persisted tenant
+membership before each existing typed job operation. The shared lookup also backs
+`authenticated_records`, retaining its single-transaction behaviour. Separate
+minimal identity/job connections keep identity tables outside the job login.
+The boundary caches no principals or bearer tokens and accepts no role headers.
+Existing job attribution, retry receipts, cancellation and worker fencing remain
+in the shared store. No migration is needed. See JOBS_POSTGRES.md for grants and
+per-call revocation semantics.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **285 passed**.
+  Nine new tests cover signed-agent lifecycle and recovery, original effect
+  attribution, all-method revocation, role downgrades, invalid/expired tokens,
+  identity cutoff/disablement, scopes, tenant isolation, worker identity fencing,
+  least-privilege connections and current authority on terminal receipt replay.
+  Existing authenticated record/HTTP behaviour remains covered by the full suite.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. The unchanged browser test receives
+  503 with Chromium unavailable. No test was skipped or removed.
+- `git diff --check`: passed.
+
+Identity lookup and job work are separate transactions. Revocation governs the
+next lookup, not an admitted call or effects already committed; token expiry is
+checked at entry. This is the identity prerequisite for a bounded executor, not
+an executor or production-qualified identity integration. Next: connect recovered
+task inputs to the current evidence gate under a live worker lease, and execute
+one bounded restart-safe preparation step. Scheduling, external providers, ledger
+posting and final-package approval remain unfinished.

@@ -101,3 +101,14 @@ Primary technical sources checked 5 November 2026:
 - [PyJWT decode configuration and required claims](https://pyjwt.readthedocs.io/en/stable/api.html)
 
 No legal rule, amount or filing capability changed in this increment.
+
+## Shared immediate-call resolution
+
+`resolve_record_principal(connection, verifier, token, tenant_id, write=False)`
+uses the same identity/member lookup in an identity-only read transaction. Its
+returned Principal is for one immediate internal service call, never a cache or
+an externally accepted credential. The [authenticated preparation job boundary](JOBS_POSTGRES.md#signed-identity-boundary-for-preparation-jobs)
+uses it for each operation with separate identity/job connections. It preserves
+records-only scopes and observes revocations on the next lookup; it does not
+serialize membership changes with the later job transaction. Existing
+`authenticated_records` still resolves membership inside its record transaction.

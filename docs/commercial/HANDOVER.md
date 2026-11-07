@@ -708,3 +708,17 @@ only; current identity, live leases and the existing scan/read gate remain requi
 Next: connect a bounded preparation executor to these checks and restart-safe
 shared-service effects. Providers, ledger posting and production qualification remain
 unfinished. No active implementation remains in this increment.
+
+## Latest authenticated job checkpoint
+
+`AuthenticatedJobStore` uses the shared signed-token/persisted-member lookup before
+every typed job operation, including retries and note effects. It caches no tokens
+or principals. Separate identity/job roles require the grants in JOBS_POSTGRES.md.
+Existing records retain their same-transaction lookup. No migration is needed.
+**46 core, 21 identity and 285 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with Chromium unavailable. Revocation is observed on the next
+lookup; it does not serialize through an already-admitted job operation.
+Next: use recovered references, fresh identity, a live lease and the current evidence
+gate for one bounded preparation execution step. No scheduler, provider, UI,
+posting or filing integration is wired by this checkpoint. No active implementation
+remains in this increment.

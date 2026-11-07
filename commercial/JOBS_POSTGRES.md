@@ -208,3 +208,53 @@ bounded executor to fresh identity, lease and evidence-read checks.
 Composite-reference and retry semantics rechecked on 7 November 2026 against
 PostgreSQL 16 [constraints](https://www.postgresql.org/docs/16/ddl-constraints.html)
 and [INSERT](https://www.postgresql.org/docs/16/sql-insert.html).
+
+## Signed identity boundary for preparation jobs
+
+`omnixat_core.jobs_identity_postgres.AuthenticatedJobStore` accepts an exclusive
+idle autocommit identity connection, an exclusive idle autocommit job connection
+and the existing server-configured `AccessTokenVerifier`. Each method takes an
+access token and tenant UUID string instead of a caller-supplied Principal:
+
+```python
+jobs = AuthenticatedJobStore(identity_connection, job_connection, server_verifier)
+job = jobs.create_evidence_task(access_token, tenant_uuid, request_key, task)
+lease = jobs.claim(access_token, tenant_uuid, job)
+inputs = jobs.get_evidence_task(access_token, tenant_uuid, job)
+```
+
+The boundary exposes typed task creation, `get`, `get_evidence_task`, `retry_state`,
+`claim`, `checkpoint`, `cancel`, `fail` and `create_note_effect`. Parameters and
+receipts otherwise follow the trusted job store. It does not expose hash-only
+creation or accept customer-selected roles, worker IDs or actor kinds. Pinned
+verifier configuration must come from the server. Bearer tokens are arguments for
+one call; the boundary stores neither tokens nor resolved principals.
+
+The shared `resolve_record_principal` service verifies the signed access token and
+reads persisted identity/membership using a read-only transaction on every call.
+Role, human/agent kind, disabled identity, membership revocation and token cutoff
+come from the database. Signed scopes are limited to the existing records allowlist.
+The job service then checks its existing permissions, live worker/token/lease and
+operation-specific retry rules in its own transaction. Notes retain the shared
+validated record/audit path. Receipt replay also requires current authority.
+
+Use a separate identity login with only schema USAGE and SELECT on
+`omnixat.identities` and `omnixat.memberships`. It needs no job, evidence or note
+grants. The job login retains the grants documented above and needs no identity
+access. Both must be safe non-owner roles with active RLS. Administrative
+provisioning remains separate. Never share either connection concurrently or hold
+an outer transaction around a call. The existing records adapter reuses the same
+lookup without changing its single-transaction record behaviour.
+
+This is a per-call admission check. Identity lookup and the job operation are
+separate transactions: a revocation committed before the next identity lookup is
+observed, but it does not cancel a call already admitted, serialize revocation
+through effect commit or undo a committed note. Token expiry is checked on entry.
+The job lease independently fences stale workers. A bounded executor must still
+use the current evidence scan/read gate and recheck authority at later operations;
+this boundary neither releases document bytes nor executes a provider or scheduler.
+It grants no filing approval, billing or bank access. Entity-specific grants,
+maintained-provider provisioning and production qualification remain unfinished.
+
+Transaction visibility rechecked on 7 November 2026 against PostgreSQL 16
+[transaction isolation](https://www.postgresql.org/docs/16/transaction-iso.html).
