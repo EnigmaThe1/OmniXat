@@ -637,5 +637,28 @@ snapshot. Stale or changed proposals are unavailable.
 The result contains the original receipt, author and the same balanced GBP
 proposal and provenance returned by the preview. Access is read-only.
 Grant a dedicated reader USAGE on `omnixat_extraction` and EXECUTE only on
-`omnixat_extraction.read_saved_expense_journal_amount_correction(uuid,uuid)`.
-Original bytes, write functions and direct table access remain separate.
+`omnixat_extraction.read_expense_journal_amount_correction_review(uuid,uuid)`.
+When upgrading from migration 0043, replace the previous reader grant on
+`read_saved_expense_journal_amount_correction(uuid,uuid)`. Migration 0044
+preserves existing ACLs. Original bytes, write functions and direct table
+access remain separate.
+
+
+## Recording an exact-proposal review decision
+
+Migration 0044 adds `proposal_sha256` to the saved proposal review. The
+versioned digest binds tenant, organisation, proposal identity, author,
+creation time, original journal snapshot, evidence, cell and balanced
+amounts/accounts. Its timestamp representation is independent of session
+timezone.
+
+An interactive owner or editor with evidence access can record `reviewed`
+or `changes_requested` against that digest. Each reviewer has one decision
+per exact proposal. Identical eligible retries return the original receipt,
+and a different decision conflicts. Historical decisions remain attributed
+to their original digest. These are bookkeeping observations. Journal
+replacement, ledger posting and statutory approval remain separate actions.
+
+Grant the dedicated decision writer USAGE on `omnixat_extraction` and
+EXECUTE only on
+`omnixat_extraction.record_expense_journal_amount_correction_decision(uuid,uuid,bytea,text,text)`.

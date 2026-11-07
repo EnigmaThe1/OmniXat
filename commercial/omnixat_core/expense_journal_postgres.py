@@ -561,6 +561,7 @@ class ExpenseJournalAmountCorrectionReview:
     receipt: ExpenseJournalAmountCorrectionReceipt
     created_by: str = field(repr=False)
     proposal: ExpenseJournalAmountCorrection
+    proposal_sha256: str
 
 
 def read_expense_journal_amount_correction(
@@ -578,8 +579,8 @@ def read_expense_journal_amount_correction(
         "expense_journal_amount_corrections",
     )):
         with connection.cursor(row_factory=dict_row) as cursor:
-            _require_draft_role(cursor, "read_saved_expense_journal_amount_correction")
-            cursor.execute("SELECT * FROM omnixat_extraction.read_saved_expense_journal_amount_correction(%s,%s)",
+            _require_draft_role(cursor, "read_expense_journal_amount_correction_review")
+            cursor.execute("SELECT * FROM omnixat_extraction.read_expense_journal_amount_correction_review(%s,%s)",
                            (organisation, proposal))
             row = cursor.fetchone()
     if row is None:
@@ -588,4 +589,57 @@ def read_expense_journal_amount_correction(
     receipt = ExpenseJournalAmountCorrectionReceipt(row["proposal_id"], row["journal_id"], digest, row["created_at"])
     cell = AmountCell(row["field_name"], row["source_row"], row["source_column"])
     details = _amount_correction_details(row, row["journal_id"], digest, row["job_id"], cell)
-    return ExpenseJournalAmountCorrectionReview(receipt, row["created_by"], details)
+    return ExpenseJournalAmountCorrectionReview(receipt, row["created_by"], details, row["proposal_sha256"].hex())
+
+
+
+class ExpenseJournalAmountCorrectionDecisionConflict(Exception):
+    """The reviewer already recorded a different decision for this exact proposal."""
+
+
+@dataclass(frozen=True)
+class ExpenseJournalAmountCorrectionDecisionReceipt:
+    proposal_id: UUID
+    proposal_sha256: str
+    decision: JournalDecision
+    reviewer_id: str = field(repr=False)
+    recorded_at: datetime
+
+
+def record_expense_journal_amount_correction_decision(
+    connection, actor, tenant_id, organisation_id, proposal_id, *,
+    proposal_sha256: str, decision: JournalDecision,
+) -> ExpenseJournalAmountCorrectionDecisionReceipt:
+    """Record a human bookkeeping observation against the exact eligible proposal."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal review required")
+    actor_id = actor.user_id
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
+        raise ValueError("Invalid correction proposal reviewer")
+    if type(proposal_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", proposal_sha256):
+        raise ValueError("An exact proposal digest is required")
+    if decision not in ("reviewed", "changes_requested"):
+        raise ValueError("Unsupported correction proposal decision")
+    organisation, proposal = (UUID(str(value)) for value in (organisation_id, proposal_id))
+    with _tenant_transaction(connection, tenant, write=True, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+        "expense_journal_amount_corrections", "expense_journal_amount_correction_decisions",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "record_expense_journal_amount_correction_decision")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.record_expense_journal_amount_correction_decision(%s,%s,%s,%s,%s)
+            """, (organisation, proposal, bytes.fromhex(proposal_sha256), decision, actor_id))
+            row = cursor.fetchone()
+        if row["outcome"] == "unavailable":
+            raise EvidenceNotEligible("Journal correction proposal is unavailable")
+        if row["outcome"] == "conflict":
+            raise ExpenseJournalAmountCorrectionDecisionConflict("A different proposal decision already exists")
+        if row["outcome"] != "stored":
+            raise RuntimeError("Correction proposal decision receipt unavailable")
+        return ExpenseJournalAmountCorrectionDecisionReceipt(
+            proposal, proposal_sha256, decision, actor_id, row["decision_recorded_at"],
+        )

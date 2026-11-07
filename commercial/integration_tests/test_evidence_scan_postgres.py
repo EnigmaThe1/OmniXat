@@ -45,6 +45,7 @@ from omnixat_core.expense_journal_postgres import (
     ExpenseJournalAmountCorrectionConflict, link_expense_journal_clarification_evidence, record_expense_journal_clarification,
     prepare_expense_journal_preview, preview_expense_journal_amount_correction,
     read_expense_journal_amount_correction, read_expense_journal_decisions, read_expense_journal_draft,
+    record_expense_journal_amount_correction_decision, ExpenseJournalAmountCorrectionDecisionConflict,
     ExpenseJournalCorrectionConflict, record_expense_journal_correction, record_expense_journal_decision,
 )
 from test_postgres import PostgresFixture
@@ -363,11 +364,25 @@ class EvidenceScanTests(PostgresFixture):
         cls.addClassCleanup(cls.drop_role, proposal_reader_role)
         cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(proposal_reader))
         cls.owner.execute(sql.SQL(
-            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_saved_expense_journal_amount_correction"
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_expense_journal_amount_correction_review"
             "(uuid,uuid) TO {}"
         ).format(proposal_reader))
         cls.proposal_reader_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                                user=proposal_reader_role, password=password)
+
+        proposal_decision_role = cls.role + "_proposal_decision"
+        proposal_decision_writer = sql.Identifier(proposal_decision_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(proposal_decision_writer, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, proposal_decision_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(proposal_decision_writer))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.record_expense_journal_amount_correction_decision"
+            "(uuid,uuid,bytea,text,text) TO {}"
+        ).format(proposal_decision_writer))
+        cls.proposal_decision_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                                 user=proposal_decision_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -2343,6 +2358,10 @@ class EvidenceScanTests(PostgresFixture):
             result = read_expense_journal_amount_correction(reader, viewer, self.a, self.org, receipt.id)
             self.assertEqual((result.receipt, result.created_by, result.proposal),
                              (receipt, self.actor.user_id, expected))
+            reader.execute("SET TIME ZONE 'Pacific/Auckland'")
+            self.assertEqual(read_expense_journal_amount_correction(
+                reader, viewer, self.a, self.org, receipt.id,
+            ).proposal_sha256, result.proposal_sha256)
             for query, args in (
                 ("SELECT * FROM omnixat.expense_journal_amount_corrections", ()),
                 ("SELECT * FROM omnixat_extraction.read_eligible_original(%s,%s)", (self.org, supporting.id)),
@@ -2411,3 +2430,94 @@ class EvidenceScanTests(PostgresFixture):
                                (self.a, journal.receipt.id))
             with self.assertRaises(EvidenceNotEligible):
                 review()
+
+
+    def test_correction_proposal_decision_is_attributed_snapshot_bound_and_retry_safe(self):
+        _, _, _, _, receipt = self.saved_amount_correction_fixture()
+        with psycopg.connect(self.proposal_reader_dsn, autocommit=True) as reader:
+            review = read_expense_journal_amount_correction(reader, self.actor, self.a, self.org, receipt.id)
+        start = Barrier(2)
+
+        def record():
+            with psycopg.connect(self.proposal_decision_dsn, autocommit=True) as writer:
+                start.wait(timeout=5)
+                return record_expense_journal_amount_correction_decision(
+                    writer, self.actor, self.a, self.org, receipt.id,
+                    proposal_sha256=review.proposal_sha256, decision="reviewed",
+                )
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(lambda _: record(), range(2)))
+        self.assertEqual(first, second)
+        self.assertEqual((first.proposal_id, first.proposal_sha256, first.reviewer_id, first.decision),
+                         (receipt.id, review.proposal_sha256, self.actor.user_id, "reviewed"))
+        with psycopg.connect(self.proposal_decision_dsn, autocommit=True) as writer:
+            with self.assertRaises(ExpenseJournalAmountCorrectionDecisionConflict):
+                record_expense_journal_amount_correction_decision(
+                    writer, self.actor, self.a, self.org, receipt.id,
+                    proposal_sha256=review.proposal_sha256, decision="changes_requested",
+                )
+            self.owner.execute("UPDATE omnixat.expense_journal_amount_corrections SET created_by='fictional-new-author' WHERE id=%s",
+                               (receipt.id,))
+            with self.assertRaises(EvidenceNotEligible):
+                record_expense_journal_amount_correction_decision(
+                    writer, self.actor, self.a, self.org, receipt.id,
+                    proposal_sha256=review.proposal_sha256, decision="reviewed",
+                )
+        with psycopg.connect(self.proposal_reader_dsn, autocommit=True) as reader:
+            changed = read_expense_journal_amount_correction(reader, self.actor, self.a, self.org, receipt.id)
+        self.assertNotEqual(changed.proposal_sha256, review.proposal_sha256)
+        with psycopg.connect(self.proposal_decision_dsn, autocommit=True) as writer:
+            latest = record_expense_journal_amount_correction_decision(
+                writer, self.actor, self.a, self.org, receipt.id,
+                proposal_sha256=changed.proposal_sha256, decision="changes_requested",
+            )
+        self.assertEqual(self.owner.execute("""
+            SELECT proposal_sha256,decision FROM omnixat.expense_journal_amount_correction_decisions
+            WHERE tenant_id=%s AND proposal_id=%s ORDER BY recorded_at
+        """, (self.a, receipt.id)).fetchall(), [
+            (bytes.fromhex(first.proposal_sha256), "reviewed"),
+            (bytes.fromhex(latest.proposal_sha256), "changes_requested"),
+        ])
+
+    def test_correction_proposal_decision_rejects_stale_scope_and_nonhuman_review(self):
+        _, supporting, _, _, receipt = self.saved_amount_correction_fixture()
+        with psycopg.connect(self.proposal_reader_dsn, autocommit=True) as reader:
+            review = read_expense_journal_amount_correction(reader, self.actor, self.a, self.org, receipt.id)
+            with self.assertRaises(PermissionError):
+                record_expense_journal_amount_correction_decision(
+                    reader, self.actor, self.a, self.org, receipt.id,
+                    proposal_sha256=review.proposal_sha256, decision="reviewed",
+                )
+        with psycopg.connect(self.proposal_decision_dsn, autocommit=True) as writer:
+            def record(*, actor=self.actor, tenant=self.a, org=self.org, proposal=receipt.id,
+                       digest=review.proposal_sha256, decision="reviewed"):
+                return record_expense_journal_amount_correction_decision(
+                    writer, actor, tenant, org, proposal, proposal_sha256=digest, decision=decision,
+                )
+            for overrides in (
+                {"actor": self.other, "tenant": self.b}, {"org": uuid4()}, {"proposal": uuid4()}, {"digest": "0" * 64},
+            ):
+                with self.subTest(overrides=overrides), self.assertRaises(EvidenceNotEligible):
+                    record(**overrides)
+            for actor in (
+                Principal("agent", self.a, "editor", actor_kind="agent"),
+                Principal("api", self.a, "editor", api_scopes=frozenset({"records:write", "evidence:read"})),
+                Principal("viewer", self.a, "viewer"),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    record(actor=actor)
+            for overrides in ({"decision": "approved"}, {"digest": "invalid"}):
+                with self.subTest(overrides=overrides), self.assertRaises(ValueError):
+                    record(**overrides)
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                writer.execute("SELECT * FROM omnixat.expense_journal_amount_correction_decisions")
+            self.owner.execute("""INSERT INTO omnixat.evidence_scan_verdicts
+                (tenant_id,evidence_id,content_sha256,byte_size,policy_version,verdict)
+                SELECT tenant_id,evidence_id,content_sha256,byte_size,policy_version,'blocked'
+                FROM omnixat.evidence_scan_verdicts WHERE tenant_id=%s AND evidence_id=%s AND verdict='clean'
+            """, (self.a, supporting.id))
+            with self.assertRaises(EvidenceNotEligible):
+                record()
+        self.assertEqual(self.owner.execute("""
+            SELECT count(*) FROM omnixat.expense_journal_amount_correction_decisions WHERE tenant_id=%s
+        """, (self.a,)).fetchone(), (0,))

@@ -1731,3 +1731,33 @@ with the pinned psycopg 3.3.8 source adapter:
 
 Next: record an attributed human bookkeeping review decision bound to the
 exact saved proposal. Keep journal replacement and posting separate.
+
+## C4 exact-proposal human review decisions — completed
+
+Recovered clean `d3fa61e`. Add a versioned digest of the exact eligible
+saved proposal and record attributed human bookkeeping observations against
+it. Preserve historical decisions and provide retry protection.
+
+Migration 0044 exposes a versioned digest of the eligible saved proposal
+and records one attributed bookkeeping observation per reviewer and digest.
+Identical eligible retries return the original receipt; different decisions
+conflict. A changed proposal requires its new digest and retains historical
+decisions. Replace the saved-proposal reader grant as documented in EVIDENCE.md.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **222 passed**.
+  Coverage includes concurrent decision replay, conflicts, stale digests,
+  changed attribution, historical decisions, timezone-independent hashes,
+  tenant scope, nonhuman rejection and restricted grants.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: return a bounded, scoped history of review decisions for the exact
+eligible proposal digest. Journal replacement and posting remain separate.

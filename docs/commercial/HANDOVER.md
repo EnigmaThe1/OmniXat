@@ -566,3 +566,12 @@ author and balanced GBP lines with exact provenance. See EVIDENCE.md for
 the dedicated reader grant. **46 core, 21 identity and 220 PostgreSQL/HTTP
 tests pass**. The unchanged prototype passes 19 of 20 tests with the known
 Chromium socket failure. Next: an exact-proposal human review decision.
+
+## Latest exact-proposal review decision checkpoint
+
+Migration 0044 adds versioned proposal digests and attributed human
+bookkeeping observations with retry protection. Replace the saved-proposal
+reader grant as documented in EVIDENCE.md. **46 core, 21 identity and 222
+PostgreSQL/HTTP tests pass**. The unchanged prototype passes 19 of 20
+tests with the known Chromium socket failure. Next: scoped decision
+history for the exact eligible proposal digest.
