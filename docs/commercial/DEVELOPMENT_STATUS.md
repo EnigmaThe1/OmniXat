@@ -1540,3 +1540,33 @@ psycopg adapter from the repository's pinned 3.3.8 upstream tag:
 
 Next: return attributed answers through the scoped journal decision read
 and suppress questions already answered for the eligible snapshot and reason.
+
+## C4 scoped journal clarification review — completed
+
+Recovered clean `4150bed`. Return attributed answers only for correction
+reasons on the current eligible decision page. Suppress answered questions
+across reviewers of the same snapshot while keeping the existing cursor.
+
+Migration 0037 returns attributed answers for correction reasons on the
+eligible decision page. Duplicate reasons share the same answer even
+across reviewers on different pages. Historical and lookahead answers
+are excluded. Existing cursors and observation receipts are preserved.
+Replace the dedicated decision reader grant as documented in EVIDENCE.md.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **211 passed**.
+  Coverage includes historical and off-page answers, same-reason deduplication,
+  stale snapshots, reader permissions and direct table access denial.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Chromium failed to create
+  a socket on direct launch. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: let an authorised user link eligible evidence to an answered
+correction for later review. Keep answer text separate from verified
+evidence and leave journal edits and posting to separate actions.

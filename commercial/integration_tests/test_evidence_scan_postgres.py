@@ -38,7 +38,8 @@ from omnixat_core.expense_funding_postgres import (
     ExpenseFundingConflict, read_expense_funding_context, record_expense_funding_context,
 )
 from omnixat_core.expense_journal_postgres import (
-    ExpenseJournalClarificationConflict, ExpenseJournalConflict, ExpenseJournalDecisionConflict,
+    ExpenseJournalClarification, ExpenseJournalClarificationConflict, ExpenseJournalConflict,
+    ExpenseJournalDecisionConflict,
     create_expense_journal_draft, record_expense_journal_clarification,
     prepare_expense_journal_preview, read_expense_journal_decisions, read_expense_journal_draft,
     ExpenseJournalCorrectionConflict, record_expense_journal_correction, record_expense_journal_decision,
@@ -275,7 +276,7 @@ class EvidenceScanTests(PostgresFixture):
         cls.addClassCleanup(cls.drop_role, decision_reader_role)
         cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(decision_reader))
         cls.owner.execute(sql.SQL(
-            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_expense_journal_decisions_with_corrections"
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_expense_journal_decisions_with_answers"
             "(uuid,uuid,bytea,text,integer) TO {}"
         ).format(decision_reader))
         cls.decision_reader_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
@@ -1647,7 +1648,10 @@ class EvidenceScanTests(PostgresFixture):
                 VALUES (%s,%s,%s,%s,%s,'changes_requested')""", old_scope)
             self.owner.execute("""INSERT INTO omnixat.expense_journal_correction_requests
                 (tenant_id,organisation_id,journal_id,snapshot_sha256,reviewer_id,reason)
-                VALUES (%s,%s,%s,%s,%s,'amount')""", old_scope)
+                VALUES (%s,%s,%s,%s,%s,'account')""", old_scope)
+            self.owner.execute("""INSERT INTO omnixat.expense_journal_clarification_answers
+                (tenant_id,organisation_id,journal_id,snapshot_sha256,reviewer_id,reason,answer,answered_by)
+                VALUES (%s,%s,%s,%s,%s,'account','Fictional old answer.','fictional-old-respondent')""", old_scope)
             first_page = page()
             self.assertEqual((first_page.decisions, first_page.next_after_reviewer), ((first,), earlier.user_id))
             self.assertEqual(first_page.corrections, ())
@@ -1656,6 +1660,16 @@ class EvidenceScanTests(PostgresFixture):
             self.assertEqual((second_page.decisions, second_page.next_after_reviewer), ((second,), None))
             self.assertEqual(second_page.corrections, (correction,))
             self.assertEqual(tuple(question.reason for question in second_page.follow_up_questions), ("account",))
+            self.assertEqual(second_page.answers, ())
+            with psycopg.connect(self.clarification_dsn, autocommit=True) as writer:
+                receipt = record_expense_journal_clarification(
+                    writer, self.actor, self.a, self.org, journal, snapshot_sha256=digest,
+                    correction_reviewer_id=later.user_id, reason="account", answer="Fictional office supplies.",
+                )
+            self.assertEqual(page().answers, ())
+            answered_page = page(first_page.next_after_reviewer)
+            self.assertEqual(answered_page.answers, (ExpenseJournalClarification(receipt, "Fictional office supplies."),))
+            self.assertEqual(answered_page.follow_up_questions, ())
             self.assertEqual(page(later.user_id).decisions, ())
             self.owner.execute("""UPDATE omnixat.expense_journal_drafts SET created_by='fictional-other-author'
                 WHERE tenant_id=%s AND id=%s""", (self.a, journal))
@@ -1692,6 +1706,8 @@ class EvidenceScanTests(PostgresFixture):
                 reader.execute("SELECT * FROM omnixat.expense_journal_review_decisions")
             with self.assertRaises(psycopg.errors.InsufficientPrivilege):
                 reader.execute("SELECT * FROM omnixat.expense_journal_correction_requests")
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                reader.execute("SELECT * FROM omnixat.expense_journal_clarification_answers")
             self.set_active_policy("fictional-v2")
             with self.assertRaises(EvidenceNotEligible):
                 read_expense_journal_decisions(reader, self.actor, self.a, self.org, journal, snapshot_sha256=digest)
@@ -1841,6 +1857,40 @@ class EvidenceScanTests(PostgresFixture):
         with psycopg.connect(self.clarification_dsn, autocommit=True) as writer:
             with self.assertRaises(EvidenceNotEligible):
                 record_expense_journal_clarification(writer, respondent, self.a, self.org, journal, **kwargs)
+
+    def test_journal_review_shares_one_answer_across_corrections_for_the_same_reason(self):
+        review = self.journal_clarification_fixture()
+        journal, digest = review.receipt.id, review.snapshot_sha256
+        second = Principal("fictional-other-reviewer", self.a, "editor")
+        viewer = Principal("fictional-viewer", self.a, "viewer")
+        with psycopg.connect(self.decision_writer_dsn, autocommit=True) as writer:
+            record_expense_journal_decision(writer, second, self.a, self.org, journal,
+                                            snapshot_sha256=digest, decision="changes_requested")
+        with psycopg.connect(self.correction_dsn, autocommit=True) as writer:
+            record_expense_journal_correction(writer, second, self.a, self.org, journal,
+                                              snapshot_sha256=digest, reason="source_evidence")
+        answer = "See the fictional receipt."
+        with psycopg.connect(self.clarification_dsn, autocommit=True) as writer:
+            receipt = record_expense_journal_clarification(
+                writer, self.actor, self.a, self.org, journal, snapshot_sha256=digest,
+                correction_reviewer_id=second.user_id, reason="source_evidence", answer=answer,
+            )
+            with self.assertRaises(PermissionError):
+                read_expense_journal_decisions(writer, self.actor, self.a, self.org, journal, snapshot_sha256=digest)
+
+        with psycopg.connect(self.decision_reader_dsn, autocommit=True) as reader:
+            def page(page_size, cursor=None):
+                return read_expense_journal_decisions(reader, viewer, self.a, self.org, journal,
+                                                      snapshot_sha256=digest, page_size=page_size, after_reviewer=cursor)
+
+            together = page(2)
+            self.assertEqual(len(together.corrections), 2)
+            first_page = page(1)
+            second_page = page(1, first_page.next_after_reviewer)
+            for result in (together, first_page, second_page):
+                self.assertEqual(result.answers, (ExpenseJournalClarification(receipt, answer),))
+                self.assertEqual(result.follow_up_questions, ())
+                self.assertNotIn(answer, repr(result))
 
     def test_journal_clarification_requires_current_scoped_correction_and_human_editor(self):
         review = self.journal_clarification_fixture()

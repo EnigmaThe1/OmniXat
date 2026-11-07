@@ -511,3 +511,12 @@ tests pass**, including the previously pending review-page verification.
 The unchanged prototype passes 19 of 20 tests with the known Chromium
 socket failure. Next: show answers in scoped review and suppress questions
 for answered reasons.
+
+## Latest scoped journal clarification review checkpoint
+
+Migration 0037 shows attributed answers for the visible correction reasons
+on an eligible decision page and suppresses questions that have an answer.
+Replace the dedicated reader grant as documented in EVIDENCE.md. **46 core,
+21 identity and 211 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with the known Chromium socket failure. Next: let an
+authorised user link eligible evidence to an answered correction for review.

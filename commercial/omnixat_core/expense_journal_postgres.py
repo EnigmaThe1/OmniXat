@@ -213,21 +213,41 @@ class ExpenseJournalCorrectionReceipt:
 
 
 @dataclass(frozen=True)
+class ExpenseJournalClarificationReceipt:
+    journal_id: UUID
+    snapshot_sha256: str
+    reason: JournalCorrectionReason
+    correction_reviewer_id: str = field(repr=False)
+    answered_by: str = field(repr=False)
+    answered_at: datetime
+
+
+@dataclass(frozen=True)
+class ExpenseJournalClarification:
+    receipt: ExpenseJournalClarificationReceipt
+    answer: str = field(repr=False)
+
+
+@dataclass(frozen=True)
 class ExpenseJournalDecisionPage:
     decisions: tuple[ExpenseJournalDecisionReceipt, ...]
     next_after_reviewer: str | None = field(repr=False)
     corrections: tuple[ExpenseJournalCorrectionReceipt, ...] = ()
+    answers: tuple[ExpenseJournalClarification, ...] = ()
 
     @property
     def follow_up_questions(self) -> tuple[ExpenseJournalFollowUpQuestion, ...]:
-        return journal_correction_questions(correction.reason for correction in self.corrections)
+        answered_reasons = {answer.receipt.reason for answer in self.answers}
+        return journal_correction_questions(
+            correction.reason for correction in self.corrections if correction.reason not in answered_reasons
+        )
 
 
 def read_expense_journal_decisions(
     connection, actor, tenant_id, organisation_id, journal_id, *,
     snapshot_sha256: str, page_size: int = 25, after_reviewer: str | None = None,
 ) -> ExpenseJournalDecisionPage:
-    """Read observations and their attached corrections for one eligible snapshot."""
+    """Read observations, corrections and answers for one eligible snapshot."""
     tenant = _authorize(actor, tenant_id, "records:read")
     _authorize(actor, tenant_id, "evidence:read")
     if actor.actor_kind != "human" or actor.api_scopes is not None:
@@ -245,11 +265,12 @@ def read_expense_journal_decisions(
 
     with _tenant_transaction(connection, tenant,
                              tables_required=(*_DRAFT_TABLES, "expense_journal_review_decisions",
-                                              "expense_journal_correction_requests")):
+                                              "expense_journal_correction_requests",
+                                              "expense_journal_clarification_answers")):
         with connection.cursor(row_factory=dict_row) as cursor:
-            _require_draft_role(cursor, "read_expense_journal_decisions_with_corrections")
+            _require_draft_role(cursor, "read_expense_journal_decisions_with_answers")
             cursor.execute("""
-                SELECT * FROM omnixat_extraction.read_expense_journal_decisions_with_corrections(%s,%s,%s,%s,%s)
+                SELECT * FROM omnixat_extraction.read_expense_journal_decisions_with_answers(%s,%s,%s,%s,%s)
             """,
                            (organisation, journal, bytes.fromhex(snapshot_sha256), after_reviewer, page_size))
             rows = cursor.fetchall()
@@ -264,7 +285,14 @@ def read_expense_journal_decisions(
     corrections = tuple(ExpenseJournalCorrectionReceipt(
         journal, snapshot_sha256, row["correction_reason"], row["reviewer_id"], row["correction_recorded_at"],
     ) for row in rows[:page_size] if row["correction_reason"] is not None)
-    return ExpenseJournalDecisionPage(decisions, next_cursor, corrections)
+    answer_rows = {row["correction_reason"]: row for row in rows[:page_size] if row["answered_at"] is not None}
+    answers = tuple(ExpenseJournalClarification(
+        ExpenseJournalClarificationReceipt(
+            journal, snapshot_sha256, reason, row["answer_reviewer_id"], row["answered_by"], row["answered_at"],
+        ),
+        row["answer"],
+    ) for reason, row in answer_rows.items())
+    return ExpenseJournalDecisionPage(decisions, next_cursor, corrections, answers)
 
 
 def record_expense_journal_correction(
@@ -305,16 +333,6 @@ def record_expense_journal_correction(
 
 class ExpenseJournalClarificationConflict(Exception):
     """A different answer already exists for the snapshot and reason."""
-
-
-@dataclass(frozen=True)
-class ExpenseJournalClarificationReceipt:
-    journal_id: UUID
-    snapshot_sha256: str
-    reason: JournalCorrectionReason
-    correction_reviewer_id: str = field(repr=False)
-    answered_by: str = field(repr=False)
-    answered_at: datetime
 
 
 def record_expense_journal_clarification(

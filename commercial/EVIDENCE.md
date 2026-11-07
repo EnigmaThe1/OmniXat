@@ -493,7 +493,7 @@ reason; a reason from a different snapshot is never carried forward.
 Decision receipts, page size and cursor behavior are unchanged.
 
 `page.follow_up_questions` returns a fixed question for each distinct
-correction reason on the page, in order of first appearance. Each item
+unanswered correction reason on the page, in order of first appearance. Each item
 contains a reason and question text. Callers collecting multiple pages
 can deduplicate by reason for the same snapshot. This derived property
 uses no record values or reviewer identifiers in the question text and
@@ -501,11 +501,18 @@ has no database writes or delivery side effects.
 
 Give a dedicated non-owner, NOBYPASSRLS reader USAGE on
 `omnixat_extraction` and EXECUTE only on
-`omnixat_extraction.read_expense_journal_decisions_with_corrections(uuid,uuid,bytea,text,integer)`.
-When upgrading from migration 0033, replace that reader's previous
-`read_expense_journal_decisions(uuid,uuid,bytea,text,integer)` grant.
-Migration 0035 leaves existing ACLs unchanged. Keep direct table access
-and other journal grants separate.
+`omnixat_extraction.read_expense_journal_decisions_with_answers(uuid,uuid,bytea,text,integer)`.
+When upgrading, revoke the reader's previous EXECUTE grant on the decision
+reader from migration 0033 or the reader with corrections from migration 0035.
+Migration 0037 leaves existing ACLs unchanged. Keep direct table access and
+other journal grants separate.
+
+Migration 0037 adds `page.answers`. Each entry includes the answer text and
+its original receipt, with the author, recording time and correction reviewer.
+Answers are unique by reason within a page and are returned only for reasons
+visible on that page. The same answer applies to every correction for the
+same reason on that snapshot, even across different pages. Answer text is
+private tenant data and is excluded from the default object representation.
 
 ## Recording a structured journal correction request
 
@@ -541,7 +548,7 @@ requested the same correction. An identical retry by the original author
 returns the original receipt and correction reference. A different author
 or answer conflicts. Eligibility is checked on write and replay. The write
 holds the active scan policy through commit. Answer text is private tenant
-data and is absent from the receipt and existing decision page.
+data and is absent from the write receipt.
 
 Grant the dedicated writer USAGE on `omnixat_extraction` and EXECUTE on
 `omnixat_extraction.record_expense_journal_clarification(uuid,uuid,bytea,text,text,text,text)`
