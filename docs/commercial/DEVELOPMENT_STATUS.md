@@ -2343,3 +2343,52 @@ Next: recover a job-linked extraction receipt and unresolved-question summary th
 current identity and evidence eligibility checks, then connect bounded clarification
 and expense preparation. Production qualification and final human approval remain
 unfinished. No active implementation remains in this increment.
+
+## C1 job-linked CSV recovery summary — completed
+
+Recovered clean `c140d05`; no active increment or competing writer recorded.
+Add a live-worker, current-identity read of an exact saved-plan extraction receipt
+and unresolved clarification summary. Keep source bytes and monetary values out
+of this recovery surface; preserve human-only clarification writes and job progress.
+Verify current scan eligibility, saved plan and source binding on every read.
+
+
+Migration 0058 and `AuthenticatedJobStore.get_csv_summary` recover the original
+extraction-effect receipt, exact source references and unanswered clarification
+questions. A separate execute-only summary login reads job/lease, saved plan,
+current source eligibility, result and human answers in one stable statement
+snapshot. SQL validates candidate values/coordinates before redacting them; no
+monetary values, original bytes or answer authors leave the database on this read.
+Python validates the returned metadata and reuses the fixed clarification prompts.
+Existing human-only answer storage is unchanged. Explicit unavailable answers are
+counted separately and are not asked again; they do not become available amounts.
+Apply the dedicated function grant in JOBS_POSTGRES.md. No data migration is needed.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2,
+psycopg 3.3.8 binary adapter and the requirements-http.txt dependencies:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **320 passed**.
+  Eight new tests cover restart/reclaim receipt recovery, human answers and
+  unavailable outcomes, no repeated resolved questions, missing effect receipts,
+  current scan-policy/blocked-verdict/live-scan checks, scope/revocation/role and
+  tenant restrictions, wrong/expired/replaced/cancelled workers, dedicated grants,
+  metadata-only database output, read-only transactions, context cleanup and corrupt
+  result/plan/answer rejection. The existing migration upgrade case checks the
+  new function while preserving original jobs and empty effect receipts.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**;
+  unchanged browser case reports Chromium unavailable (503). No tests skipped or
+  removed; no prototype or commercial UI code changed.
+- `git diff --check`: passed.
+
+This is a read-only observation, not a lease reservation, continuing eligibility,
+posting authority or job-completion decision. Identity admission precedes the read;
+revocation after admission and cancellation/scanner changes after the statement
+snapshot cannot retract returned metadata. Every later effect must recheck current
+authority/lease/eligibility. No progress or stored answers are changed by this read.
+Next: persist validated expense-preparation context and connect the existing shared
+preparation service to job-scoped retry receipts. Human clarification handoff,
+scheduling, providers, ledger posting, final-package approval and full production
+qualification remain unfinished. No active implementation remains in this increment.

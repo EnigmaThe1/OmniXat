@@ -66,3 +66,9 @@ class AuthenticatedJobStore:
         from .job_csv_effects_postgres import store_job_csv_effect
         actor = self._actor(token, tenant, write=True)
         return store_job_csv_effect(gate_connection, actor, tenant, job_id, lease_token, plan, result)
+
+    def get_csv_summary(self, summary_connection, token, tenant, job_id, lease_token):
+        from .job_csv_summary_postgres import read_job_csv_summary
+        plan = self.get_csv_plan(token, tenant, job_id).plan
+        actor = self._actor(token, tenant, write=True)
+        return read_job_csv_summary(summary_connection, actor, tenant, job_id, lease_token, plan)

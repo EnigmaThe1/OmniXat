@@ -408,3 +408,50 @@ No scheduler, OCR, model, posting, final approval or live integration is enabled
 Technical references rechecked 7 November 2026: PostgreSQL 16
 [row locks](https://www.postgresql.org/docs/16/explicit-locking.html) and
 [function security](https://www.postgresql.org/docs/16/sql-createfunction.html).
+
+## Metadata-only CSV recovery
+
+Migration 0058 and `AuthenticatedJobStore.get_csv_summary` recover an exact job's
+first extraction-effect receipt, source references, current scan-policy version,
+counts and pending questions. Use a **separate summary-only login**, with existing
+CONNECT permission and only these additional grants:
+
+```sql
+GRANT USAGE ON SCHEMA omnixat_extraction TO summary_runtime;
+GRANT EXECUTE ON FUNCTION omnixat_extraction.read_job_csv_summary(uuid,text,uuid,bytea) TO summary_runtime;
+```
+
+It needs no direct table privileges, original-byte access, full review access or
+write function grants. The adapter rejects migration owners and logins with the
+existing original/review/extraction/clarification function privileges. Keep the
+summary login separate from the extraction gate and human clarification writer.
+
+The signed identity is resolved again after plan recovery. The database read
+requires the running job's current worker/token/lease, matching saved-plan digest,
+existing effect receipt and source fingerprint. One stable function snapshot
+covers job state, current scan eligibility, saved result and human answers.
+Candidates are validated against the saved ordered plan before values are removed.
+Malformed candidates and answers attached to different coordinates fail closed.
+The SQL function itself returns only cell status and answered/unavailable flags;
+monetary values, answer authors and document bytes do not leave the database on
+this surface. Python rechecks the metadata shape and uses the existing fixed
+clarification prompts. No evidence text becomes a question or instruction.
+
+`found_count` counts original decimal candidates; `answered_count` counts human
+answers to unresolved cells; `unavailable_count` is the subset explicitly answered
+with no amount. Such an answer removes the repeated question but does not make an
+amount available. Counts are observations, not posting or completion approval.
+No progress, lease, result or answer is changed by recovery. The job remains running.
+Cancelled/completed/failed jobs and expired/replaced workers cannot use this read.
+
+This is a snapshot observation, not a lease reservation or ongoing eligibility
+promise. Membership changes after identity admission and cancellation/scanner
+changes after the statement snapshot cannot retract already-returned metadata.
+Later effects still require fresh authority and current eligibility. Human-only
+clarification storage and final-package approval boundaries are unchanged.
+Next: connect job-linked clarification handoff and expense preparation through the
+shared validated services; no scheduler, model or UI starts from this adapter.
+
+Technical references rechecked 7 November 2026: PostgreSQL 16
+[function snapshots](https://www.postgresql.org/docs/16/xfunc-volatility.html) and
+[security-definer functions](https://www.postgresql.org/docs/16/sql-createfunction.html).

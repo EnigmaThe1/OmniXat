@@ -776,3 +776,22 @@ Next: recover a job-linked extraction receipt/unresolved-question summary under 
 identity and evidence eligibility, then connect bounded clarification and expense
 preparation. No scheduler, provider, posting, final approval, UI or live integration
 is activated. No active implementation remains in this increment.
+
+
+## Latest job-linked CSV recovery checkpoint
+
+Migration 0058 and `AuthenticatedJobStore.get_csv_summary` recover exact extraction
+receipts, source references, counts and pending fixed clarification questions.
+The separate execute-only summary login reads current worker/token/lease, plan,
+source eligibility and human answers in one stable statement snapshot. Candidate
+values are validated then redacted in SQL; this surface returns no monetary values,
+original bytes or answer authors. Apply the new grant in JOBS_POSTGRES.md.
+**46 core, 21 identity and 320 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with Chromium unavailable. Human answers stop repeated questions;
+explicit unavailable answers remain distinct from available amounts. Job progress
+is unchanged; no posting or completion decision is implied. Revocation after
+identity admission or changes after the read snapshot cannot retract metadata.
+Next: persist validated expense-preparation context and connect the existing shared
+preparation service using job-scoped retry receipts. Human clarification handoff,
+scheduling, providers, posting, final approval and production qualification remain
+unfinished. No UI or live integration is activated; no active increment remains.

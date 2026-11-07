@@ -30,6 +30,10 @@ class AuthenticatedJobsTests(MembershipFixture):
             'job_gate': ['USAGE ON SCHEMA omnixat_extraction',
                          'EXECUTE ON FUNCTION omnixat_extraction.read_eligible_original(uuid,uuid)',
                          'EXECUTE ON FUNCTION omnixat_extraction.store_job_csv_result(uuid,text,uuid,uuid,bytea,text,bytea,jsonb)'],
+            'job_summary': ['USAGE ON SCHEMA omnixat_extraction',
+                            'EXECUTE ON FUNCTION omnixat_extraction.read_job_csv_summary(uuid,text,uuid,bytea)'],
+            'job_clarify': ['USAGE ON SCHEMA omnixat_extraction',
+                            'EXECUTE ON FUNCTION omnixat_extraction.store_csv_answer(uuid,uuid,uuid,text,integer,integer,text,text)'],
             'job_auth': ['USAGE ON SCHEMA omnixat', 'SELECT ON omnixat.identities,omnixat.memberships'],
             'job_data': ['USAGE ON SCHEMA omnixat',
                          'SELECT,INSERT,UPDATE ON omnixat.agent_jobs',
@@ -62,6 +66,10 @@ class AuthenticatedJobsTests(MembershipFixture):
         self.jobs = AuthenticatedJobStore(self.identity_connection, self.job_connection, self.verifier)
         self.gate_connection = psycopg.connect(self.job_gate_dsn, autocommit=True)
         self.addCleanup(self.gate_connection.close)
+        self.summary_connection = psycopg.connect(self.job_summary_dsn, autocommit=True)
+        self.addCleanup(self.summary_connection.close)
+        self.clarify_connection = psycopg.connect(self.job_clarify_dsn, autocommit=True)
+        self.addCleanup(self.clarify_connection.close)
         self.owner.execute("DELETE FROM omnixat_extraction.active_scan_policy")
         self.original = b'Fictional document,12.34\r\n'
         evidence = uuid4()
@@ -775,3 +783,161 @@ class AuthenticatedJobsTests(MembershipFixture):
             self.owner.execute('DROP FUNCTION public.reject_csv_effect()')
         self.assert_no_csv_effect(job)
         self.execute_csv(token,job,lease)
+
+
+    def summary(self, token, job, lease):
+        return self.jobs.get_csv_summary(self.summary_connection, token, self.a, job, lease)
+
+    def test_csv_summary_recovers_receipt_and_only_unanswered_questions_after_reconnect(self):
+        from dataclasses import asdict
+        from omnixat_core.access import Principal
+        from omnixat_core.evidence_review_postgres import store_csv_clarification
+        token, job, lease = self.csv_execution()
+        receipt = self.execute_csv(token,job,lease)
+        first = self.summary(token,job,lease)
+        self.assertEqual(first.receipt,receipt)
+        self.assertEqual((first.organisation_id,first.evidence_id,first.content_sha256),
+                         (self.org,self.task.evidence_id,self.task.content_sha256.hex()))
+        self.assertEqual((first.found_count,first.answered_count,first.unavailable_count),(1,0,0))
+        self.assertEqual([(q.cell.field_name,q.reason) for q in first.clarifications],[('net','missing')])
+        self.assertNotIn('12.34',str(asdict(first)))
+        human = Principal('fictional-human',self.a,'editor')
+        store_csv_clarification(self.clarify_connection,human,self.a,self.org,self.task.evidence_id,job,
+                               self.csv_plan().selections[1],amount='7.00')
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s",(job,))
+        with psycopg.connect(self.job_auth_dsn,autocommit=True) as auth, psycopg.connect(self.job_data_dsn,autocommit=True) as data:
+            recovered = AuthenticatedJobStore(auth,data,self.verifier)
+            new = recovered.claim(token,self.a,job)
+            summary = recovered.get_csv_summary(self.summary_connection,token,self.a,job,new)
+        self.assertEqual(summary.receipt,receipt)
+        self.assertEqual((summary.found_count,summary.answered_count,summary.unavailable_count),(1,1,0))
+        self.assertEqual(summary.clarifications,())
+        self.assertNotIn('7.00',str(asdict(summary)))
+        self.assertEqual(self.jobs.get(token,self.a,job)['checkpoint'],{})
+        self.assertEqual(self.jobs.get(token,self.a,job)['status'],'running')
+
+    def test_csv_summary_unavailable_human_answer_is_distinct_from_found_or_pending(self):
+        from omnixat_core.access import Principal
+        from omnixat_core.evidence_review_postgres import store_csv_clarification
+        token, job, lease = self.csv_execution()
+        self.execute_csv(token,job,lease)
+        store_csv_clarification(self.clarify_connection,Principal('fictional-human',self.a,'editor'),
+                               self.a,self.org,self.task.evidence_id,job,self.csv_plan().selections[1],amount=None)
+        summary = self.summary(token,job,lease)
+        self.assertEqual((summary.found_count,summary.answered_count,summary.unavailable_count),(1,1,1))
+        self.assertEqual(summary.clarifications,())
+        with self.assertRaises(PermissionError):
+            store_csv_clarification(self.clarify_connection,self.jobs._actor(token,self.a),
+                                   self.a,self.org,self.task.evidence_id,job,self.csv_plan().selections[1],amount=None)
+
+    def test_csv_summary_requires_effect_receipt_and_current_scan_eligibility(self):
+        token, job, lease = self.csv_execution()
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(token,job,lease)
+        self.execute_csv(token,job,lease)
+        self.owner.execute("UPDATE omnixat_extraction.active_scan_policy SET policy_version='fictional-v2'")
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(token,job,lease)
+        self.owner.execute("UPDATE omnixat_extraction.active_scan_policy SET policy_version='fictional-v1'")
+        self.summary(token,job,lease)
+        self.owner.execute("""INSERT INTO omnixat.evidence_scan_verdicts
+            (tenant_id,evidence_id,content_sha256,byte_size,policy_version,verdict)
+            VALUES (%s,%s,%s,%s,'fictional-v1','blocked')""",
+            (self.a,self.task.evidence_id,self.task.content_sha256,len(self.original)))
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(token,job,lease)
+
+    def test_csv_summary_rejects_revoked_downgraded_wrong_scope_and_other_tenant(self):
+        token, job, lease = self.csv_execution()
+        self.execute_csv(token,job,lease)
+        for invalid in [self.token(scope='records:read'),self.token(scope='records:write')]:
+            with self.assertRaises(PermissionError):
+                self.summary(invalid,job,lease)
+        with self.assertRaises(AuthenticationError):
+            self.jobs.get_csv_summary(self.summary_connection,token,self.b,job,lease)
+        self.owner.execute("UPDATE omnixat.memberships SET role='viewer' WHERE user_id=%s",(self.user,))
+        with self.assertRaises(PermissionError):
+            self.summary(token,job,lease)
+        self.owner.execute("UPDATE omnixat.memberships SET role='editor',revoked_at=now() WHERE user_id=%s",(self.user,))
+        with self.assertRaises(AuthenticationError):
+            self.summary(token,job,lease)
+
+    def test_csv_summary_rejects_wrong_worker_expired_reclaimed_and_cancelled_job(self):
+        token, job, lease = self.csv_execution()
+        self.execute_csv(token,job,lease)
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(token,job,uuid4())
+        second = uuid4()
+        self.owner.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,'summary-worker','agent')",(second,self.issuer))
+        self.owner.execute("INSERT INTO omnixat.memberships(tenant_id,user_id,role) VALUES (%s,%s,'editor')",(self.a,second))
+        second_token = self.token(sub='summary-worker')
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(second_token,job,lease)
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s",(job,))
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(token,job,lease)
+        new = self.jobs.claim(second_token,self.a,job)
+        self.summary(second_token,job,new)
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(token,job,lease)
+        self.jobs.cancel(token,self.a,job)
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(second_token,job,new)
+
+    def test_csv_summary_exec_only_role_cannot_read_values_or_mutate_and_cleans_context(self):
+        token, job, lease = self.csv_execution()
+        self.execute_csv(token,job,lease)
+        self.summary(token,job,lease)
+        for table in ['evidence_quarantine','csv_extraction_results','csv_clarification_answers','agent_job_csv_effects']:
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                self.summary_connection.execute('SELECT * FROM omnixat.'+table)
+        for function in ["read_eligible_original(NULL,NULL)","read_csv_review(NULL,NULL,NULL)",
+                         "read_csv_review_with_answers(NULL,NULL,NULL)",
+                         "store_csv_answer(NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)"]:
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                self.summary_connection.execute('SELECT * FROM omnixat_extraction.'+function)
+        for connection in [self.owner,self.gate_connection]:
+            with self.assertRaises(PermissionError):
+                self.jobs.get_csv_summary(connection,token,self.a,job,lease)
+        self.assertEqual(self.summary_connection.execute("SELECT NULLIF(current_setting('omnixat.tenant_id',true),'')").fetchone(),(None,))
+
+    def test_csv_summary_rejects_changed_plan_source_and_corrupt_results_or_answers(self):
+        from psycopg.types.json import Jsonb
+        token, job, lease = self.csv_execution()
+        self.execute_csv(token,job,lease)
+        saved = self.owner.execute('SELECT amounts FROM omnixat.csv_extraction_results WHERE job_id=%s',(job,)).fetchone()[0]
+        for changed in [[saved[1],saved[0]], [dict(saved[0],amount='not-a-decimal'),saved[1]],
+                        [dict(saved[0],status='unknown'),saved[1]], [dict(saved[0],extra='secret'),saved[1]]]:
+            self.owner.execute('UPDATE omnixat.csv_extraction_results SET amounts=%s WHERE job_id=%s',(Jsonb(changed),job))
+            with self.assertRaises(EvidenceNotEligible):
+                self.summary(token,job,lease)
+        self.owner.execute('UPDATE omnixat.csv_extraction_results SET amounts=%s WHERE job_id=%s',(Jsonb(saved),job))
+        self.owner.execute("""INSERT INTO omnixat.csv_clarification_answers
+            (tenant_id,job_id,field_name,source_row,source_column,amount,answered_by)
+            VALUES (%s,%s,'net',3,2,'7.00','fictional-human')""",(self.a,job))
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(token,job,lease)
+        self.owner.execute('DELETE FROM omnixat.csv_clarification_answers WHERE job_id=%s',(job,))
+        self.owner.execute('UPDATE omnixat.agent_job_csv_plans SET plan_digest=%s WHERE job_id=%s',(b'x'*32,job))
+        with self.assertRaises(CreationConflict):
+            self.summary(token,job,lease)
+
+
+    def test_csv_summary_database_output_contains_only_metadata_and_read_only_transaction(self):
+        from omnixat_core.job_csv_plans_postgres import _digest
+        from omnixat_core.postgres import _tenant_transaction
+        from uuid import UUID
+        token, job, lease = self.csv_execution()
+        self.execute_csv(token,job,lease)
+        with _tenant_transaction(self.summary_connection,UUID(self.a),tables_required=('agent_jobs',)):
+            self.assertEqual(self.summary_connection.execute('SHOW transaction_read_only').fetchone(),('on',))
+            row = self.summary_connection.execute('SELECT * FROM omnixat_extraction.read_job_csv_summary(%s,%s,%s,%s)',
+                (job,str(self.user),lease,_digest(self.csv_plan()))).fetchone()
+            cells = row[-1]
+            self.assertEqual([set(cell) for cell in cells],[{'field_name','row','column','status','answered','unavailable'}]*2)
+            self.assertNotIn('12.34',str(row))
+        self.owner.execute("""INSERT INTO omnixat.evidence_scan_claims
+            (tenant_id,evidence_id,policy_version,lease_token,expires_at)
+            VALUES (%s,%s,'fictional-v1',%s,clock_timestamp()+interval '60 seconds')""",(self.a,self.task.evidence_id,uuid4()))
+        with self.assertRaises(EvidenceNotEligible):
+            self.summary(token,job,lease)
