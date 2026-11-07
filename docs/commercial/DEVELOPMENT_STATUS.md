@@ -2046,3 +2046,41 @@ effects, current membership verification and transport wiring need their separat
 controls. Next: introduce a fenced transaction boundary for one idempotent
 preparation effect, with a durable operation receipt and job authority checked
 under the same transaction before autonomous orchestration.
+
+## C1 fenced job note preparation — completed
+
+Recovered clean `eb57a00` with no unfinished task or competing writer found.
+Create one organisation note through the existing validated record repository,
+with a job-scoped operation receipt in the same transaction. Lock and recheck
+worker/token/lease authority, preserve actor attribution across recovered retries,
+and roll back the note, record audit and effect receipt together on failure.
+
+
+Migration 0053 and `PostgresJobStore.create_note_effect` create organisation notes
+through the existing record repository with a job-scoped receipt in the same
+transaction. Job state, current worker, token and lease are checked under the job
+lock before and after preparation. Concurrent retries and recovered workers reuse
+the original note and actor. Changed inputs or a changed saved note conflict.
+Cancellation serializes against note creation. All participating tables have
+forced tenant RLS and runtime ownership checks. See JOBS_POSTGRES.md for grants.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **262 passed**.
+  Seven new tests cover receipt replay after reconnect/reclaim, concurrent retries,
+  exact note/audit attribution, changed inputs and notes, foreign/missing parents,
+  permissions and job authority, cancellation races, atomic rollback and expiry
+  after creating the note but before committing its effect receipt.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch reproduced
+  the socket permission error. The browser test remains unchanged.
+- `git diff --check`: passed.
+
+This increment covers a local note preparation effect. Current identity resolution,
+ledger posting, external effects and worker orchestration remain unfinished.
+Next: persist bounded job retry/failure outcomes and attempt budgets so recovered
+or failing preparation can stop predictably before adding an autonomous worker.

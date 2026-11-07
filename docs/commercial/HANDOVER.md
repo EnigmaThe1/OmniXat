@@ -667,3 +667,16 @@ Existing role grants cover the migration. See JOBS_POSTGRES.md for semantics and
 limits. Next: a fenced transactional preparation effect with an idempotent receipt
 and job authority checked together. Production identity/transport qualification
 and in-flight external effect controls remain unfinished.
+
+
+## Latest fenced job note preparation checkpoint
+
+Migration 0053 and `PostgresJobStore.create_note_effect` commit one shared-service
+note, audit and job operation receipt under worker/token/lease checks. Recovery
+replays the original note and attribution. Changed inputs conflict and cancelled
+jobs reject effects. Apply the extra note/receipt grants in JOBS_POSTGRES.md.
+**46 core, 21 identity and 262 PostgreSQL/HTTP tests pass**. The unchanged
+prototype passes 19 of 20 tests with the Chromium socket permission failure.
+This covers local note preparation. Ledger/external effects, current identity
+wiring and orchestration remain unfinished. Next: bounded persistent job
+retry/failure outcomes and attempt budgets before autonomous worker execution.

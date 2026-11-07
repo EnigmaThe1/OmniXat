@@ -91,3 +91,37 @@ cover the added columns.
 
 PostgreSQL 16 row-lock semantics rechecked on 7 November 2026 against
 [explicit locking](https://www.postgresql.org/docs/16/explicit-locking.html).
+
+## Fenced note preparation
+
+Migration 0053 adds `create_note_effect(actor, tenant, job_id, token,
+operation_key, organisation_id, body)`. This operation uses the existing
+`TenantRecords.create_note` validation, parent checks and record audit. It commits
+the note, record audit and job-scoped operation receipt together while holding
+the job lock. Current verified worker, token, running state and database lease
+are checked after lock acquisition and again after preparing the result.
+
+Use a stable operation key of 1–128 ASCII letters, digits or `._~-` per tenant
+and job. Its digest and the exact organisation/body digest identify the operation.
+The returned `JobNoteReceipt` contains job, note and organisation IDs plus original
+actor and timestamp. Concurrent identical retries return one receipt. A recovered
+worker with a fresh valid claim can replay the original operation and attribution.
+Changed inputs under the same key raise `CreationConflict`. A saved note that has
+changed also conflicts. Terminal jobs reject effect calls, including receipt replay.
+
+The worker requires both records write and records read permission, with matching
+API scopes where applicable. Add SELECT on `omnixat.tenants` and
+`omnixat.organisations`, and SELECT, INSERT on `omnixat.notes`,
+`omnixat.record_creations` and `omnixat.agent_job_note_effects` to its job grants.
+These grants share the existing application SQL trust boundary. The method checks
+active RLS and non-owner role safety for every participating table.
+
+Job progress is checkpointed separately. After recovery, reusing the same operation
+key reconciles a note committed before the last saved progress update. Cancellation
+and note preparation serialize on the job lock. A note committed before cancellation
+remains part of preparation history. Expiry during preparation rolls the whole
+operation back. External effects, ledger posting and workflow scheduling require
+separate qualified transaction/fencing contracts.
+
+PostgreSQL 16 transaction semantics rechecked on 7 November 2026 against
+[transaction isolation](https://www.postgresql.org/docs/16/transaction-iso.html).

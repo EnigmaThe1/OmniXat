@@ -13,7 +13,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from .access import require_tenant
-from .postgres import _tenant_transaction
+from .postgres import CreationConflict, TenantRecords, _tenant_transaction, validate_creation_key
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,15 @@ class JobCancellationReceipt:
     job_id: str
     cancelled_by: str = field(repr=False)
     cancelled_at: datetime
+
+
+@dataclass(frozen=True)
+class JobNoteReceipt:
+    job_id: str
+    note_id: UUID
+    organisation_id: UUID
+    created_by: str = field(repr=False)
+    created_at: datetime
 
 
 class PostgresJobStore:
@@ -132,3 +141,61 @@ class PostgresJobStore:
                     """, (actor.user_id, scope, job))
                     row = cursor.fetchone()
                 return JobCancellationReceipt(str(job), row["cancelled_by"], row["cancelled_at"])
+
+
+    def create_note_effect(self, actor, tenant, job_id, token, operation_key, organisation_id, body) -> JobNoteReceipt:
+        """Create or replay a note and its operation receipt under current job authority."""
+        scope = self._scope(actor, tenant, "records:write")
+        require_tenant(actor, tenant, "records:read")
+        validate_creation_key(operation_key)
+        if operation_key is None:
+            raise ValueError("An explicit job operation key is required")
+        job, lease, organisation = (UUID(str(value)) for value in (job_id, token, organisation_id))
+        key_digest = sha256(operation_key.encode('ascii')).digest()
+        payload_digest = sha256(json.dumps([1, str(organisation), body], separators=(',', ':'),
+                                            allow_nan=False).encode('ascii')).digest()
+        authority_query = """
+            SELECT 1 FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s AND status='running'
+              AND claimed_by=%s AND lease_token=%s AND lease_until > clock_timestamp()
+        """
+        authority = (scope, job, actor.user_id, lease)
+        with _tenant_transaction(self.connection, scope, write=True, tables_required=(
+            "tenants", "organisations", "notes", "record_creations", "agent_jobs", "agent_job_note_effects",
+        )):
+            records = TenantRecords(self.connection, actor, scope, True)
+            try:
+                with self.connection.cursor(row_factory=dict_row) as cursor:
+                    cursor.execute("SELECT id FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s FOR UPDATE",
+                                   (scope, job))
+                    cursor.fetchone()
+                    cursor.execute(authority_query, authority)
+                    if cursor.fetchone() is None:
+                        raise ValueError("Claim expired, superseded or job unavailable")
+                    cursor.execute("""
+                        SELECT note_id,payload_digest,created_by,created_at FROM omnixat.agent_job_note_effects
+                        WHERE tenant_id=%s AND job_id=%s AND key_digest=%s
+                    """, (scope, job, key_digest))
+                    previous = cursor.fetchone()
+                    if previous is not None:
+                        if previous["payload_digest"] != payload_digest:
+                            raise CreationConflict("Job operation key does not match these note inputs")
+                        note = records.get_note(previous["note_id"])
+                        if (note["organisation_id"], note["body"], note["created_by"]) != (
+                            organisation, body, previous["created_by"],
+                        ):
+                            raise CreationConflict("Saved job note no longer matches its receipt")
+                    else:
+                        note = records.create_note(organisation, body)
+                        cursor.execute("""
+                            INSERT INTO omnixat.agent_job_note_effects
+                                (tenant_id,job_id,key_digest,payload_digest,note_id,created_by)
+                            VALUES (%s,%s,%s,%s,%s,%s) RETURNING note_id,payload_digest,created_by,created_at
+                        """, (scope, job, key_digest, payload_digest, note["id"], actor.user_id))
+                        previous = cursor.fetchone()
+                    cursor.execute(authority_query, authority)
+                    if cursor.fetchone() is None:
+                        raise ValueError("Claim expired, superseded or job unavailable")
+                    return JobNoteReceipt(str(job), previous["note_id"], organisation,
+                                          previous["created_by"], previous["created_at"])
+            finally:
+                records._active = False

@@ -13,6 +13,7 @@ from psycopg.conninfo import make_conninfo
 
 from omnixat_core.access import Principal
 from omnixat_core.jobs_postgres import PostgresJobStore
+from omnixat_core.postgres import CreationConflict, TenantRecords, tenant_records
 from omnixat_core.postgres import MIGRATIONS, migrate
 from test_postgres import PostgresFixture
 
@@ -29,6 +30,10 @@ class PostgresJobsTests(PostgresFixture):
         cls.addClassCleanup(cls.drop_job_role)
         cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat TO {}").format(role))
         cls.owner.execute(sql.SQL("GRANT SELECT,INSERT,UPDATE ON omnixat.agent_jobs TO {}").format(role))
+        cls.owner.execute(sql.SQL("GRANT SELECT ON omnixat.tenants,omnixat.organisations TO {}").format(role))
+        cls.owner.execute(sql.SQL(
+            "GRANT SELECT,INSERT ON omnixat.notes,omnixat.record_creations,omnixat.agent_job_note_effects TO {}"
+        ).format(role))
         cls.job_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database, user=cls.job_role, password=password)
 
     @classmethod
@@ -399,3 +404,148 @@ class PostgresJobsTests(PostgresFixture):
         self.store.checkpoint(self.worker, self.a, job, token, {'step': 'recovered'})
         self.store.cancel(self.actor, self.a, job)
         self.assertEqual(self.store.get(self.actor, self.a, job)['status'], 'cancelled')
+
+
+    def test_job_note_effect_replays_after_reconnect_and_worker_recovery(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        receipt = self.store.create_note_effect(self.worker, self.a, job, token, "note-1", self.org, "Fictional note")
+        self.assertEqual((receipt.job_id, receipt.organisation_id, receipt.created_by),
+                         (job, self.org, self.worker.user_id))
+        with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+            self.assertEqual(PostgresJobStore(connection).create_note_effect(
+                self.worker, self.a, job, token, "note-1", self.org, "Fictional note"), receipt)
+        self.expire(job)
+        replacement = Principal("fictional-recovered-agent", self.a, "editor", actor_kind="agent")
+        new = self.store.claim(replacement, self.a, job)
+        with self.assertRaises(ValueError):
+            self.store.create_note_effect(self.worker, self.a, job, token, "note-1", self.org, "Fictional note")
+        self.assertEqual(self.store.create_note_effect(replacement, self.a, job, new, "note-1", self.org, "Fictional note"), receipt)
+        with tenant_records(self.job_connection, replacement, self.a) as records:
+            self.assertEqual(records.get_note(receipt.note_id), {
+                "id": receipt.note_id, "organisation_id": self.org, "body": "Fictional note", "created_by": self.worker.user_id,
+            })
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.agent_job_note_effects WHERE tenant_id=%s", (self.a,)).fetchone(), (1,))
+        self.assertEqual(self.store.get(replacement, self.a, job)["checkpoint"], {})
+        self.assertEqual(self.job_connection.execute("SELECT * FROM omnixat.agent_job_note_effects").fetchall(), [])
+
+    def test_concurrent_job_note_effects_return_one_note_and_receipt(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        start = Barrier(2)
+        def create_note():
+            with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                start.wait(timeout=5)
+                return PostgresJobStore(connection).create_note_effect(
+                    self.worker, self.a, job, token, "note-1", self.org, "Fictional concurrent note")
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(lambda _: create_note(), range(2)))
+        self.assertEqual(first, second)
+        self.assertEqual(self.owner.execute("SELECT note_id FROM omnixat.agent_job_note_effects WHERE tenant_id=%s", (self.a,)).fetchall(), [(first.note_id,)])
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.record_creations WHERE tenant_id=%s AND note_id=%s",
+                                           (self.a, first.note_id)).fetchone(), (1,))
+
+    def test_job_note_effect_conflicts_and_invalid_parents_leave_no_extra_records(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        receipt = self.store.create_note_effect(self.worker, self.a, job, token, "note-1", self.org, "Fictional note")
+        with tenant_records(self.runtime, self.other, self.b, write=True) as records:
+            foreign_org = records.create_organisation("Fictional foreign organisation")["id"]
+        for org, body in ((self.org, "Different note"), (foreign_org, "Fictional note")):
+            with self.subTest(org=org), self.assertRaises(CreationConflict):
+                self.store.create_note_effect(self.worker, self.a, job, token, "note-1", org, body)
+        for org in (uuid4(), foreign_org):
+            with self.subTest(org=org), self.assertRaises(KeyError):
+                self.store.create_note_effect(self.worker, self.a, job, token, "missing-parent", org, "Fictional note")
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.store.create_note_effect(self.worker, self.a, job, token, "empty-note", self.org, " ")
+        self.owner.execute("UPDATE omnixat.notes SET body='Fictional changed note' WHERE tenant_id=%s AND id=%s",
+                           (self.a, receipt.note_id))
+        with self.assertRaises(CreationConflict):
+            self.store.create_note_effect(self.worker, self.a, job, token, "note-1", self.org, "Fictional note")
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.agent_job_note_effects WHERE tenant_id=%s", (self.a,)).fetchone(), (1,))
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.record_creations WHERE tenant_id=%s AND operation='note.create'",
+                                           (self.a,)).fetchone(), (2,))
+
+    def test_job_note_effect_checks_scope_authority_and_terminal_states(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        for actor in (
+            Principal("viewer", self.a, "viewer"),
+            Principal("api", self.a, "editor", api_scopes=frozenset({"records:write"})),
+            Principal("staff", self.a, "editor", staff_role="platform_owner", mfa_verified=True), self.other,
+        ):
+            with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                self.store.create_note_effect(actor, self.a, job, token, "forbidden", self.org, "Fictional note")
+        for tenant, actor, chosen_job, chosen_token in (
+            (self.b, self.other, job, token), (self.a, self.worker, uuid4(), token),
+            (self.a, self.worker, job, uuid4()), (self.a, self.actor, job, token),
+        ):
+            with self.subTest(tenant=tenant, actor=actor.user_id), self.assertRaises(ValueError):
+                self.store.create_note_effect(actor, tenant, chosen_job, chosen_token, "forbidden", self.org, "Fictional note")
+        for key in (None, "", "bad key", "x" * 129):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.store.create_note_effect(self.worker, self.a, job, token, key, self.org, "Fictional note")
+        self.store.cancel(self.actor, self.a, job)
+        with self.assertRaises(ValueError):
+            self.store.create_note_effect(self.worker, self.a, job, token, "cancelled", self.org, "Fictional note")
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.agent_job_note_effects WHERE tenant_id=%s", (self.a,)).fetchone(), (0,))
+
+    def test_job_note_effect_deadline_failure_rolls_back_note_audit_and_receipt(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        before = self.owner.execute("SELECT count(*) FROM omnixat.notes WHERE tenant_id=%s", (self.a,)).fetchone()
+        with patch('omnixat_core.postgres.monotonic', side_effect=(0, 11)):
+            with self.assertRaises(TimeoutError):
+                self.store.create_note_effect(self.worker, self.a, job, token, "note-1", self.org, "Fictional rollback note")
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.notes WHERE tenant_id=%s", (self.a,)).fetchone(), before)
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.agent_job_note_effects WHERE tenant_id=%s", (self.a,)).fetchone(), (0,))
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.record_creations WHERE tenant_id=%s AND operation='note.create'",
+                                           (self.a,)).fetchone(), (1,))
+        self.store.create_note_effect(self.worker, self.a, job, token, "note-1", self.org, "Fictional rollback note")
+
+    def test_job_note_effect_rechecks_lease_after_note_creation(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()+interval '1 second' WHERE tenant_id=%s AND id=%s",
+                           (self.a, job))
+        original_create = TenantRecords.create_note
+        created = []
+        def slow_note(records, organisation, body):
+            created.append(original_create(records, organisation, body))
+            records._connection.execute("SELECT pg_sleep(1.1)")
+            return created[-1]
+        with patch('omnixat_core.jobs_postgres.TenantRecords.create_note', autospec=True, side_effect=slow_note):
+            with self.assertRaises(ValueError):
+                self.store.create_note_effect(self.worker, self.a, job, token, "note-1", self.org, "Fictional slow note")
+        self.assertEqual(len(created), 1)
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.notes WHERE tenant_id=%s AND id=%s",
+                                           (self.a, created[0]["id"])).fetchone(), (0,))
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.agent_job_note_effects WHERE tenant_id=%s", (self.a,)).fetchone(), (0,))
+
+    def test_job_note_effect_and_cancellation_serialize(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        start = Barrier(2)
+        def effect():
+            with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                start.wait(timeout=5)
+                try:
+                    return PostgresJobStore(connection).create_note_effect(
+                        self.worker, self.a, job, token, "note-1", self.org, "Fictional racing note")
+                except ValueError:
+                    return None
+        def cancel():
+            with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                start.wait(timeout=5)
+                return PostgresJobStore(connection).cancel(self.actor, self.a, job)
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            note_result = workers.submit(effect)
+            cancel_result = workers.submit(cancel)
+            receipt = note_result.result(timeout=5)
+            cancel_result.result(timeout=5)
+        self.assertEqual(self.store.get(self.actor, self.a, job)["status"], "cancelled")
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.agent_job_note_effects WHERE tenant_id=%s", (self.a,)).fetchone(),
+                         (0 if receipt is None else 1,))
+        with self.assertRaises(ValueError):
+            self.store.create_note_effect(self.worker, self.a, job, token, "note-2", self.org, "Fictional later note")
