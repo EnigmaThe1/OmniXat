@@ -2009,3 +2009,40 @@ remain unfinished. SQLite retains its separate development contract.
 Next: add tenant-authorised PostgreSQL job cancellation and reject further claims
 or checkpoints after cancellation, then qualify operation-specific effect
 idempotency before connecting autonomous orchestration.
+
+## C1 PostgreSQL job cancellation — completed
+
+Recovered clean `25ead85` with no active task or competing writer found.
+Add tenant-authorised cancellation using the existing records-write boundary.
+Persist the first cancellation attribution and time, clear active leases and
+preserve checkpoints. Serialize cancellation against claims and completion.
+
+
+Migration 0052 adds the cancelled state and database-enforced cancellation
+attribution. `PostgresJobStore.cancel` uses existing tenant records-write checks,
+locks the job, stores the first actor and database timestamp, preserves progress
+and clears the lease. Retries return the first receipt. Claims, checkpoints and
+completion serialize against cancellation. Completed jobs retain their terminal
+state. Authorised agent and scoped API writers follow the same permission boundary.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **255 passed**.
+  Eight new tests cover queued/running cancellation, receipt replay/reconnect,
+  concurrent cancel/claim/complete outcomes, scope and role boundaries, terminal
+  state constraints, transaction rollback and upgrade of existing queued, running
+  and completed jobs with repeatable checksum-verified migrations.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch reproduced
+  the socket permission error. The browser test remains unchanged.
+- `git diff --check`: passed.
+
+Cancellation governs preparation state. In-flight external work, committed domain
+effects, current membership verification and transport wiring need their separate
+controls. Next: introduce a fenced transaction boundary for one idempotent
+preparation effect, with a durable operation receipt and job authority checked
+under the same transaction before autonomous orchestration.

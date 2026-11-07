@@ -3,6 +3,8 @@
 Each call requires an exclusive idle autocommit connection. Payloads are hashed,
 while progress contains bounded evidence references. Leases use the database clock.
 """
+from dataclasses import dataclass, field
+from datetime import datetime
 from hashlib import sha256
 import json
 from uuid import UUID, uuid4
@@ -12,6 +14,13 @@ from psycopg.types.json import Jsonb
 
 from .access import require_tenant
 from .postgres import _tenant_transaction
+
+
+@dataclass(frozen=True)
+class JobCancellationReceipt:
+    job_id: str
+    cancelled_by: str = field(repr=False)
+    cancelled_at: datetime
 
 
 class PostgresJobStore:
@@ -100,3 +109,26 @@ class PostgresJobStore:
                   complete, scope, job, actor.user_id, lease)).rowcount
             if changed != 1:
                 raise ValueError("Claim expired, superseded or job unavailable")
+
+
+    def cancel(self, actor, tenant, job_id) -> JobCancellationReceipt:
+        """Cancel queued or running preparation and replay the first attributed receipt."""
+        scope = self._scope(actor, tenant, "records:write")
+        job = UUID(str(job_id))
+        with _tenant_transaction(self.connection, scope, write=True, tables_required=("agent_jobs",)):
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute("""
+                    SELECT status,cancelled_by,cancelled_at FROM omnixat.agent_jobs
+                    WHERE tenant_id=%s AND id=%s FOR UPDATE
+                """, (scope, job))
+                row = cursor.fetchone()
+                if row is None or row["status"] == "completed":
+                    raise ValueError("Job unavailable or already completed")
+                if row["status"] != "cancelled":
+                    cursor.execute("""
+                        UPDATE omnixat.agent_jobs SET status='cancelled',cancelled_by=%s,cancelled_at=clock_timestamp(),
+                            lease_token=NULL,lease_until=NULL WHERE tenant_id=%s AND id=%s
+                        RETURNING cancelled_by,cancelled_at
+                    """, (actor.user_id, scope, job))
+                    row = cursor.fetchone()
+                return JobCancellationReceipt(str(job), row["cancelled_by"], row["cancelled_at"])

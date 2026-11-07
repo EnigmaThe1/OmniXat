@@ -1,6 +1,10 @@
 """PostgreSQL job contract with fictional reference-only payloads and checkpoints."""
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
+from pathlib import Path
+from shutil import copyfile
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import psycopg
@@ -9,6 +13,7 @@ from psycopg.conninfo import make_conninfo
 
 from omnixat_core.access import Principal
 from omnixat_core.jobs_postgres import PostgresJobStore
+from omnixat_core.postgres import MIGRATIONS, migrate
 from test_postgres import PostgresFixture
 
 
@@ -223,3 +228,174 @@ class PostgresJobsTests(PostgresFixture):
             with self.assertRaises(ValueError):
                 result.result(timeout=3)
         self.assertEqual(self.store.get(self.worker, self.a, job), {"id": job, "status": "running", "checkpoint": {}})
+
+
+    def test_cancel_queued_job_replays_first_receipt_and_preserves_creation_key(self):
+        job = self.create()
+        first = self.store.cancel(self.actor, self.a, job)
+        self.assertEqual((first.job_id, first.cancelled_by), (job, self.actor.user_id))
+        with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+            restored = PostgresJobStore(connection)
+            self.assertEqual(restored.cancel(self.worker, self.a, job), first)
+            self.assertEqual(restored.get(self.worker, self.a, job),
+                             {"id": job, "status": "cancelled", "checkpoint": {}})
+        self.assertEqual(self.create(), job)
+        with self.assertRaises(ValueError):
+            self.store.claim(self.worker, self.a, job)
+        self.assertEqual(self.owner.execute("""
+            SELECT lease_token,lease_until,claimed_by,created_by FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s
+        """, (self.a, job)).fetchone(), (None, None, None, self.worker.user_id))
+
+    def test_cancel_running_job_preserves_progress_and_fences_active_worker(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        progress = {"step": "matched", "entry_ids": ["fictional-entry"]}
+        self.store.checkpoint(self.worker, self.a, job, token, progress)
+        receipt = self.store.cancel(self.actor, self.a, job)
+        self.assertEqual(self.store.get(self.actor, self.a, job),
+                         {"id": job, "status": "cancelled", "checkpoint": progress})
+        for complete in (False, True):
+            with self.subTest(complete=complete), self.assertRaises(ValueError):
+                self.store.checkpoint(self.worker, self.a, job, token, {"step": "late"}, complete=complete)
+        with self.assertRaises(ValueError):
+            self.store.claim(self.worker, self.a, job)
+        self.assertEqual(self.owner.execute("""
+            SELECT lease_token,lease_until,claimed_by,cancelled_by,cancelled_at
+            FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s
+        """, (self.a, job)).fetchone(),
+                         (None, None, self.worker.user_id, self.actor.user_id, receipt.cancelled_at))
+
+    def test_concurrent_cancellations_preserve_one_attributed_receipt(self):
+        job = self.create()
+        start = Barrier(2)
+        def cancel(actor):
+            with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                start.wait(timeout=5)
+                return PostgresJobStore(connection).cancel(actor, self.a, job)
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(cancel, (self.actor, self.worker)))
+        self.assertEqual(first, second)
+        self.assertIn(first.cancelled_by, (self.actor.user_id, self.worker.user_id))
+
+    def test_cancel_racing_claim_and_completion_keeps_consistent_terminal_state(self):
+        for operation in ("claim", "complete"):
+            job = self.store.create(self.worker, self.a, operation, self.payload)
+            token = self.store.claim(self.worker, self.a, job) if operation == "complete" else None
+            start = Barrier(2)
+            def cancel():
+                with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                    start.wait(timeout=5)
+                    try:
+                        PostgresJobStore(connection).cancel(self.actor, self.a, job)
+                        return True
+                    except ValueError:
+                        return False
+            def work():
+                with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                    store = PostgresJobStore(connection)
+                    start.wait(timeout=5)
+                    try:
+                        if operation == "claim":
+                            store.claim(self.worker, self.a, job)
+                        else:
+                            store.checkpoint(self.worker, self.a, job, token, {"step": "prepared"}, complete=True)
+                        return True
+                    except ValueError:
+                        return False
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                cancelled = workers.submit(cancel)
+                worked = workers.submit(work)
+                cancellation_won, work_won = cancelled.result(timeout=5), worked.result(timeout=5)
+            state = self.store.get(self.actor, self.a, job)
+            with self.subTest(operation=operation):
+                if operation == "claim":
+                    self.assertTrue(cancellation_won)
+                    self.assertEqual(state["status"], "cancelled")
+                else:
+                    self.assertNotEqual(cancellation_won, work_won)
+                    self.assertEqual(state["status"], "cancelled" if cancellation_won else "completed")
+                self.assertEqual(self.owner.execute("""
+                    SELECT lease_token,lease_until FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s
+                """, (self.a, job)).fetchone(), (None, None))
+                with self.assertRaises(ValueError):
+                    self.store.claim(self.worker, self.a, job)
+
+    def test_cancel_checks_scope_permissions_and_completed_job_boundary(self):
+        job = self.create()
+        for actor in (
+            Principal("viewer", self.a, "viewer"),
+            Principal("api", self.a, "editor", api_scopes=frozenset({"records:read"})),
+            Principal("staff", self.a, "editor", staff_role="platform_owner", mfa_verified=True),
+            self.other,
+        ):
+            with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                self.store.cancel(actor, self.a, job)
+        with self.assertRaises(ValueError):
+            self.store.cancel(self.other, self.b, job)
+        with self.assertRaises(ValueError):
+            self.store.cancel(self.actor, self.a, uuid4())
+        with self.assertRaises(PermissionError):
+            PostgresJobStore(self.owner).cancel(self.actor, self.a, job)
+        token = self.store.claim(self.worker, self.a, job)
+        self.store.checkpoint(self.worker, self.a, job, token, {"step": "prepared"}, complete=True)
+        with self.assertRaises(ValueError):
+            self.store.cancel(self.actor, self.a, job)
+        self.assertEqual(self.store.get(self.actor, self.a, job)["status"], "completed")
+        self.assertEqual(self.owner.execute("""
+            SELECT cancelled_by,cancelled_at FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s
+        """, (self.a, job)).fetchone(), (None, None))
+        api_job = self.store.create(self.worker, self.a, "fictional-api-cancel", {})
+        api = Principal("fictional-api-editor", self.a, "editor", api_scopes=frozenset({"records:write"}))
+        self.assertEqual(self.store.cancel(api, self.a, api_job).cancelled_by, api.user_id)
+
+    def test_cancellation_state_requires_attribution_and_cleared_lease(self):
+        job = self.create()
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.owner.execute("UPDATE omnixat.agent_jobs SET status='cancelled' WHERE tenant_id=%s AND id=%s", (self.a, job))
+        self.store.cancel(self.actor, self.a, job)
+        for update, value in (("cancelled_by", None), ("cancelled_at", None), ("lease_token", uuid4())):
+            with self.subTest(field=update), self.assertRaises(psycopg.errors.CheckViolation):
+                self.owner.execute(sql.SQL("UPDATE omnixat.agent_jobs SET {}=%s WHERE tenant_id=%s AND id=%s")
+                                   .format(sql.Identifier(update)), (value, self.a, job))
+        self.assertEqual(self.store.get(self.actor, self.a, job)["status"], "cancelled")
+
+    def test_cancellation_migration_preserves_existing_job_states_and_progress(self):
+        database = "omnixat_upgrade_" + uuid4().hex
+        self.admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
+        self.addCleanup(lambda: self.admin.execute(
+            sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database))))
+        with psycopg.connect(self.admin.info.dsn, dbname=database, autocommit=True) as db:
+            with TemporaryDirectory() as directory:
+                previous = Path(directory)
+                for migration in MIGRATIONS.glob("[0-9]*.sql"):
+                    if migration.name < "0052":
+                        copyfile(migration, previous / migration.name)
+                with patch("omnixat_core.postgres.MIGRATIONS", previous):
+                    migrate(db)
+            db.execute("INSERT INTO omnixat.tenants VALUES (%s,'Fictional upgrade')", (self.a,))
+            for status in ("queued", "running", "completed"):
+                db.execute("""INSERT INTO omnixat.agent_jobs
+                    (tenant_id,request_key,payload_hash,status,checkpoint,created_by,claimed_by,lease_token,lease_until)
+                    VALUES (%s,%s,%s,%s,'{"step":"fictional"}'::jsonb,'fictional',%s,%s,%s)
+                """, (self.a, status, bytes(32), status, None if status == "queued" else "fictional",
+                      uuid4() if status == "running" else None, "2099-01-01T00:00:00Z" if status == "running" else None))
+            before = db.execute("SELECT * FROM omnixat.agent_jobs ORDER BY request_key").fetchall()
+            migrate(db)
+            after = db.execute("SELECT * FROM omnixat.agent_jobs ORDER BY request_key").fetchall()
+            self.assertEqual([row[:-2] for row in after], before)
+            self.assertTrue(all(row[-2:] == (None, None) for row in after))
+            migrate(db)
+            self.assertEqual(db.execute("SELECT * FROM omnixat.agent_jobs ORDER BY request_key").fetchall(), after)
+
+    def test_cancellation_rolls_back_when_transaction_deadline_fails(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        with patch('omnixat_core.postgres.monotonic', side_effect=(0, 11)):
+            with self.assertRaises(TimeoutError):
+                self.store.cancel(self.actor, self.a, job)
+        self.assertEqual(self.owner.execute("""
+            SELECT status,lease_token,cancelled_by,cancelled_at FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s
+        """, (self.a, job)).fetchone(), ('running', UUID(token), None, None))
+        self.store.checkpoint(self.worker, self.a, job, token, {'step': 'recovered'})
+        self.store.cancel(self.actor, self.a, job)
+        self.assertEqual(self.store.get(self.actor, self.a, job)['status'], 'cancelled')

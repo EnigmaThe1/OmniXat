@@ -52,7 +52,7 @@ retry. Creation replay and checkpoint-result reconciliation have distinct roles.
 Checkpoint storage and individual domain effects have separate transactions.
 Ledger effects still require operation-specific idempotency and atomic/outbox
 boundaries. Lease recovery can repeat work since the last checkpoint. Worker
-scheduling, cancellation/revocation, retry budgets, effect fencing and transport
+scheduling, membership revocation, retry budgets, effect fencing and transport
 wiring remain unfinished. Existing SQLite stores retain their development scope.
 
 ## Verification
@@ -66,3 +66,28 @@ explicit orchestration.
 Technical semantics rechecked on 7 November 2026 against PostgreSQL 16
 [transaction isolation](https://www.postgresql.org/docs/16/transaction-iso.html)
 and [database time functions](https://www.postgresql.org/docs/16/functions-datetime.html).
+
+
+## Cancellation
+
+Migration 0052 adds `cancel(actor, tenant, job_id)`. It uses the same tenant
+records-write permission and API-scope checks as job creation. Authorised human
+and agent editors may cancel queued or running preparation. The method returns
+an immutable `JobCancellationReceipt` with job ID, first cancelling actor and
+database timestamp. Retries by authorised tenant writers return that first receipt.
+
+Cancellation locks the job against claims and checkpoints, preserves the last
+progress and worker attribution, and clears the live token and expiry. Subsequent
+claims and checkpoints fail. A completed job retains its terminal state. Concurrent
+cancellation and completion serialize on the row, with the first committed terminal
+transition determining the result. `get` exposes `cancelled` using its existing
+response shape. Creation-key replay continues to identify the cancelled job.
+
+Cancellation controls job preparation state. External work already in flight and
+committed domain effects require their own cancellation/fencing and reconciliation
+contracts. Operation-specific effect idempotency remains the next implementation
+step. Apply the migration before using cancellation. Existing job-role grants
+cover the added columns.
+
+PostgreSQL 16 row-lock semantics rechecked on 7 November 2026 against
+[explicit locking](https://www.postgresql.org/docs/16/explicit-locking.html).

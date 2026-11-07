@@ -653,3 +653,17 @@ prototype passes 19 of 20 tests with the Chromium socket permission failure.
 Production qualification, identity wiring and atomic ledger-effect handling remain
 unfinished. Next: tenant-authorised PostgreSQL job cancellation with claim and
 checkpoint rejection, then effect idempotency before autonomous orchestration.
+
+
+## Latest PostgreSQL job cancellation checkpoint
+
+Migration 0052 and `PostgresJobStore.cancel` persist first cancellation attribution,
+clear leases and preserve progress. Cancel/claim/checkpoint/complete transitions
+serialize on the job row. Queued and running preparation can be cancelled through
+existing tenant records-write authority. Retries return the original receipt.
+**46 core, 21 identity and 255 PostgreSQL/HTTP tests pass**. The unchanged
+prototype passes 19 of 20 tests with the Chromium socket permission failure.
+Existing role grants cover the migration. See JOBS_POSTGRES.md for semantics and
+limits. Next: a fenced transactional preparation effect with an idempotent receipt
+and job authority checked together. Production identity/transport qualification
+and in-flight external effect controls remain unfinished.
