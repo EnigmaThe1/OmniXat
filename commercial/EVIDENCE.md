@@ -763,3 +763,27 @@ resolving the selected draft remains the next implementation step.
 PostgreSQL 16 locking and RLS semantics rechecked on 7 November 2026 against
 [explicit locking](https://www.postgresql.org/docs/16/explicit-locking.html) and
 [row security](https://www.postgresql.org/docs/16/ddl-rowsecurity.html).
+
+## Reading the current journal draft
+
+Migration 0050 adds `read_current_expense_journal`. An interactive tenant reader
+with records read and evidence read permission selects the original journal ID
+within its organisation. The result includes the original review, optional saved
+replacement and its selection receipt. The `journal` property exposes the effective
+balanced lines, accounting context and exact source provenance.
+
+An original remains current until a replacement is explicitly selected. The read
+checks both original and selected replacement eligibility, the original snapshot
+and exact proposal digest on one statement snapshot. A stale or ineligible
+selection makes the read unavailable. Original lineage and the selected author's,
+reviewer's and selector's separate attribution remain available in the typed result.
+
+Grant a dedicated current reader USAGE on `omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.read_current_expense_journal(uuid,uuid)`. The role has no direct
+table, original-byte or writer access. Existing historical readers retain their
+original behaviour. This service provides read-only draft preparation data.
+
+PostgreSQL 16 statement-snapshot semantics rechecked on 7 November 2026 against
+[function volatility](https://www.postgresql.org/docs/16/xfunc-volatility.html).
+Eligibility is established for the read snapshot. Future posting and approval
+services must perform their own transactional checks on the exact outgoing data.

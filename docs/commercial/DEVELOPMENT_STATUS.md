@@ -1927,3 +1927,42 @@ eligibility changes. Production transport, ledger posting and final-package
 approval remain separate unfinished work.
 Next: add a unified current-draft reader that resolves the selected replacement,
 rechecks its exact snapshot and current eligibility, and preserves lineage.
+
+## C4 unified current journal draft reader — completed
+
+Recovered clean `5a7d2ee` with no unfinished task or competing writer found.
+Read the original or explicitly selected replacement on one statement snapshot,
+revalidating current evidence, review and exact selection digests. Return typed
+balanced journal lines with original lineage and selection attribution. An
+ineligible selected replacement makes the current read unavailable.
+
+
+Migration 0050 and the shared Python reader resolve original and selected
+replacement data on one statement snapshot. The typed result preserves the
+original review, replacement review and exact attributed selection. Its `journal`
+property supplies the effective balanced lines with the selected source's exact
+fingerprint, extraction job and cell. Saved replacements require an explicit
+selection. Stale or ineligible selections make the current read unavailable.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **237 passed**.
+  Added coverage for original-only records, saved but unselected replacements,
+  explicit selections, balanced amounts, exact provenance, separate attribution,
+  original preservation, reconnects, scope/role boundaries, corrupt selection
+  digests, changed observations, blocked sources and changed original snapshots.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch reproduced
+  the socket permission error. The browser test remains unchanged.
+- `git diff --check`: passed.
+
+The service is internal and read-only. Production transport, maintained-provider
+qualification, ledger posting and final-package approval remain unfinished.
+Next: resume the production-target PostgreSQL job persistence work recorded in
+the durable-job update. Reuse the existing SQLite contract for tenant-scoped
+creation, idempotent replay and recoverable worker checkpoints before connecting
+the shared evidence/journal services to autonomous orchestration.

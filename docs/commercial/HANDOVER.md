@@ -626,3 +626,17 @@ socket permission failure. This historical choice has draft preparation scope.
 Next: a unified current-draft reader resolving the selection with fresh
 eligibility checks and original lineage. Posting and final-package approval
 remain unfinished.
+
+
+## Latest unified current journal draft checkpoint
+
+Migration 0050 and the shared current reader resolve an original or explicitly
+selected replacement with fresh eligibility and exact digest checks on one
+statement snapshot. The result retains original, replacement and selection
+attribution, with effective balanced lines and source provenance. Use the dedicated
+current-reader grant in EVIDENCE.md. **46 core, 21 identity and 237 PostgreSQL/HTTP
+tests pass**. The unchanged prototype passes 19 of 20 tests with the Chromium
+socket permission failure. Production transport, posting and final-package
+approval remain unfinished.
+Next: resume tenant-scoped PostgreSQL agent-job persistence using the existing
+SQLite development contract, then connect shared evidence/journal services.

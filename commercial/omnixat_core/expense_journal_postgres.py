@@ -145,6 +145,10 @@ def read_expense_journal_draft(
             row = cursor.fetchone()
     if row is None:
         raise EvidenceNotEligible("Journal draft is unavailable")
+    return _journal_review_details(row)
+
+
+def _journal_review_details(row):
     draft = row["expense_draft_id"]
     receipt = ExpenseJournalReceipt(row["journal_id"], draft, row["journal_created_at"])
     return ExpenseJournalReview(receipt, row["journal_created_by"], _journal_details(row, draft),
@@ -822,6 +826,10 @@ def read_expense_journal_replacement(
             row = cursor.fetchone()
     if row is None:
         raise EvidenceNotEligible("Saved journal replacement is unavailable")
+    return _replacement_review_details(row)
+
+
+def _replacement_review_details(row):
     receipt = ExpenseJournalReplacementReceipt(
         row["replacement_id"], row["journal_id"], row["replacement_created_at"],
     )
@@ -881,3 +889,56 @@ def select_expense_journal_replacement(
             row["original_journal"], row["replacement_id"], row["snapshot_sha256"].hex(),
             row["proposal_sha256"].hex(), row["selected_by"], row["selected_at"],
         )
+
+
+@dataclass(frozen=True)
+class ExpenseJournalCurrentDraft:
+    original: ExpenseJournalReview
+    replacement: ExpenseJournalReplacementReview | None
+    selection: ExpenseJournalReplacementSelection | None
+
+    @property
+    def journal(self) -> ExpenseJournalPreview:
+        """Return the effective balanced journal with its exact source provenance."""
+        if self.replacement is None:
+            return self.original.journal
+        draft = self.replacement.draft
+        proposal = draft.correction.proposal
+        return ExpenseJournalPreview(
+            self.original.journal.draft_id, draft.funding_source_id, proposal.currency,
+            draft.accounting_date, draft.period_id, proposal.evidence_id, proposal.extraction_job_id,
+            proposal.source_cell, proposal.scan_policy_version, proposal.content_sha256, proposal.proposed_lines,
+        )
+
+
+def read_current_expense_journal(
+    connection, actor, tenant_id, organisation_id, journal_id,
+) -> ExpenseJournalCurrentDraft:
+    """Resolve the eligible original or explicitly selected replacement on one snapshot."""
+    tenant = _authorize(actor, tenant_id, "records:read")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal review required")
+    organisation, journal = (UUID(str(value)) for value in (organisation_id, journal_id))
+    with _tenant_transaction(connection, tenant, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+        "expense_journal_amount_corrections", "expense_journal_amount_correction_decisions",
+        "expense_journal_replacements", "expense_journal_replacement_selections",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_current_expense_journal")
+            cursor.execute("SELECT * FROM omnixat_extraction.read_current_expense_journal(%s,%s)",
+                           (organisation, journal))
+            row = cursor.fetchone()
+    if row is None:
+        raise EvidenceNotEligible("Current journal draft is unavailable")
+    original = _journal_review_details(row)
+    if row["r_replacement_id"] is None:
+        return ExpenseJournalCurrentDraft(original, None, None)
+    replacement = _replacement_review_details({name[2:]: value for name, value in row.items() if name.startswith("r_")})
+    selection = ExpenseJournalReplacementSelection(
+        original.receipt.id, replacement.receipt.id, original.snapshot_sha256,
+        replacement.draft.correction.proposal_sha256, row["selected_by"], row["selected_at"],
+    )
+    return ExpenseJournalCurrentDraft(original, replacement, selection)
