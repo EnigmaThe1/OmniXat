@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
+from decimal import Decimal
 import re
 from typing import Literal
 from uuid import UUID
@@ -9,9 +10,10 @@ from uuid import UUID
 from psycopg.rows import dict_row
 
 from .evidence_csv import AmountCell
-from .evidence_drafts_postgres import _require_draft_role
+from .evidence_drafts_postgres import _require_draft_role, _validate_cell
 from .evidence_extraction_postgres import EvidenceNotEligible
 from .evidence_postgres import _authorize
+from .expense_context import expense_pence
 from .expense_funding_postgres import _TABLES as _FUNDING_TABLES
 from .journal_correction_questions import (
     ExpenseJournalFollowUpQuestion, JournalCorrectionReason, journal_correction_questions,
@@ -444,3 +446,53 @@ def link_expense_journal_clarification_evidence(
             raise RuntimeError("Journal clarification evidence receipt unavailable")
         return ExpenseJournalEvidenceLink(journal, snapshot_sha256, reason, evidence, row["fingerprint"].hex(),
                                           row["scan_policy"], actor_id, row["recorded_at"])
+
+
+@dataclass(frozen=True)
+class ExpenseJournalAmountCorrection:
+    journal_id: UUID
+    snapshot_sha256: str
+    evidence_id: UUID
+    extraction_job_id: UUID
+    source_cell: AmountCell
+    content_sha256: str = field(repr=False)
+    scan_policy_version: str
+    currency: Literal["GBP"]
+    previous_pence: int = field(repr=False)
+    proposed_lines: tuple[JournalPreviewLine, JournalPreviewLine]
+
+
+def preview_expense_journal_amount_correction(
+    connection, actor, tenant_id, organisation_id, journal_id, *,
+    snapshot_sha256: str, extraction_job_id: UUID, cell: AmountCell, currency: Literal["GBP"],
+) -> ExpenseJournalAmountCorrection:
+    """Preview replacement amounts from one extracted cell in the linked original."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal preparation required")
+    if currency != "GBP":
+        raise ValueError("Explicit GBP currency required")
+    if type(snapshot_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", snapshot_sha256):
+        raise ValueError("An exact journal snapshot digest is required")
+    _validate_cell(cell)
+    organisation, journal, job = (UUID(str(value)) for value in (organisation_id, journal_id, extraction_job_id))
+    with _tenant_transaction(connection, tenant, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_expense_journal_amount_correction")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.read_expense_journal_amount_correction(%s,%s,%s,%s,%s,%s,%s)
+            """, (organisation, journal, bytes.fromhex(snapshot_sha256), job, cell.field_name, cell.row, cell.column))
+            row = cursor.fetchone()
+    if row is None:
+        raise EvidenceNotEligible("Journal amount correction source is unavailable")
+    pence = expense_pence(Decimal(row["amount"]))
+    return ExpenseJournalAmountCorrection(
+        journal, snapshot_sha256, row["evidence_id"], job, cell, row["content_sha256"].hex(),
+        row["policy_version"], "GBP", int(row["previous_pence"]),
+        (JournalPreviewLine(row["expense_account_id"], "debit", pence),
+         JournalPreviewLine(row["counterpart_account_id"], "credit", pence)),
+    )

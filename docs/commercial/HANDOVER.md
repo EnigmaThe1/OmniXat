@@ -539,3 +539,12 @@ decision, correction and clarification retries. **46 core, 21 identity,
 213 PostgreSQL/HTTP and 60 repeated concurrency checks pass**. The
 unchanged prototype passes 19 of 20 tests with the known Chromium socket
 failure. Next: preview a correction from a verified CSV amount.
+
+## Latest journal amount correction preview checkpoint
+
+Migration 0041 previews both balanced GBP lines from one explicitly selected
+eligible extracted CSV cell on the linked evidence, with the original amount
+and exact provenance. See EVIDENCE.md for the dedicated reader grant.
+**46 core, 21 identity and 215 PostgreSQL/HTTP tests pass**. The unchanged
+prototype passes 19 of 20 tests with the known Chromium socket failure.
+Next: persist a scoped amount-correction proposal for review.

@@ -1639,3 +1639,35 @@ with the pinned psycopg 3.3.8 source adapter:
 Next: preview an amount correction from an explicitly selected verified
 CSV amount in linked supporting evidence. Keep the original journal and
 answer intact and leave posting to a separate action.
+
+## C4 journal amount correction preview — completed
+
+Recovered clean `31818ca`. Add a read-only preview from an explicitly selected
+CSV extraction cell on the evidence linked to an answered amount correction.
+Require explicit GBP confirmation, current scan eligibility and exact pence.
+Preserve the journal, clarification and ledger records.
+
+Migration 0041 provides a scoped read from the answered amount correction
+to its linked original and explicitly selected, eligible CSV extraction
+cell. The service requires GBP and a positive whole-pence result. It
+returns the original pence amount, both balanced proposed lines and
+source provenance. The preview is read-only.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **215 passed**. The new
+  tests cover exact pence, balanced accounts, source provenance, isolation,
+  blocked originals, mismatched jobs and cells, role separation and
+  preservation of the original journal.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: persist an attributed amount-correction proposal against the original
+snapshot with a retry-safe receipt and current source revalidation. Journal
+replacement and ledger posting remain separate decisions.

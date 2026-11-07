@@ -583,3 +583,24 @@ snapshot and visible reasons. Access to original bytes remains separate.
 Migration 0040 keeps decision, correction and answer writes retry-safe
 when concurrent inserts collide on either index for the same record.
 Existing receipts, scoped foreign keys and grants are preserved.
+
+## Previewing a journal amount correction
+
+Migration 0041 adds `preview_expense_journal_amount_correction`. An
+interactive tenant owner or editor with records write and evidence read
+permission selects the extraction job and exact CSV field, row and
+column, and explicitly confirms GBP. The cell must contain a unique
+extracted amount from the document linked to the answered amount
+correction on the exact eligible journal snapshot. The scan gate
+rechecks the current fingerprint and policy. Clarification text is
+separate from the source amount.
+
+The service requires a positive amount expressible in whole pence.
+It returns the previous amount and two equal proposed amounts for the
+existing debit and credit accounts, with the evidence and cell provenance.
+The operation is read-only.
+
+Grant the dedicated preview reader USAGE on `omnixat_extraction` and
+EXECUTE on
+`omnixat_extraction.read_expense_journal_amount_correction(uuid,uuid,bytea,uuid,text,integer,integer)`
+only. Original bytes and other journal grants remain separate.
