@@ -604,3 +604,23 @@ Grant the dedicated preview reader USAGE on `omnixat_extraction` and
 EXECUTE on
 `omnixat_extraction.read_expense_journal_amount_correction(uuid,uuid,bytea,uuid,text,integer,integer)`
 only. Original bytes and other journal grants remain separate.
+
+## Saving a journal amount-correction proposal
+
+Migration 0042 adds `create_expense_journal_amount_correction`. An
+interactive tenant owner or editor selects the same exact extraction
+cell as the preview and explicitly confirms GBP. PostgreSQL derives
+the proposed amount, requires positive whole pence and stores the
+original snapshot, both account IDs, evidence fingerprint, extraction
+coordinates and authenticated author.
+
+One proposal is retained per journal snapshot. An identical eligible
+retry by the original author returns its receipt. A different source
+selection or author conflicts. The writer protects journal policies,
+both originals, scanner state and the relevant extraction records
+through commit. The original journal and clarification are retained.
+
+Grant the dedicated writer USAGE on `omnixat_extraction` and EXECUTE on
+`omnixat_extraction.create_expense_journal_amount_correction(uuid,uuid,bytea,uuid,text,integer,integer,text,text)`
+only. The receipt contains an ID, journal snapshot and creation time.
+A proposal is preparation for a separate review and replacement action.

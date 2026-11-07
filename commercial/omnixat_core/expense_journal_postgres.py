@@ -496,3 +496,56 @@ def preview_expense_journal_amount_correction(
         (JournalPreviewLine(row["expense_account_id"], "debit", pence),
          JournalPreviewLine(row["counterpart_account_id"], "credit", pence)),
     )
+
+
+class ExpenseJournalAmountCorrectionConflict(Exception):
+    """A different amount-correction proposal exists for this snapshot."""
+
+
+@dataclass(frozen=True)
+class ExpenseJournalAmountCorrectionReceipt:
+    id: UUID
+    journal_id: UUID
+    snapshot_sha256: str
+    created_at: datetime
+
+
+def create_expense_journal_amount_correction(
+    connection, actor, tenant_id, organisation_id, journal_id, *,
+    snapshot_sha256: str, extraction_job_id: UUID, cell: AmountCell, currency: Literal["GBP"],
+) -> ExpenseJournalAmountCorrectionReceipt:
+    """Save a source-derived proposal while leaving the journal intact."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal preparation required")
+    if currency != "GBP":
+        raise ValueError("Explicit GBP currency required")
+    if type(snapshot_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", snapshot_sha256):
+        raise ValueError("An exact journal snapshot digest is required")
+    actor_id = actor.user_id
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
+        raise ValueError("Invalid correction proposal attribution")
+    _validate_cell(cell)
+    organisation, journal, job = (UUID(str(value)) for value in (organisation_id, journal_id, extraction_job_id))
+    with _tenant_transaction(connection, tenant, write=True, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+        "expense_journal_amount_corrections",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "create_expense_journal_amount_correction")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.create_expense_journal_amount_correction(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (organisation, journal, bytes.fromhex(snapshot_sha256), job, cell.field_name, cell.row, cell.column,
+                  currency, actor_id))
+            row = cursor.fetchone()
+        if row["outcome"] == "unavailable":
+            raise EvidenceNotEligible("Journal amount correction source is unavailable")
+        if row["outcome"] == "invalid_amount":
+            raise ValueError("Correction amount must be positive and exact to a penny")
+        if row["outcome"] == "conflict":
+            raise ExpenseJournalAmountCorrectionConflict("A different correction proposal already exists")
+        if row["outcome"] != "stored":
+            raise RuntimeError("Correction proposal receipt unavailable")
+        return ExpenseJournalAmountCorrectionReceipt(row["proposal_id"], journal, snapshot_sha256, row["recorded_at"])

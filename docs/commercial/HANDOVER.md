@@ -548,3 +548,12 @@ and exact provenance. See EVIDENCE.md for the dedicated reader grant.
 **46 core, 21 identity and 215 PostgreSQL/HTTP tests pass**. The unchanged
 prototype passes 19 of 20 tests with the known Chromium socket failure.
 Next: persist a scoped amount-correction proposal for review.
+
+## Latest durable amount-correction proposal checkpoint
+
+Migration 0042 stores one attributed source-derived proposal per journal
+snapshot through a dedicated writer grant documented in EVIDENCE.md.
+Eligibility is held through commit and identical retries reuse the receipt.
+**46 core, 21 identity and 218 PostgreSQL/HTTP tests pass**. The unchanged
+prototype passes 19 of 20 tests with the known Chromium socket failure.
+Next: scoped saved-proposal review with current eligibility checks.

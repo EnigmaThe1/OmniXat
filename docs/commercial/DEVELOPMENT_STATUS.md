@@ -1671,3 +1671,34 @@ with the pinned psycopg 3.3.8 source adapter:
 Next: persist an attributed amount-correction proposal against the original
 snapshot with a retry-safe receipt and current source revalidation. Journal
 replacement and ledger posting remain separate decisions.
+
+## C4 durable journal amount correction proposals — completed
+
+Recovered clean `88124f2`. Save one attributed amount-correction proposal
+per exact journal snapshot, derived from the linked extraction cell.
+Revalidate source and journal eligibility and protect it through commit.
+Keep original journals and ledger balances separate from proposal storage.
+
+Migration 0042 saves one source-derived, attributed proposal per exact
+journal snapshot. It records original and proposed pence, both account IDs,
+evidence fingerprint and the exact extraction cell. Current journal and
+source eligibility is protected through commit. Identical eligible retries
+return the first receipt; different author or source inputs conflict.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **218 passed**. New
+  coverage includes concurrent replay, conflicting sources and authors,
+  permission and tenant boundaries, rollback, invalid amounts, and locks
+  protecting journal policy, both originals and extraction through commit.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: read a saved proposal by receipt ID, compare it with the exact current
+journal and source and return its attributed balanced lines for review.
