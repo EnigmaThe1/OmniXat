@@ -489,6 +489,10 @@ def preview_expense_journal_amount_correction(
             row = cursor.fetchone()
     if row is None:
         raise EvidenceNotEligible("Journal amount correction source is unavailable")
+    return _amount_correction_details(row, journal, snapshot_sha256, job, cell)
+
+
+def _amount_correction_details(row, journal, snapshot_sha256, job, cell):
     pence = expense_pence(Decimal(row["amount"]))
     return ExpenseJournalAmountCorrection(
         journal, snapshot_sha256, row["evidence_id"], job, cell, row["content_sha256"].hex(),
@@ -549,3 +553,39 @@ def create_expense_journal_amount_correction(
         if row["outcome"] != "stored":
             raise RuntimeError("Correction proposal receipt unavailable")
         return ExpenseJournalAmountCorrectionReceipt(row["proposal_id"], journal, snapshot_sha256, row["recorded_at"])
+
+
+
+@dataclass(frozen=True)
+class ExpenseJournalAmountCorrectionReview:
+    receipt: ExpenseJournalAmountCorrectionReceipt
+    created_by: str = field(repr=False)
+    proposal: ExpenseJournalAmountCorrection
+
+
+def read_expense_journal_amount_correction(
+    connection, actor, tenant_id, organisation_id, proposal_id,
+) -> ExpenseJournalAmountCorrectionReview:
+    """Review one saved proposal only while its journal and exact source remain eligible."""
+    tenant = _authorize(actor, tenant_id, "records:read")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal review required")
+    organisation, proposal = (UUID(str(value)) for value in (organisation_id, proposal_id))
+    with _tenant_transaction(connection, tenant, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+        "expense_journal_amount_corrections",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_saved_expense_journal_amount_correction")
+            cursor.execute("SELECT * FROM omnixat_extraction.read_saved_expense_journal_amount_correction(%s,%s)",
+                           (organisation, proposal))
+            row = cursor.fetchone()
+    if row is None:
+        raise EvidenceNotEligible("Journal correction proposal is unavailable")
+    digest = row["snapshot_sha256"].hex()
+    receipt = ExpenseJournalAmountCorrectionReceipt(row["proposal_id"], row["journal_id"], digest, row["created_at"])
+    cell = AmountCell(row["field_name"], row["source_row"], row["source_column"])
+    details = _amount_correction_details(row, row["journal_id"], digest, row["job_id"], cell)
+    return ExpenseJournalAmountCorrectionReview(receipt, row["created_by"], details)

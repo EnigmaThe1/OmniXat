@@ -557,3 +557,12 @@ Eligibility is held through commit and identical retries reuse the receipt.
 **46 core, 21 identity and 218 PostgreSQL/HTTP tests pass**. The unchanged
 prototype passes 19 of 20 tests with the known Chromium socket failure.
 Next: scoped saved-proposal review with current eligibility checks.
+
+## Latest saved correction proposal review checkpoint
+
+Migration 0043 reads a saved proposal by receipt ID only while its exact
+journal snapshot, source, amounts and accounts still match. It returns the
+author and balanced GBP lines with exact provenance. See EVIDENCE.md for
+the dedicated reader grant. **46 core, 21 identity and 220 PostgreSQL/HTTP
+tests pass**. The unchanged prototype passes 19 of 20 tests with the known
+Chromium socket failure. Next: an exact-proposal human review decision.

@@ -624,3 +624,18 @@ Grant the dedicated writer USAGE on `omnixat_extraction` and EXECUTE on
 `omnixat_extraction.create_expense_journal_amount_correction(uuid,uuid,bytea,uuid,text,integer,integer,text,text)`
 only. The receipt contains an ID, journal snapshot and creation time.
 A proposal is preparation for a separate review and replacement action.
+
+## Reviewing a saved amount-correction proposal
+
+Migration 0043 adds `read_expense_journal_amount_correction`. An interactive
+tenant reader with records read and evidence read permission selects a
+proposal receipt ID in its organisation. The read checks the saved journal
+snapshot, linked evidence fingerprint and scan policy, selected extraction
+cell, original and proposed pence, and both account IDs on one statement
+snapshot. Stale or changed proposals are unavailable.
+
+The result contains the original receipt, author and the same balanced GBP
+proposal and provenance returned by the preview. Access is read-only.
+Grant a dedicated reader USAGE on `omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.read_saved_expense_journal_amount_correction(uuid,uuid)`.
+Original bytes, write functions and direct table access remain separate.

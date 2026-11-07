@@ -1702,3 +1702,32 @@ with the pinned psycopg 3.3.8 source adapter:
 
 Next: read a saved proposal by receipt ID, compare it with the exact current
 journal and source and return its attributed balanced lines for review.
+
+## C4 saved amount-correction proposal review — completed
+
+Recovered clean `cb475dc`. Read one saved proposal by receipt ID with tenant
+and organisation scope. Recheck the exact journal snapshot and selected CSV
+source before returning attribution, original pence and both proposed lines.
+
+Migration 0043 returns one attributed saved proposal only when its original
+journal snapshot and exact selected source still match. The read compares
+fingerprint, scan policy, original and proposed pence and both account IDs.
+It reuses the preview's typed balanced-line representation.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **220 passed**.
+  New cases cover exact receipts and attribution after reconnect, tenant
+  and organisation scope, changed proposal fields, stale journal inputs,
+  blocked supporting evidence and dedicated read grants.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: record an attributed human bookkeeping review decision bound to the
+exact saved proposal. Keep journal replacement and posting separate.
