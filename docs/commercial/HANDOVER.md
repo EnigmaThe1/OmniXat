@@ -640,3 +640,16 @@ socket permission failure. Production transport, posting and final-package
 approval remain unfinished.
 Next: resume tenant-scoped PostgreSQL agent-job persistence using the existing
 SQLite development contract, then connect shared evidence/journal services.
+
+
+## Latest PostgreSQL agent-job checkpoint
+
+Migration 0051 and `PostgresJobStore` provide tenant-scoped creation, idempotent
+replay, reads, database-timed leases and persisted progress. Checkpoints require
+the current verified worker and token after acquiring the row lock. Completion
+clears the lease. Apply the dedicated role grants in JOBS_POSTGRES.md.
+**46 core, 21 identity and 247 PostgreSQL/HTTP tests pass**. The unchanged
+prototype passes 19 of 20 tests with the Chromium socket permission failure.
+Production qualification, identity wiring and atomic ledger-effect handling remain
+unfinished. Next: tenant-authorised PostgreSQL job cancellation with claim and
+checkpoint rejection, then effect idempotency before autonomous orchestration.

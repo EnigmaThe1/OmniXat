@@ -1966,3 +1966,46 @@ Next: resume the production-target PostgreSQL job persistence work recorded in
 the durable-job update. Reuse the existing SQLite contract for tenant-scoped
 creation, idempotent replay and recoverable worker checkpoints before connecting
 the shared evidence/journal services to autonomous orchestration.
+
+## C1 PostgreSQL agent-job persistence — completed first slice
+
+Recovered clean `305b050` with no active task or competing writer found.
+Implement the existing create/read/claim/checkpoint interface over tenant-scoped
+PostgreSQL transactions, with concurrent idempotency, database-timed leases,
+worker-bound fencing and restart-safe progress. Preserve the SQLite development
+adapter. Ledger effects and autonomous orchestration remain subsequent work.
+
+
+Migration 0051 and `PostgresJobStore` provide tenant-scoped create/read/claim/
+checkpoint operations through the shared PostgreSQL transaction boundary. The
+schema forces RLS and validates queued/running/completed state and bounded JSON
+progress. Creation stores the payload hash and original actor with concurrent
+idempotency. Claims and progress use the database clock after row-lock acquisition.
+The current worker identity and token must match, and completion clears the lease.
+The worker-identity check is an additional restriction in this PostgreSQL adapter.
+See JOBS_POSTGRES.md for the dedicated role grants, interface and trust boundary.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **247 passed**.
+  Ten new tests cover reconnect/recovery, creator attribution, same/different
+  payload races, single-winner claims, expiry/reclaim, worker/token fencing,
+  lock-wait expiry, tenant RLS, scope/role safety, validation, database state
+  constraints and rollback after a rejected JSON checkpoint.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch reproduced
+  the socket permission error. The browser test remains unchanged.
+- `git diff --check`: passed.
+
+This internal adapter uses server-verified Principals and an exclusive connection
+per operation. Current membership/revocation must be resolved by callers. Runtime
+SQL privileges trust the application boundary. Production operational qualification,
+worker scheduling, cancellation, retry budgets and atomic ledger-effect handling
+remain unfinished. SQLite retains its separate development contract.
+Next: add tenant-authorised PostgreSQL job cancellation and reject further claims
+or checkpoints after cancellation, then qualify operation-specific effect
+idempotency before connecting autonomous orchestration.

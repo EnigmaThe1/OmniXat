@@ -15,7 +15,9 @@ Implemented:
 - Artifact/destination/environment-bound approval integrity helpers.
 - Agent identities cannot approve filings; API keys cannot replace human review.
 - Durable, tenant-scoped agent-job checkpoints with idempotency and expiring worker
-  claims, using a SQLite development adapter. Production PostgreSQL remains to build.
+  claims, using a SQLite development adapter. The
+  [PostgreSQL job adapter](JOBS_POSTGRES.md) provides the same internal
+  create/read/claim/checkpoint interface with database-timed, worker-bound leases.
 - Bounded ordinary private-company/SA deadlines, MTD threshold screening and cumulative standard update dates.
 - Historic/current nominal micro-threshold lookup and revised-replacement completeness checks.
 - Dated source catalogue with explicit research-only versus bounded-function support.
