@@ -1823,3 +1823,36 @@ with the pinned psycopg 3.3.8 source adapter:
 Next: save a retry-safe replacement draft linked to the exact proposal,
 selected reviewed observation and original journal. Preserve the original
 and hold current eligibility through commit.
+
+## C4 durable linked replacement drafts — completed
+
+Recovered clean `8309afd`. Save one attributed replacement draft per
+original journal, bound to the exact proposal and selected reviewed
+observation. Reuse transactional proposal revalidation to hold current
+journal and source eligibility through commit. Preserve original records.
+
+Migration 0047 saves one linked replacement draft per original journal.
+Its snapshot includes exact proposal and reviewed-observation references,
+original accounting context, both balanced account amounts and source
+provenance. The writer reuses proposal replay to hold current journal and
+source eligibility through commit, and locks the selected observation.
+Identical eligible retries return the original receipt.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **229 passed**.
+  New tests cover exact persisted attribution/provenance, concurrent replay,
+  author conflicts, stale or missing reviews, permission boundaries,
+  original-record preservation, rollback and commit-time eligibility locks.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: read one saved replacement draft by receipt ID, revalidate the
+original snapshot, proposal, selected review and source, and return its
+attributed balanced lines.

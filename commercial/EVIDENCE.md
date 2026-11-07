@@ -700,3 +700,24 @@ EXECUTE only on
 `omnixat_extraction.read_expense_journal_replacement_preview(uuid,uuid,bytea,text)`.
 The preview is read-only. Saving a replacement draft and posting ledger
 entries require their own operations.
+
+## Saving a linked replacement draft
+
+Migration 0047 adds `create_expense_journal_replacement`. An interactive
+tenant owner or editor with records write and evidence read permission
+selects the exact proposal digest and its reviewed observation. The writer
+locks the existing proposal and replays its original inputs through the
+transactional proposal writer to revalidate the source and retain its
+eligibility locks. It also holds the selected observation through commit.
+
+One replacement draft is stored per original journal. The draft snapshots
+the selected review, accounting context, balanced pence amount and exact
+evidence provenance with the authenticated draft author. Scoped foreign
+keys require the original journal and reviewed observation. Identical
+eligible retries return the first receipt. Different authors or selected
+observations conflict.
+
+Grant the dedicated writer USAGE on `omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.create_expense_journal_replacement(uuid,uuid,bytea,text,text)`.
+The original journal and correction proposal are retained as evidence of the
+preparation history. Saving this linked draft carries no posting authority.

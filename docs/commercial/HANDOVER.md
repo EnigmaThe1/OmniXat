@@ -592,3 +592,12 @@ context and source-linked balanced amounts. See EVIDENCE.md for its grant.
 **46 core, 21 identity and 226 PostgreSQL/HTTP tests pass**. The unchanged
 prototype passes 19 of 20 tests with the known Chromium socket failure.
 Next: persist a linked replacement draft with retry protection.
+
+## Latest durable replacement draft checkpoint
+
+Migration 0047 saves a linked replacement draft with exact proposal, review,
+source and accounting provenance through a dedicated writer grant in
+EVIDENCE.md. Original records are retained. **46 core, 21 identity and 229
+PostgreSQL/HTTP tests pass**. The unchanged prototype passes 19 of 20 tests
+with the known Chromium socket failure. Next: scoped saved replacement
+review with current eligibility checks.
