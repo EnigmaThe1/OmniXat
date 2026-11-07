@@ -815,3 +815,23 @@ Next: execute saved expense plans using a job-fenced shared-service effect with
 fresh source/accounting checks and an atomic expense/retry receipt. Human handoff,
 scheduling, providers, posting, final approval and production qualification remain
 unfinished. No UI/live integration or active increment remains.
+
+
+## Latest fenced expense execution checkpoint
+
+Migration 0060 and `AuthenticatedJobStore.execute_expense_plan` run saved plans
+through existing source-amount and expense creators. No worker-supplied amount is
+accepted. Fresh signed identity, live worker/lease, exact plan/source and current
+policy checks precede an atomic source-draft/expense/job-receipt transaction.
+Recovered-worker retries preserve first attribution and receipt-bound plan digests.
+Use the separate execute-only grant in JOBS_POSTGRES.md; human-only preparation
+and clarification remain unchanged. The summary guard rejects this write role.
+**47 core, 21 identity and 341 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with Chromium unavailable. No progress/completion, funding,
+journal, posting or filing approval occurs. Revocation cannot stop already-admitted
+transactions; cancellation serializes and preserves earlier committed effects.
+The final lease check precedes commit. Next: recover job-linked expense receipts
+and review under fresh eligibility, then persist explicit funding/counterpart
+intent before journal work. Human handoff, providers, scheduling, posting, final
+approval and production qualification remain unfinished. No UI/live integration
+or active increment remains.

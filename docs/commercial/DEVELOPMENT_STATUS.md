@@ -2445,3 +2445,58 @@ rechecking resolved source/current evidence/accounting policy and atomically sto
 expense and retry receipt. Human clarification handoff, providers, scheduling,
 posting, final approval and production qualification remain unfinished. No active
 implementation remains in this increment.
+
+## C1 fenced expense-draft execution — completed
+
+Recovered clean `d3657d0`; no active increment or competing writer recorded.
+Execute immutable saved expense plans through existing source-amount and expense
+creators. Recheck signed identity, live worker/lease, exact plan/source/current
+eligibility and accounting policy; atomically commit draft and job-effect receipt.
+Preserve first attribution on recovered-worker retries, accept no worker-supplied
+amount and leave progress/job completion/posting unchanged.
+
+
+Migration 0060 and `AuthenticatedJobStore.execute_expense_plan` execute saved input
+plans via the existing source-amount and expense creators. The worker submits no
+amount or replacement accounting context. After recovering validated plans, fresh
+signed identity is resolved again. SQL locks the job, verifies current worker/lease,
+exact source/plan and job-backed extraction receipt, then atomically creates source
+draft, expense draft and first-actor job receipt. Existing creators recheck current
+source/accounting policy and hold their locks through commit. Recovered-worker
+retries retain original attribution; both input digests are pinned in the receipt.
+The result contains metadata only and leaves progress/job completion unchanged.
+Apply the separate execute-only role grant in JOBS_POSTGRES.md. Existing human-only
+preparation/clarification checks remain unchanged; the summary-role guard now also
+rejects the new expense-write privilege.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2,
+psycopg 3.3.8 binary adapter and requirements-http.txt dependencies:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **47 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **341 passed**.
+  Thirteen new tests cover exact source-backed pence, first-attribution recovery,
+  concurrent retry/cancellation, human clarification/unavailable answers, missing
+  extraction receipts, nonpositive/fractional-penny rejection, current policy,
+  scope/role/tenant/revocation and wrong/expired/terminal claims, receipt failure
+  and real lease expiry rolling back all new rows, dedicated grants, preservation
+  of another actor's preexisting source draft, fresh identity after input recovery
+  and changed intent refusing the original receipt. Upgrade preserves existing
+  jobs/plans and invents no effect receipts.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**;
+  unchanged browser case reports Chromium unavailable (503). No test skipped or
+  removed; no prototype or commercial UI code changed.
+- `git diff --check`: passed.
+
+This prepares an expense draft only: no funding choice, journal, ledger posting,
+statutory approval or job-completion decision is made. No figure enters progress or
+the worker's returned receipt. Membership revocation governs the next admission,
+not an already-admitted transaction. Cancellation follows job-lock ordering and
+preserves effects committed before it. Final lease verification precedes commit;
+it does not promise commit finishes before expiry. The database role is a trusted
+server capability, not customer authentication or a model-facing SQL tool.
+Next: recover job-linked expense receipts/review under fresh eligibility, then save
+explicit funding/counterpart intent before journal preparation. Human handoff,
+scheduling, providers, ledger posting, final-package approval and production
+qualification remain unfinished. No active implementation remains in this increment.

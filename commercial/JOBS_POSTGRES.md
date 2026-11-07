@@ -501,3 +501,55 @@ Human-only clarification/approval and UI decisions remain unchanged.
 Technical references rechecked 7 November 2026: PostgreSQL 16
 [row locking](https://www.postgresql.org/docs/16/explicit-locking.html) and
 [conflict handling](https://www.postgresql.org/docs/16/sql-insert.html).
+
+## Job-backed expense-draft execution
+
+Migration 0060 and `AuthenticatedJobStore.execute_expense_plan` execute one saved
+expense plan through the existing deterministic source-amount and expense-draft
+creators. The call accepts only job/lease references; no worker-supplied monetary
+value, accounting context or claimed original actor can enter this effect.
+Use a **separate execute-only expense worker login**, with CONNECT and only:
+
+```sql
+GRANT USAGE ON SCHEMA omnixat_extraction TO expense_worker;
+GRANT EXECUTE ON FUNCTION omnixat_extraction.create_job_expense_draft(uuid,text,uuid,bytea,bytea) TO expense_worker;
+```
+
+It needs no direct table privileges or permission to execute the older unfenced
+creators. The adapter rejects other extraction/review/clarification function grants.
+The metadata-only summary guard also rejects this new write privilege. Human
+preparation and clarification adapters keep their existing human-only checks.
+Database credentials alone do not authenticate end users: signed current identity
+is established by the enclosing job service, separately from the job transaction.
+
+The service recovers and validates both saved plan digests, then resolves identity
+again. SQL locks the job, checks the current running worker/token/lease, requires
+the exact job-backed extraction receipt and validates its source/ordered CSV plan
+through the existing metadata gate. It selects the expense cell from the saved
+intent and calls the shared amount creator. Missing/blank/ambiguous cells require
+an existing exact human clarification; an unavailable answer cannot become zero.
+The shared expense creator rechecks current scan/accounting policy and retains its
+policy/source locks through commit. Positive, supported amounts exact to a penny
+are derived from evidence in PostgreSQL; no rounding or guessed value is introduced.
+
+Source draft, expense draft and job-effect receipt commit together. Any rejected
+source/context/amount, conflict, SQL failure or failed final lease check rolls back
+all newly created rows. Same-job retries serialize and return the first receipt.
+Recovered workers authenticate as themselves; SQL reuses only the original effect
+actor for shared-creator replay, preserving audit attribution. Receipt digests bind
+both original plans. Other actors' conflicting preexisting drafts remain untouched.
+
+The return value is metadata only: job ID, expense ID, first actor and receipt time.
+It neither returns an amount nor changes progress, completes the job, chooses a
+funding source, creates a journal, posts to the ledger or approves a filing.
+Identity revocation governs the next admission; it cannot stop an admitted database
+transaction. Cancellation serializes on the job: a committed draft may precede
+cancellation and remains preserved. The final lease check precedes commit and does
+not guarantee that the commit interval itself ends before lease expiry.
+
+Next: recover a job-linked expense-draft review under current authority and
+eligibility, then persist explicit funding/counterpart intent before journal work.
+Scheduler, providers, posting and final approval remain separate unfinished work.
+Technical references rechecked 7 November 2026: PostgreSQL 16
+[row locks](https://www.postgresql.org/docs/16/explicit-locking.html) and
+[security-definer functions](https://www.postgresql.org/docs/16/sql-createfunction.html).

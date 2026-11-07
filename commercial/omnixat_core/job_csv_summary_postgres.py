@@ -69,6 +69,7 @@ def read_job_csv_summary(connection, actor, tenant_id, job_id, lease_token, plan
                 has_function_privilege('omnixat_extraction.read_eligible_original(uuid,uuid)', 'EXECUTE')
                 OR has_function_privilege('omnixat_extraction.store_csv_result(uuid,uuid,uuid,text,bytea,jsonb)', 'EXECUTE')
                 OR has_function_privilege('omnixat_extraction.store_job_csv_result(uuid,text,uuid,uuid,bytea,text,bytea,jsonb)', 'EXECUTE')
+                OR has_function_privilege('omnixat_extraction.create_job_expense_draft(uuid,text,uuid,bytea,bytea)', 'EXECUTE')
                 OR has_function_privilege('omnixat_extraction.read_csv_review(uuid,uuid,uuid)', 'EXECUTE')
                 OR has_function_privilege('omnixat_extraction.read_csv_review_with_answers(uuid,uuid,uuid)', 'EXECUTE')
                 OR has_function_privilege('omnixat_extraction.store_csv_answer(uuid,uuid,uuid,text,integer,integer,text,text)', 'EXECUTE')

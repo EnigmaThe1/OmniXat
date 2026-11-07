@@ -80,3 +80,10 @@ class AuthenticatedJobStore:
 
     def get_expense_plan(self, token, tenant, job_id):
         return self._jobs.get_expense_plan(self._actor(token, tenant), tenant, job_id)
+
+    def execute_expense_plan(self, effect_connection, token, tenant, job_id, lease_token):
+        from .job_expense_effects_postgres import execute_job_expense
+        csv_plan = self.get_csv_plan(token, tenant, job_id).plan
+        expense_plan = self.get_expense_plan(token, tenant, job_id).plan
+        actor = self._actor(token, tenant, write=True)
+        return execute_job_expense(effect_connection, actor, tenant, job_id, lease_token, csv_plan, expense_plan)
