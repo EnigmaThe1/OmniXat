@@ -1790,3 +1790,36 @@ with the pinned psycopg 3.3.8 source adapter:
 Next: preview an explicit replacement journal draft linked to the exact
 proposal and an attributed reviewed observation. Preserve the original
 journal and keep posting as a separate operation.
+
+## C4 reviewed replacement journal preview — completed
+
+Recovered clean `671b6ed`. Preview a replacement draft using the exact
+eligible correction proposal and an explicitly selected reviewed observation.
+Retain the original journal's accounting context and source-linked balanced
+amounts. Keep this operation read-only.
+
+Migration 0046 returns a replacement preview tied to an explicitly
+selected reviewed observation on the exact eligible proposal digest.
+It carries the original journal's accounting date, period and funding
+source with the proposal's balanced amounts and evidence provenance.
+The operation is read-only and returns the selected observation's author
+and timestamp.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **226 passed**.
+  New cases cover exact review attribution, preserved accounting context,
+  stale/missing/changes-requested observations, tenant scope, source
+  blocking, restricted grants and unchanged original journals.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: save a retry-safe replacement draft linked to the exact proposal,
+selected reviewed observation and original journal. Preserve the original
+and hold current eligibility through commit.

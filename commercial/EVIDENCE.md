@@ -681,3 +681,22 @@ Grant the dedicated history reader USAGE on `omnixat_extraction` and EXECUTE
 only on
 `omnixat_extraction.read_expense_journal_amount_correction_decisions(uuid,uuid,bytea,text,integer)`.
 Keep original-document, proposal-detail and write grants separate.
+
+## Previewing a reviewed replacement draft
+
+Migration 0046 adds `preview_expense_journal_replacement`. An interactive
+tenant owner or editor with records write and evidence read permission
+selects the exact proposal digest and a reviewer whose observation is
+`reviewed` for that digest. Eligibility of the proposal, journal and
+linked extraction is rechecked on one statement snapshot.
+
+The result includes the attributed proposal and its balanced GBP amounts,
+the selected review observation and the original journal's accounting date,
+period and funding source. The selection identifies one observation.
+Decision history remains available separately for broader review.
+
+Grant the dedicated preview reader USAGE on `omnixat_extraction` and
+EXECUTE only on
+`omnixat_extraction.read_expense_journal_replacement_preview(uuid,uuid,bytea,text)`.
+The preview is read-only. Saving a replacement draft and posting ledger
+entries require their own operations.

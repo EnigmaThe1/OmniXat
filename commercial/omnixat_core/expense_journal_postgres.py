@@ -585,6 +585,10 @@ def read_expense_journal_amount_correction(
             row = cursor.fetchone()
     if row is None:
         raise EvidenceNotEligible("Journal correction proposal is unavailable")
+    return _saved_amount_correction_details(row)
+
+
+def _saved_amount_correction_details(row):
     digest = row["snapshot_sha256"].hex()
     receipt = ExpenseJournalAmountCorrectionReceipt(row["proposal_id"], row["journal_id"], digest, row["created_at"])
     cell = AmountCell(row["field_name"], row["source_row"], row["source_column"])
@@ -690,3 +694,47 @@ def read_expense_journal_amount_correction_decisions(
     ) for row in rows[:page_size])
     next_cursor = decisions[-1].reviewer_id if len(rows) > page_size else None
     return ExpenseJournalAmountCorrectionDecisionPage(decisions, next_cursor)
+
+
+
+@dataclass(frozen=True)
+class ExpenseJournalReplacementPreview:
+    correction: ExpenseJournalAmountCorrectionReview
+    reviewer_id: str = field(repr=False)
+    reviewed_at: datetime
+    accounting_date: date
+    period_id: UUID
+    funding_source_id: UUID
+
+
+def preview_expense_journal_replacement(
+    connection, actor, tenant_id, organisation_id, proposal_id, *,
+    proposal_sha256: str, reviewer_id: str,
+) -> ExpenseJournalReplacementPreview:
+    """Preview the current replacement context tied to one selected reviewed observation."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal preparation required")
+    if type(proposal_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", proposal_sha256):
+        raise ValueError("An exact proposal digest is required")
+    if type(reviewer_id) is not str or not reviewer_id.strip() or len(reviewer_id) > 200 or "\0" in reviewer_id:
+        raise ValueError("Select an attributed proposal reviewer")
+    organisation, proposal = (UUID(str(value)) for value in (organisation_id, proposal_id))
+    with _tenant_transaction(connection, tenant, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+        "expense_journal_amount_corrections", "expense_journal_amount_correction_decisions",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_expense_journal_replacement_preview")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.read_expense_journal_replacement_preview(%s,%s,%s,%s)
+            """, (organisation, proposal, bytes.fromhex(proposal_sha256), reviewer_id))
+            row = cursor.fetchone()
+    if row is None:
+        raise EvidenceNotEligible("Reviewed journal replacement is unavailable")
+    return ExpenseJournalReplacementPreview(
+        _saved_amount_correction_details(row), row["reviewer_id"], row["reviewed_at"],
+        row["accounting_date"], row["period_id"], row["funding_source_id"],
+    )

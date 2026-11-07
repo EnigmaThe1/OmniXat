@@ -583,3 +583,12 @@ digest through a dedicated grant documented in EVIDENCE.md. **46 core,
 21 identity and 224 PostgreSQL/HTTP tests pass**. The unchanged prototype
 passes 19 of 20 tests with the known Chromium socket failure. Next: preview
 a replacement draft linked to the exact proposal and reviewed observation.
+
+## Latest reviewed replacement preview checkpoint
+
+Migration 0046 previews a replacement draft from an eligible proposal and
+one explicitly selected reviewed observation. It retains original accounting
+context and source-linked balanced amounts. See EVIDENCE.md for its grant.
+**46 core, 21 identity and 226 PostgreSQL/HTTP tests pass**. The unchanged
+prototype passes 19 of 20 tests with the known Chromium socket failure.
+Next: persist a linked replacement draft with retry protection.
