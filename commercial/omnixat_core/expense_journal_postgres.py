@@ -734,6 +734,10 @@ def preview_expense_journal_replacement(
             row = cursor.fetchone()
     if row is None:
         raise EvidenceNotEligible("Reviewed journal replacement is unavailable")
+    return _replacement_preview_details(row)
+
+
+def _replacement_preview_details(row):
     return ExpenseJournalReplacementPreview(
         _saved_amount_correction_details(row), row["reviewer_id"], row["reviewed_at"],
         row["accounting_date"], row["period_id"], row["funding_source_id"],
@@ -787,3 +791,38 @@ def create_expense_journal_replacement(
         if row["outcome"] != "stored":
             raise RuntimeError("Replacement draft receipt unavailable")
         return ExpenseJournalReplacementReceipt(row["replacement_id"], row["original_journal"], row["recorded_at"])
+
+
+@dataclass(frozen=True)
+class ExpenseJournalReplacementReview:
+    receipt: ExpenseJournalReplacementReceipt
+    created_by: str = field(repr=False)
+    draft: ExpenseJournalReplacementPreview
+
+
+def read_expense_journal_replacement(
+    connection, actor, tenant_id, organisation_id, replacement_id,
+) -> ExpenseJournalReplacementReview:
+    """Review a saved replacement while its journal, source and selected review still match."""
+    tenant = _authorize(actor, tenant_id, "records:read")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal review required")
+    organisation, replacement = (UUID(str(value)) for value in (organisation_id, replacement_id))
+    with _tenant_transaction(connection, tenant, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+        "expense_journal_amount_corrections", "expense_journal_amount_correction_decisions",
+        "expense_journal_replacements",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "read_saved_expense_journal_replacement")
+            cursor.execute("SELECT * FROM omnixat_extraction.read_saved_expense_journal_replacement(%s,%s)",
+                           (organisation, replacement))
+            row = cursor.fetchone()
+    if row is None:
+        raise EvidenceNotEligible("Saved journal replacement is unavailable")
+    receipt = ExpenseJournalReplacementReceipt(
+        row["replacement_id"], row["journal_id"], row["replacement_created_at"],
+    )
+    return ExpenseJournalReplacementReview(receipt, row["replacement_created_by"], _replacement_preview_details(row))

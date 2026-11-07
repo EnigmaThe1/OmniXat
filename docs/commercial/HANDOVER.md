@@ -601,3 +601,15 @@ EVIDENCE.md. Original records are retained. **46 core, 21 identity and 229
 PostgreSQL/HTTP tests pass**. The unchanged prototype passes 19 of 20 tests
 with the known Chromium socket failure. Next: scoped saved replacement
 review with current eligibility checks.
+
+
+## Latest saved replacement review checkpoint
+
+Migration 0048 reads a saved replacement by receipt ID with current original,
+proposal, selected review and evidence eligibility checks. It returns author,
+receipt and balanced source-linked preview. Use the dedicated reader grant in
+EVIDENCE.md. **46 core, 21 identity and 231 PostgreSQL/HTTP tests pass**.
+The unchanged prototype passes 19 of 20 tests with the Chromium socket
+permission failure. Next: an explicit, retry-safe current replacement choice
+that preserves original lineage and review history. Shared production web/API
+integration and final-package human approval remain open.

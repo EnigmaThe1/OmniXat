@@ -47,7 +47,7 @@ from omnixat_core.expense_journal_postgres import (
     read_expense_journal_amount_correction, read_expense_journal_decisions, read_expense_journal_draft,
     record_expense_journal_amount_correction_decision, ExpenseJournalAmountCorrectionDecisionConflict,
     read_expense_journal_amount_correction_decisions, preview_expense_journal_replacement,
-    create_expense_journal_replacement, ExpenseJournalReplacementConflict,
+    create_expense_journal_replacement, ExpenseJournalReplacementConflict, read_expense_journal_replacement,
     ExpenseJournalCorrectionConflict, record_expense_journal_correction, record_expense_journal_decision,
 )
 from test_postgres import PostgresFixture
@@ -427,6 +427,20 @@ class EvidenceScanTests(PostgresFixture):
         ).format(replacement_writer))
         cls.replacement_writer_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                                    user=replacement_writer_role, password=password)
+
+        replacement_reader_role = cls.role + "_replacement_reader"
+        replacement_reader = sql.Identifier(replacement_reader_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(replacement_reader, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, replacement_reader_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(replacement_reader))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.read_saved_expense_journal_replacement"
+            "(uuid,uuid) TO {}"
+        ).format(replacement_reader))
+        cls.replacement_reader_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                                   user=replacement_reader_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -2868,3 +2882,95 @@ class EvidenceScanTests(PostgresFixture):
         self.assertEqual(self.owner.execute("""
             SELECT count(*) FROM omnixat.expense_journal_replacements WHERE tenant_id=%s
         """, (self.a,)).fetchone(), (0,))
+
+    def saved_replacement_fixture(self):
+        journal, supporting, job, _, correction, decision = self.reviewed_replacement_fixture()
+        author = Principal("fictional-replacement-author", self.a, "editor")
+        with psycopg.connect(self.replacement_writer_dsn, autocommit=True) as writer:
+            receipt = create_expense_journal_replacement(
+                writer, author, self.a, self.org, correction.receipt.id,
+                proposal_sha256=correction.proposal_sha256, reviewer_id=decision.reviewer_id,
+            )
+        return journal, supporting, job, correction, decision, author, receipt
+
+    def test_saved_replacement_review_returns_exact_attribution_and_balanced_preview(self):
+        _, supporting, _, correction, decision, author, receipt = self.saved_replacement_fixture()
+        viewer = Principal("fictional-viewer", self.a, "viewer")
+        with psycopg.connect(self.replacement_preview_dsn, autocommit=True) as reader:
+            expected = preview_expense_journal_replacement(
+                reader, self.actor, self.a, self.org, correction.receipt.id,
+                proposal_sha256=correction.proposal_sha256, reviewer_id=decision.reviewer_id,
+            )
+        with psycopg.connect(self.replacement_reader_dsn, autocommit=True) as reader:
+            result = read_expense_journal_replacement(reader, viewer, self.a, self.org, receipt.id)
+            self.assertEqual((result.receipt, result.created_by, result.draft), (receipt, author.user_id, expected))
+            for query, args in (
+                ("SELECT * FROM omnixat.expense_journal_replacements", ()),
+                ("SELECT * FROM omnixat_extraction.read_eligible_original(%s,%s)", (self.org, supporting.id)),
+            ):
+                with self.subTest(query=query), self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    reader.execute(query, args)
+            with self.assertRaises(PermissionError):
+                create_expense_journal_replacement(
+                    reader, self.actor, self.a, self.org, correction.receipt.id,
+                    proposal_sha256=correction.proposal_sha256, reviewer_id=decision.reviewer_id,
+                )
+        with psycopg.connect(self.replacement_reader_dsn, autocommit=True) as fresh:
+            self.assertEqual(read_expense_journal_replacement(fresh, viewer, self.a, self.org, receipt.id), result)
+
+    def test_saved_replacement_review_rejects_wrong_scope_changed_context_and_stale_source(self):
+        journal, supporting, _, correction, decision, _, receipt = self.saved_replacement_fixture()
+        with psycopg.connect(self.replacement_reader_dsn, autocommit=True) as reader:
+            def review(*, actor=self.actor, tenant=self.a, org=self.org, replacement=receipt.id, connection=reader):
+                return read_expense_journal_replacement(connection, actor, tenant, org, replacement)
+            for overrides in (
+                {"actor": self.other, "tenant": self.b}, {"org": uuid4()}, {"replacement": uuid4()},
+            ):
+                with self.subTest(overrides=overrides), self.assertRaisesRegex(
+                    EvidenceNotEligible, "^Saved journal replacement is unavailable$",
+                ):
+                    review(**overrides)
+            for actor in (
+                Principal("agent", self.a, "viewer", actor_kind="agent"),
+                Principal("api", self.a, "viewer", api_scopes=frozenset({"records:read", "evidence:read"})),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    review(actor=actor)
+            with psycopg.connect(self.replacement_writer_dsn, autocommit=True) as writer:
+                with self.assertRaises(PermissionError):
+                    review(connection=writer)
+
+            for field, changed in (
+                ("amount_pence", 999), ("accounting_date", date(2026, 11, 7)),
+                ("period_id", uuid4()), ("funding_source_id", uuid4()), ("expense_account_id", uuid4()),
+                ("source_column", 3), ("scan_policy_version", "fictional-old"),
+                ("original_snapshot_sha256", bytes(32)),
+            ):
+                select = sql.SQL("SELECT {} FROM omnixat.expense_journal_replacements WHERE tenant_id=%s AND id=%s")
+                update = sql.SQL("UPDATE omnixat.expense_journal_replacements SET {}=%s WHERE tenant_id=%s AND id=%s")
+                original = self.owner.execute(select.format(sql.Identifier(field)), (self.a, receipt.id)).fetchone()[0]
+                self.owner.execute(update.format(sql.Identifier(field)), (changed, self.a, receipt.id))
+                with self.subTest(field=field), self.assertRaises(EvidenceNotEligible):
+                    review()
+                self.owner.execute(update.format(sql.Identifier(field)), (original, self.a, receipt.id))
+            self.owner.execute("""UPDATE omnixat.expense_journal_amount_correction_decisions
+                SET recorded_at=recorded_at + interval '1 second' WHERE tenant_id=%s AND proposal_id=%s AND reviewer_id=%s
+            """, (self.a, correction.receipt.id, decision.reviewer_id))
+            with self.assertRaises(EvidenceNotEligible):
+                review()
+            self.owner.execute("""UPDATE omnixat.expense_journal_amount_correction_decisions
+                SET recorded_at=%s WHERE tenant_id=%s AND proposal_id=%s AND reviewer_id=%s
+            """, (decision.recorded_at, self.a, correction.receipt.id, decision.reviewer_id))
+            self.owner.execute("""INSERT INTO omnixat.evidence_scan_verdicts
+                (tenant_id,evidence_id,content_sha256,byte_size,policy_version,verdict)
+                SELECT tenant_id,evidence_id,content_sha256,byte_size,policy_version,'blocked'
+                FROM omnixat.evidence_scan_verdicts WHERE tenant_id=%s AND evidence_id=%s AND verdict='clean'
+            """, (self.a, supporting.id))
+            with self.assertRaises(EvidenceNotEligible):
+                review()
+            self.owner.execute("DELETE FROM omnixat.evidence_scan_verdicts WHERE tenant_id=%s AND evidence_id=%s AND verdict='blocked'",
+                               (self.a, supporting.id))
+            self.owner.execute("UPDATE omnixat.expense_journal_drafts SET created_by='fictional-changed' WHERE tenant_id=%s AND id=%s",
+                               (self.a, journal.receipt.id))
+            with self.assertRaises(EvidenceNotEligible):
+                review()

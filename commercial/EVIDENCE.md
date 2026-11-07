@@ -721,3 +721,19 @@ Grant the dedicated writer USAGE on `omnixat_extraction` and EXECUTE only on
 `omnixat_extraction.create_expense_journal_replacement(uuid,uuid,bytea,text,text)`.
 The original journal and correction proposal are retained as evidence of the
 preparation history. Saving this linked draft carries no posting authority.
+
+## Reviewing a saved replacement draft
+
+Migration 0048 adds `read_expense_journal_replacement`. An interactive tenant
+reader with records read and evidence read permission selects a replacement
+receipt ID within its organisation. The read revalidates the original
+journal snapshot, exact proposal digest, selected reviewed observation,
+accounting context and source provenance on one statement snapshot.
+
+The result returns the replacement receipt and author with the same
+balanced, source-linked draft representation as the preview. Changed or
+ineligible inputs make the saved draft unavailable to this read.
+
+Grant the dedicated reader USAGE on `omnixat_extraction` and EXECUTE only on
+`omnixat_extraction.read_saved_expense_journal_replacement(uuid,uuid)`.
+The operation is read-only and retains the original and replacement records.

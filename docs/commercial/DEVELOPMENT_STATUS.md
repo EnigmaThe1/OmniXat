@@ -1856,3 +1856,37 @@ with the pinned psycopg 3.3.8 source adapter:
 Next: read one saved replacement draft by receipt ID, revalidate the
 original snapshot, proposal, selected review and source, and return its
 attributed balanced lines.
+
+## C4 saved replacement draft review — complete
+
+Recovered clean `6cddd28`. Read a saved replacement by receipt ID with tenant
+and organisation scope. Compare the saved snapshot with the exact current
+proposal, selected reviewed observation, original journal and source before
+returning attribution and balanced lines.
+
+
+Migration 0048 and the shared Python reader return a saved replacement receipt,
+author and typed balanced preview through a dedicated read-only database role.
+The read checks tenant and organisation scope, the exact original snapshot,
+proposal digest, selected reviewed observation, accounting context and current
+source eligibility on one statement snapshot.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **231 passed**.
+  Added coverage for saved attribution and balanced preview, fresh connections,
+  wrong scope, role boundaries, changed accounting/provenance fields, changed
+  review observations, blocked evidence and changed original snapshots.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch again
+  failed with a socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+This increment provides saved-draft review. Production web/API integration,
+identity-provider provisioning and final-package human approval remain open.
+Next: design and implement an explicit, retry-safe choice of the current
+replacement draft while preserving original lineage and review history.
