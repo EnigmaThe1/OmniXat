@@ -680,3 +680,17 @@ prototype passes 19 of 20 tests with the Chromium socket permission failure.
 This covers local note preparation. Ledger/external effects, current identity
 wiring and orchestration remain unfinished. Next: bounded persistent job
 retry/failure outcomes and attempt budgets before autonomous worker execution.
+
+
+## Latest bounded job retry checkpoint
+
+Migration 0054 pins configurable attempt limits, counts claims and records fixed-code
+failures with delayed retry or terminal failure. Historical receipt replay preserves
+newer claims. Apply the extra failure-table grant in JOBS_POSTGRES.md.
+**46 core, 21 identity and 269 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with the Chromium socket permission failure. Default limits
+are 3 attempts, configurable 1–20. Existing jobs begin a fresh counted budget at
+migration time while preserving their prior state/progress/leases.
+Next: validated reference-only task specifications with tenant/organisation binding,
+so restarted workers can recover inputs. Current identity wiring, autonomous workers
+and provider/ledger integrations remain unfinished.

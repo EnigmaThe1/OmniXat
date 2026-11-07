@@ -32,7 +32,7 @@ class PostgresJobsTests(PostgresFixture):
         cls.owner.execute(sql.SQL("GRANT SELECT,INSERT,UPDATE ON omnixat.agent_jobs TO {}").format(role))
         cls.owner.execute(sql.SQL("GRANT SELECT ON omnixat.tenants,omnixat.organisations TO {}").format(role))
         cls.owner.execute(sql.SQL(
-            "GRANT SELECT,INSERT ON omnixat.notes,omnixat.record_creations,omnixat.agent_job_note_effects TO {}"
+            "GRANT SELECT,INSERT ON omnixat.notes,omnixat.record_creations,omnixat.agent_job_note_effects,omnixat.agent_job_failures TO {}"
         ).format(role))
         cls.job_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database, user=cls.job_role, password=password)
 
@@ -387,8 +387,10 @@ class PostgresJobsTests(PostgresFixture):
             before = db.execute("SELECT * FROM omnixat.agent_jobs ORDER BY request_key").fetchall()
             migrate(db)
             after = db.execute("SELECT * FROM omnixat.agent_jobs ORDER BY request_key").fetchall()
-            self.assertEqual([row[:-2] for row in after], before)
-            self.assertTrue(all(row[-2:] == (None, None) for row in after))
+            previous_columns = len(before[0])
+            self.assertEqual([row[:previous_columns] for row in after], before)
+            self.assertTrue(all(row[previous_columns:previous_columns + 2] == (None, None) for row in after))
+            self.assertEqual(db.execute("SELECT attempt_limit,attempts_started FROM omnixat.agent_jobs").fetchall(), [(3, 0)] * 3)
             migrate(db)
             self.assertEqual(db.execute("SELECT * FROM omnixat.agent_jobs ORDER BY request_key").fetchall(), after)
 
@@ -549,3 +551,159 @@ class PostgresJobsTests(PostgresFixture):
                          (0 if receipt is None else 1,))
         with self.assertRaises(ValueError):
             self.store.create_note_effect(self.worker, self.a, job, token, "note-2", self.org, "Fictional later note")
+
+
+    def test_retry_budget_delay_and_terminal_failure_are_persisted(self):
+        job = self.store.create(self.worker, self.a, "retry-budget", self.payload, max_attempts=2)
+        self.assertEqual(self.store.create(self.worker, self.a, "retry-budget", self.payload, max_attempts=2), job)
+        with self.assertRaises(ValueError):
+            self.store.create(self.worker, self.a, "retry-budget", self.payload, max_attempts=3)
+        token = self.store.claim(self.worker, self.a, job)
+        first = self.store.fail(self.worker, self.a, job, token, "temporary_dependency", retryable=True)
+        self.assertTrue(first.will_retry)
+        self.assertIsNotNone(first.retry_at)
+        self.assertEqual(self.store.get(self.worker, self.a, job)["status"], "queued")
+        with self.assertRaises(ValueError):
+            self.store.claim(self.worker, self.a, job)
+        with self.assertRaises(ValueError):
+            self.store.checkpoint(self.worker, self.a, job, token, {"step": "stale"})
+        state = self.store.retry_state(self.worker, self.a, job)
+        self.assertEqual((state.attempt_limit, state.attempts_started, state.retry_at, state.failure_code),
+                         (2, 1, first.retry_at, "temporary_dependency"))
+        self.owner.execute("UPDATE omnixat.agent_jobs SET retry_at=clock_timestamp()-interval '1 second' WHERE tenant_id=%s AND id=%s",
+                           (self.a, job))
+        token = self.store.claim(self.worker, self.a, job)
+        last = self.store.fail(self.worker, self.a, job, token, "temporary_dependency", retryable=True)
+        self.assertFalse(last.will_retry)
+        self.assertIsNone(last.retry_at)
+        self.assertEqual(self.store.get(self.worker, self.a, job)["status"], "failed")
+        state = self.store.retry_state(self.worker, self.a, job)
+        self.assertEqual(state.attempts_started, 2)
+        self.assertIsNotNone(state.failed_at)
+        for action in (lambda: self.store.claim(self.worker, self.a, job), lambda: self.store.cancel(self.actor, self.a, job)):
+            with self.assertRaises(ValueError):
+                action()
+
+    def test_expired_final_claim_persists_exhaustion_when_claim_is_rejected(self):
+        job = self.store.create(self.worker, self.a, "one-attempt", {}, max_attempts=1)
+        token = self.store.claim(self.worker, self.a, job)
+        self.expire(job)
+        with self.assertRaises(ValueError):
+            self.store.claim(self.worker, self.a, job)
+        self.assertEqual(self.store.get(self.worker, self.a, job)["status"], "failed")
+        state = self.store.retry_state(self.worker, self.a, job)
+        self.assertEqual((state.attempts_started, state.failure_code), (1, "lease_exhausted"))
+        self.assertIsNotNone(state.failed_at)
+        self.assertEqual(self.owner.execute("SELECT lease_token,lease_until FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s",
+                                           (self.a, job)).fetchone(), (None, None))
+        with self.assertRaises(ValueError):
+            self.store.fail(self.worker, self.a, job, token, "unexpected_error", retryable=False)
+
+    def test_failure_receipt_replay_preserves_new_claim_and_rejects_changed_outcomes(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        start = Barrier(2)
+        def fail():
+            with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                start.wait(timeout=5)
+                return PostgresJobStore(connection).fail(
+                    self.worker, self.a, job, token, "source_unavailable", retryable=True, retry_after_seconds=0)
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = list(workers.map(lambda _: fail(), range(2)))
+        self.assertEqual(first, second)
+        new = self.store.claim(self.worker, self.a, job)
+        with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+            self.assertEqual(PostgresJobStore(connection).fail(
+                self.worker, self.a, job, token, "source_unavailable", retryable=True, retry_after_seconds=0), first)
+        for actor, code, retryable, delay in (
+            (self.actor, "source_unavailable", True, 0), (self.worker, "unexpected_error", True, 0),
+            (self.worker, "source_unavailable", False, 0), (self.worker, "source_unavailable", True, 1),
+        ):
+            with self.subTest(actor=actor.user_id, code=code), self.assertRaises(ValueError):
+                self.store.fail(actor, self.a, job, token, code, retryable=retryable, retry_after_seconds=delay)
+        self.assertEqual(self.owner.execute("SELECT lease_token,status FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s",
+                                           (self.a, job)).fetchone(), (UUID(new), "running"))
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.agent_job_failures WHERE tenant_id=%s AND job_id=%s",
+                                           (self.a, job)).fetchone(), (1,))
+        self.store.checkpoint(self.worker, self.a, job, new, {"step": "recovered"}, complete=True)
+
+    def test_failure_and_retry_state_enforce_permissions_scope_and_validation(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        viewer = Principal("viewer", self.a, "viewer")
+        self.assertEqual(self.store.retry_state(viewer, self.a, job).attempts_started, 1)
+        for actor in (viewer, Principal("api", self.a, "editor", api_scopes=frozenset({"records:read"})),
+                      Principal("staff", self.a, "editor", staff_role="platform_owner", mfa_verified=True)):
+            with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                self.store.fail(actor, self.a, job, token, "unexpected_error", retryable=False)
+        with self.assertRaises(ValueError):
+            self.store.fail(self.other, self.b, job, token, "unexpected_error", retryable=False)
+        with self.assertRaises(KeyError):
+            self.store.retry_state(self.other, self.b, job)
+        for code, retryable, delay in (("private exception text", True, 0), ([], True, 0),
+                                       ("unexpected_error", 1, 0), ("unexpected_error", True, -1),
+                                       ("unexpected_error", True, 86401), ("unexpected_error", True, True)):
+            with self.subTest(code=code, delay=delay), self.assertRaises(ValueError):
+                self.store.fail(self.worker, self.a, job, token, code, retryable=retryable, retry_after_seconds=delay)
+        for limit in (0, 21, True, 1.5):
+            with self.subTest(limit=limit), self.assertRaises(ValueError):
+                self.store.create(self.worker, self.a, "invalid-budget", {}, max_attempts=limit)
+        self.assertEqual(self.job_connection.execute("SELECT * FROM omnixat.agent_job_failures").fetchall(), [])
+        self.assertEqual(self.store.get(self.worker, self.a, job)["status"], "running")
+
+    def test_failure_rolls_back_receipt_and_state_on_commit_deadline(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        with patch('omnixat_core.postgres.monotonic', side_effect=(0, 11)):
+            with self.assertRaises(TimeoutError):
+                self.store.fail(self.worker, self.a, job, token, "invalid_input", retryable=False)
+        self.assertEqual(self.owner.execute("SELECT status,lease_token,failure_code,failed_at FROM omnixat.agent_jobs WHERE tenant_id=%s AND id=%s",
+                                           (self.a, job)).fetchone(), ("running", UUID(token), None, None))
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.agent_job_failures WHERE tenant_id=%s AND job_id=%s",
+                                           (self.a, job)).fetchone(), (0,))
+        self.assertFalse(self.store.fail(self.worker, self.a, job, token, "invalid_input", retryable=False).will_retry)
+
+    def test_failure_races_terminal_transitions_without_overwriting_winner(self):
+        for operation in ("cancel", "complete"):
+            job = self.store.create(self.worker, self.a, "failure-race-" + operation, {})
+            token = self.store.claim(self.worker, self.a, job)
+            start = Barrier(2)
+            def fail():
+                with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                    start.wait(timeout=5)
+                    try:
+                        PostgresJobStore(connection).fail(self.worker, self.a, job, token, "unexpected_error", retryable=False)
+                        return True
+                    except ValueError:
+                        return False
+            def finish():
+                with psycopg.connect(self.job_dsn, autocommit=True) as connection:
+                    store = PostgresJobStore(connection)
+                    start.wait(timeout=5)
+                    try:
+                        if operation == "cancel":
+                            store.cancel(self.actor, self.a, job)
+                        else:
+                            store.checkpoint(self.worker, self.a, job, token, {}, complete=True)
+                        return True
+                    except ValueError:
+                        return False
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                failed = workers.submit(fail)
+                finished = workers.submit(finish)
+                failure_won, other_won = failed.result(timeout=5), finished.result(timeout=5)
+            self.assertNotEqual(failure_won, other_won)
+            self.assertEqual(self.store.get(self.actor, self.a, job)["status"],
+                             "failed" if failure_won else ("cancelled" if operation == "cancel" else "completed"))
+
+    def test_delayed_retry_cancellation_preserves_budget_and_failure_history(self):
+        job = self.create()
+        token = self.store.claim(self.worker, self.a, job)
+        receipt = self.store.fail(self.worker, self.a, job, token, 'temporary_dependency', retryable=True)
+        self.store.cancel(self.actor, self.a, job)
+        self.assertEqual(self.store.get(self.actor, self.a, job)['status'], 'cancelled')
+        state = self.store.retry_state(self.actor, self.a, job)
+        self.assertEqual((state.attempts_started, state.failure_code, state.retry_at), (1, 'temporary_dependency', None))
+        self.assertEqual(self.store.fail(self.worker, self.a, job, token, 'temporary_dependency', retryable=True), receipt)
+        with self.assertRaises(ValueError):
+            self.store.claim(self.worker, self.a, job)

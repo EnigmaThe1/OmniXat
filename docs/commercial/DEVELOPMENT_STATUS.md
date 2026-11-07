@@ -2084,3 +2084,46 @@ This increment covers a local note preparation effect. Current identity resoluti
 ledger posting, external effects and worker orchestration remain unfinished.
 Next: persist bounded job retry/failure outcomes and attempt budgets so recovered
 or failing preparation can stop predictably before adding an autonomous worker.
+
+## C1 bounded job attempts and failure outcomes — completed
+
+Recovered clean `44fc84c` with no active task or competing writer found.
+Persist immutable creation-time attempt limits, counted claims, delayed retry
+eligibility and fixed-code failure receipts. Serialize failure/retry with existing
+job authority, cancellation and completion. Preserve legacy job data and document
+that migration starts a fresh counted-attempt budget for existing jobs.
+
+
+Migration 0054 persists a pinned attempt limit, counted claims, retry eligibility
+and fixed-code failure receipts. The default limit is 3 and creation can configure
+1–20. Delayed retries require database-clock eligibility and remaining budget.
+Exhausted expired claims become terminal failed state. Explicit failure and its
+receipt commit together under worker/token checks. Replaying an old receipt
+preserves a newer claim. Cancellation, completion and failure serialize together.
+The existing get response shape is retained, with separate retry_state metadata.
+
+Existing jobs receive a new counted-attempt budget starting at migration time.
+Earlier totals were never stored. Their original state/progress/leases are retained,
+and claims acquired after migration consume the new count. See JOBS_POSTGRES.md
+for full semantics and the additional SELECT, INSERT failure-receipt grant.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **269 passed**.
+  Seven new tests cover pinned limits, delayed retries, exhausted leases, repeated
+  failure receipts, newer-claim preservation, scope/validation, commit rollback,
+  competing terminal transitions and delayed-retry cancellation. The existing
+  upgrade case also verifies preservation of prior fields and new budget defaults.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch reproduced
+  the socket permission error. The browser test remains unchanged.
+- `git diff --check`: passed.
+
+Current identity resolution, provider execution and autonomous workers remain
+unfinished. Job creation currently stores a payload hash. Next: persist validated,
+tenant/organisation-bound, reference-only preparation task inputs so a restarted
+worker can recover its specification before adding orchestration.
