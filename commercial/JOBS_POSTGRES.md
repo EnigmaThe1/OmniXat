@@ -455,3 +455,49 @@ shared validated services; no scheduler, model or UI starts from this adapter.
 Technical references rechecked 7 November 2026: PostgreSQL 16
 [function snapshots](https://www.postgresql.org/docs/16/xfunc-volatility.html) and
 [security-definer functions](https://www.postgresql.org/docs/16/sql-createfunction.html).
+
+## Saved expense-preparation intent
+
+Migration 0059 adds one immutable `ExpensePreparationPlan` per exact CSV evidence
+task. The versioned plan stores only a saved source cell, explicit GBP currency,
+accounting date, period ID and expense-account ID. It contains no amount, funding
+assumption, tax treatment, user prompt or approval. The existing human expense
+preparation boundary and the new plan share the same context-input validator.
+
+Add these grants to the existing **job-data login**:
+
+```sql
+GRANT SELECT, INSERT ON omnixat.agent_job_expense_plans TO jobs_runtime;
+GRANT SELECT ON omnixat.expense_accounting_periods, omnixat.expense_account_policy TO jobs_runtime;
+```
+
+Do not grant UPDATE/DELETE on plans or any policy-write permission. Composite
+foreign keys bind the plan to the task's organisation and that organisation's
+configured period/account; forced RLS isolates tenants. Existing tasks/plans are
+preserved and migration invents no expense inputs.
+
+`AuthenticatedJobStore.save_expense_plan` resolves current identity and both record
+scopes. Saving locks the job, requires its current running worker/token/lease,
+validates the parent CSV plan/digest and exact selected source cell, and observes
+an open configured period, an eligible account and a date within that period.
+The first plan and actor persist through restarts/reclaims; changed inputs conflict.
+A final database-clock lease check rejects expired writes. Exceptions roll back
+the plan. No progress or lease is renewed.
+
+`get_expense_plan` uses current read authority, validates the canonical digest and
+returns historical intent even after policy closure or job termination. Reading
+or saving this intent does not establish current evidence eligibility or amount
+availability. Configuration validation is a statement observation, not a period or
+account reservation through commit or later execution. Identity admission and job
+work remain separate transactions; revocation governs the next admission. The
+final lease check precedes commit, as for saved CSV plans.
+
+No expense, source-amount draft, journal, ledger posting or clarification answer is
+created here. Next: a separate job effect must recheck live identity/worker lease,
+exact evidence eligibility, current accounting policy and resolved source amount
+while atomically creating the shared-service expense result and job retry receipt.
+Human-only clarification/approval and UI decisions remain unchanged.
+
+Technical references rechecked 7 November 2026: PostgreSQL 16
+[row locking](https://www.postgresql.org/docs/16/explicit-locking.html) and
+[conflict handling](https://www.postgresql.org/docs/16/sql-insert.html).

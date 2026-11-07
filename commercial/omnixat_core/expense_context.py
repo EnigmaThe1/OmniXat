@@ -60,3 +60,15 @@ def expense_pence(amount: Decimal) -> int:
     if remainder:
         raise ValueError("Expense amount must be exact to a penny")
     return pence
+
+
+def validate_expense_context_inputs(context: ExpenseDraftContext, period_id: UUID) -> None:
+    """Validate explicit inputs without asserting current bookkeeping eligibility."""
+    if type(context) is not ExpenseDraftContext or context.currency != "GBP":
+        raise ValueError("Explicit GBP currency required")
+    if type(context.accounting_date) is not date:
+        raise ValueError("An explicit accounting date is required")
+    if type(period_id) is not UUID or not period_id.int:
+        raise ValueError("Select an accounting period")
+    if type(context.expense_account_id) is not UUID or not context.expense_account_id.int:
+        raise ValueError("Select an eligible expense account")

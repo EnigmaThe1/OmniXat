@@ -150,6 +150,14 @@ class PostgresJobStore:
                     raise KeyError("Task specification unavailable")
                 return EvidencePreparationTask(**row)
 
+    def save_expense_plan(self, actor, tenant, job_id, token, plan):
+        from .job_expense_plans_postgres import save_expense_plan
+        return save_expense_plan(self, actor, tenant, job_id, token, plan)
+
+    def get_expense_plan(self, actor, tenant, job_id):
+        from .job_expense_plans_postgres import get_expense_plan
+        return get_expense_plan(self, actor, tenant, job_id)
+
     def save_csv_plan(self, actor, tenant, job_id, token, plan):
         from .job_csv_plans_postgres import save_csv_plan
         return save_csv_plan(self, actor, tenant, job_id, token, plan)

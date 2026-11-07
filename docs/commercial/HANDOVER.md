@@ -795,3 +795,23 @@ Next: persist validated expense-preparation context and connect the existing sha
 preparation service using job-scoped retry receipts. Human clarification handoff,
 scheduling, providers, posting, final approval and production qualification remain
 unfinished. No UI or live integration is activated; no active increment remains.
+
+
+## Latest saved expense-plan checkpoint
+
+Migration 0059 and `ExpensePreparationPlan` persist explicit GBP/date/period/account
+context and an exact saved CSV source cell. Signed methods validate fresh authority;
+saves lock the job, check current worker/lease, parent plan and current bookkeeping
+configuration, preserve first attribution and roll back failed/expired writes.
+Composite task/organisation/period/account references and forced RLS enforce scope.
+Apply the append-only plan and read-only configuration grants in JOBS_POSTGRES.md.
+**47 core, 21 identity and 328 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with Chromium unavailable. Human preparation uses the shared
+input validator without changing its human-only boundary. Historical reads confer
+no continuing policy or evidence eligibility; saving neither creates an expense nor
+changes progress. Configuration is observed at save time; the final lease check
+precedes commit and admitted identity is not retroactively revoked.
+Next: execute saved expense plans using a job-fenced shared-service effect with
+fresh source/accounting checks and an atomic expense/retry receipt. Human handoff,
+scheduling, providers, posting, final approval and production qualification remain
+unfinished. No UI/live integration or active increment remains.

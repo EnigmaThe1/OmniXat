@@ -72,3 +72,11 @@ class AuthenticatedJobStore:
         plan = self.get_csv_plan(token, tenant, job_id).plan
         actor = self._actor(token, tenant, write=True)
         return read_job_csv_summary(summary_connection, actor, tenant, job_id, lease_token, plan)
+
+
+    def save_expense_plan(self, token, tenant, job_id, lease_token, plan):
+        actor = self._actor(token, tenant, write=True)
+        return self._jobs.save_expense_plan(actor, tenant, job_id, lease_token, plan)
+
+    def get_expense_plan(self, token, tenant, job_id):
+        return self._jobs.get_expense_plan(self._actor(token, tenant), tenant, job_id)

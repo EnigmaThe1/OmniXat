@@ -11,7 +11,7 @@ from psycopg.rows import dict_row
 from .evidence_csv import AmountCell, _DECIMAL, _FIELD, _MAX_COLUMNS, _MAX_ROWS
 from .evidence_extraction_postgres import EvidenceNotEligible, _TABLES
 from .evidence_postgres import _authorize
-from .expense_context import ExpenseDraftContext, ExpenseDraftPolicy, expense_pence, validate_expense_context
+from .expense_context import ExpenseDraftContext, ExpenseDraftPolicy, expense_pence, validate_expense_context, validate_expense_context_inputs
 from .postgres import _tenant_transaction
 
 _DRAFT_TABLES = (*_TABLES, "csv_extraction_results", "csv_clarification_answers", "evidence_draft_amounts")
@@ -137,14 +137,7 @@ def _expense_scope(actor, tenant_id, organisation_id, evidence_id, job_id, cell,
     _authorize(actor, tenant_id, "evidence:read")
     if actor.actor_kind != "human" or actor.api_scopes is not None:
         raise PermissionError("Interactive tenant expense preparation required")
-    if type(context) is not ExpenseDraftContext or context.currency != "GBP":
-        raise ValueError("Explicit GBP currency required")
-    if type(context.accounting_date) is not date:
-        raise ValueError("An explicit accounting date is required")
-    if type(period_id) is not UUID or not period_id.int:
-        raise ValueError("Select an accounting period")
-    if type(context.expense_account_id) is not UUID or not context.expense_account_id.int:
-        raise ValueError("Select an eligible expense account")
+    validate_expense_context_inputs(context, period_id)
     _validate_cell(cell)
     organisation, evidence, job = (UUID(str(value)) for value in (organisation_id, evidence_id, job_id))
     return tenant, organisation, evidence, job

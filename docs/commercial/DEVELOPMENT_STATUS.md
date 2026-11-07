@@ -2392,3 +2392,56 @@ Next: persist validated expense-preparation context and connect the existing sha
 preparation service to job-scoped retry receipts. Human clarification handoff,
 scheduling, providers, ledger posting, final-package approval and full production
 qualification remain unfinished. No active implementation remains in this increment.
+
+## C1 saved expense-preparation inputs — completed
+
+Recovered clean `c0f778e`; no unfinished increment or competing writer recorded.
+Persist one immutable expense plan per CSV evidence task: exact saved source cell,
+GBP currency, accounting date, configured period and eligible expense account.
+Require current identity and worker lease, validate current bookkeeping policy on
+saves/replays and preserve first attribution through recovery. Execution and
+job-scoped expense effects remain a subsequent increment. No posting or UI work.
+
+
+Migration 0059 and `ExpensePreparationPlan` persist exact source coordinates and
+explicit GBP/date/period/account context per CSV evidence task. Composite foreign
+keys bind the task organisation and configured accounting references; forced RLS
+and append-only grants protect the new table. Signed save/read methods recheck
+current authority. Saves serialize on the job, validate the parent CSV digest and
+cell, current period/account policy and live worker lease, preserve first actor
+and reject conflicting plans. A final database-clock check rolls back expired
+saves. The existing human expense preparation path shares the input validator;
+its human-only boundary is unchanged. Apply grants in JOBS_POSTGRES.md.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2,
+psycopg 3.3.8 binary adapter and requirements-http.txt dependencies:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **47 passed**.
+  New canonical-input coverage rejects implicit/extra monetary fields, unsupported
+  currency, invalid references/coordinates and datetime instead of accounting date.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **328 passed**.
+  Eight new tests cover first-attribution recovery after a different worker claims,
+  current period/account/date/cell checks, concurrent same/competing initial writes,
+  scope/role/revocation/tenant boundaries, wrong/expired/cancelled claims, failed
+  inserts and real lease-expiry rollback, RLS/immutability/constraints/digest checks,
+  and missing/corrupt parent plans. Upgrade retains existing jobs and invents no
+  expense plans. Existing human preparation and policy behaviour remain covered.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**;
+  unchanged browser case reports Chromium unavailable (503). No tests removed or
+  skipped; no prototype or commercial UI code changed.
+- `git diff --check`: passed.
+
+A saved plan is historical intent, not evidence eligibility, amount availability,
+expense creation or posting authority. Reads validate its digest and current read
+authority; they remain available after policy closure. Save-time bookkeeping
+configuration is a statement observation, not a reservation through commit or
+execution. Identity admission and job work remain separate transactions; the final
+lease check precedes commit. No source amounts, expenses, journals, clarification
+answers or progress changes are created by saving a plan.
+Next: execute saved expense plans using a separate job-fenced shared-service effect,
+rechecking resolved source/current evidence/accounting policy and atomically storing
+expense and retry receipt. Human clarification handoff, providers, scheduling,
+posting, final approval and production qualification remain unfinished. No active
+implementation remains in this increment.
