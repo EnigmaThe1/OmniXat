@@ -27,6 +27,7 @@ from omnixat_core.evidence_extraction_postgres import (
 from omnixat_core.expense_context import ExpenseDraftContext
 from omnixat_core.evidence_intake import stage_evidence
 from omnixat_core.evidence_postgres import register_evidence
+from omnixat_core.postgres import tenant_records
 from omnixat_core.evidence_quarantine_postgres import store_quarantined_evidence
 from omnixat_core.evidence_review_postgres import (
     CSVClarificationConflict, read_csv_extraction_review, store_csv_clarification,
@@ -39,8 +40,8 @@ from omnixat_core.expense_funding_postgres import (
 )
 from omnixat_core.expense_journal_postgres import (
     ExpenseJournalClarification, ExpenseJournalClarificationConflict, ExpenseJournalConflict,
-    ExpenseJournalDecisionConflict,
-    create_expense_journal_draft, record_expense_journal_clarification,
+    ExpenseJournalDecisionConflict, ExpenseJournalEvidenceLinkConflict,
+    create_expense_journal_draft, link_expense_journal_clarification_evidence, record_expense_journal_clarification,
     prepare_expense_journal_preview, read_expense_journal_decisions, read_expense_journal_draft,
     ExpenseJournalCorrectionConflict, record_expense_journal_correction, record_expense_journal_decision,
 )
@@ -309,6 +310,20 @@ class EvidenceScanTests(PostgresFixture):
         ).format(clarification_writer))
         cls.clarification_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
                                              user=clarification_role, password=password)
+
+        link_role = cls.role + "_evidence_link"
+        link_writer = sql.Identifier(link_role)
+        password = uuid4().hex
+        cls.admin.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD {} NOSUPERUSER NOBYPASSRLS")
+                          .format(link_writer, sql.Literal(password)))
+        cls.addClassCleanup(cls.drop_role, link_role)
+        cls.owner.execute(sql.SQL("GRANT USAGE ON SCHEMA omnixat_extraction TO {}").format(link_writer))
+        cls.owner.execute(sql.SQL(
+            "GRANT EXECUTE ON FUNCTION omnixat_extraction.link_expense_journal_clarification_evidence"
+            "(uuid,uuid,bytea,text,uuid,text) TO {}"
+        ).format(link_writer))
+        cls.evidence_link_dsn = make_conninfo(cls.admin.info.dsn, dbname=cls.database,
+                                              user=link_role, password=password)
 
     @classmethod
     def drop_role(cls, role):
@@ -1924,4 +1939,107 @@ class EvidenceScanTests(PostgresFixture):
                 record_expense_journal_clarification(writer, self.actor, self.a, self.org, journal, **kwargs)
         self.assertEqual(self.owner.execute("""
             SELECT count(*) FROM omnixat.expense_journal_clarification_answers WHERE tenant_id=%s
+        """, (self.a,)).fetchone(), (0,))
+
+
+    def record_supporting_answer(self, review):
+        with psycopg.connect(self.clarification_dsn, autocommit=True) as writer:
+            return record_expense_journal_clarification(
+                writer, self.actor, self.a, self.org, review.receipt.id, snapshot_sha256=review.snapshot_sha256,
+                correction_reviewer_id=self.actor.user_id, reason="source_evidence", answer="See the fictional record.",
+            )
+
+    def stage_supporting_original(self, original, organisation):
+        registration = register_evidence(
+            self.runtime, self.actor, self.a, organisation,
+            content_sha256=sha256(original).hexdigest(), media_type=self.media_type, byte_size=len(original),
+        )
+        with TemporaryDirectory() as directory, stage_evidence(
+            BytesIO(original), media_type=self.media_type, quarantine_dir=Path(directory),
+        ) as staged:
+            store_quarantined_evidence(self.runtime, self.actor, self.a, organisation, registration.id, staged)
+        return registration
+
+    def test_journal_evidence_link_replays_concurrently_and_preserves_original_answer(self):
+        review = self.journal_clarification_fixture()
+        answer = self.record_supporting_answer(review)
+        supporting = self.stage_supporting_original(b"Fictional,Supporting\r\nInvoice,12\r\n", self.org)
+        self.run_scan(lambda *_: "clean", evidence=supporting.id)
+        linker = Principal("fictional-evidence-linker", self.a, "editor")
+        barrier = Barrier(2)
+
+        def record():
+            with psycopg.connect(self.evidence_link_dsn, autocommit=True) as writer:
+                barrier.wait(timeout=5)
+                return link_expense_journal_clarification_evidence(
+                    writer, linker, self.a, self.org, review.receipt.id, snapshot_sha256=review.snapshot_sha256,
+                    reason="source_evidence", evidence_id=supporting.id,
+                )
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, retry = list(workers.map(lambda _: record(), range(2)))
+        self.assertEqual(first, retry)
+        self.assertEqual((first.evidence_id, first.linked_by, first.content_sha256, first.scan_policy_version),
+                         (supporting.id, linker.user_id, supporting.content_sha256, "fictional-v1"))
+        with psycopg.connect(self.evidence_link_dsn, autocommit=True) as writer:
+            for actor, candidate in ((self.actor, supporting.id), (linker, self.registration.id)):
+                with self.assertRaises(ExpenseJournalEvidenceLinkConflict):
+                    link_expense_journal_clarification_evidence(
+                        writer, actor, self.a, self.org, review.receipt.id, snapshot_sha256=review.snapshot_sha256,
+                        reason="source_evidence", evidence_id=candidate,
+                    )
+            with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                writer.execute("SELECT * FROM omnixat.expense_journal_clarification_evidence")
+            self.owner.execute("""INSERT INTO omnixat.evidence_scan_verdicts
+                (tenant_id,evidence_id,content_sha256,byte_size,policy_version,verdict)
+                SELECT tenant_id,evidence_id,content_sha256,byte_size,policy_version,'blocked'
+                FROM omnixat.evidence_scan_verdicts WHERE tenant_id=%s AND evidence_id=%s AND verdict='clean'
+            """, (self.a, supporting.id))
+            with self.assertRaises(EvidenceNotEligible):
+                link_expense_journal_clarification_evidence(
+                    writer, linker, self.a, self.org, review.receipt.id, snapshot_sha256=review.snapshot_sha256,
+                    reason="source_evidence", evidence_id=supporting.id,
+                )
+        self.assertEqual(self.record_supporting_answer(review), answer)
+        with psycopg.connect(self.journal_review_dsn, autocommit=True) as reader:
+            self.assertEqual(read_expense_journal_draft(reader, self.actor, self.a, self.org, review.receipt.id), review)
+
+    def test_journal_evidence_link_requires_answer_current_policy_and_scoped_clean_original(self):
+        review = self.journal_clarification_fixture()
+        with psycopg.connect(self.evidence_link_dsn, autocommit=True) as writer:
+            def link(*, actor=self.actor, tenant=self.a, evidence=self.registration.id,
+                     digest=review.snapshot_sha256, reason="source_evidence"):
+                return link_expense_journal_clarification_evidence(
+                    writer, actor, tenant, self.org, review.receipt.id, snapshot_sha256=digest,
+                    reason=reason, evidence_id=evidence,
+                )
+
+            with self.assertRaises(EvidenceNotEligible):
+                link()
+            self.record_supporting_answer(review)
+            unscanned = self.stage_supporting_original(b"Fictional,Unscanned\r\n", self.org)
+            blocked = self.stage_supporting_original(b"Fictional,Blocked\r\n", self.org)
+            self.run_scan(lambda *_: "blocked", evidence=blocked.id)
+            with tenant_records(self.runtime, self.actor, self.a, write=True) as records:
+                other_org = records.create_organisation("Other fictional organisation")["id"]
+            outside = self.stage_supporting_original(b"Fictional,Outside\r\n", other_org)
+            self.run_scan(lambda *_: "clean", org=other_org, evidence=outside.id)
+            for candidate in (unscanned.id, blocked.id, outside.id, uuid4()):
+                with self.subTest(evidence=candidate), self.assertRaises(EvidenceNotEligible):
+                    link(evidence=candidate)
+            for overrides in ({"actor": self.other, "tenant": self.b}, {"digest": "0" * 64}, {"reason": "funding"}):
+                with self.subTest(overrides=overrides), self.assertRaises(EvidenceNotEligible):
+                    link(**overrides)
+            for actor in (
+                Principal("agent", self.a, "editor", actor_kind="agent"),
+                Principal("api", self.a, "editor", api_scopes=frozenset({"records:write", "evidence:read"})),
+                Principal("viewer", self.a, "viewer"),
+            ):
+                with self.subTest(actor=actor.user_id), self.assertRaises(PermissionError):
+                    link(actor=actor)
+            self.set_active_policy("fictional-v2")
+            with self.assertRaises(EvidenceNotEligible):
+                link()
+        self.assertEqual(self.owner.execute("""
+            SELECT count(*) FROM omnixat.expense_journal_clarification_evidence WHERE tenant_id=%s
         """, (self.a,)).fetchone(), (0,))

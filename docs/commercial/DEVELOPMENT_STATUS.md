@@ -1570,3 +1570,36 @@ with the pinned psycopg 3.3.8 source adapter:
 Next: let an authorised user link eligible evidence to an answered
 correction for later review. Keep answer text separate from verified
 evidence and leave journal edits and posting to separate actions.
+
+## C4 journal clarification evidence links — completed
+
+Recovered clean `a5baae9`. Let an authorised human editor link one eligible
+supporting original to an answered reason on the exact journal snapshot.
+Persist the scoped evidence fingerprint and scan policy with attribution.
+Keep journal data, answer text and bookkeeping decisions separate.
+
+Migration 0038 stores one supporting original per answered reason and
+snapshot, with scoped foreign keys to the answer and evidence fingerprint.
+The writer rechecks the current journal and original's eligibility and
+holds the active scan policy and supporting original scan state through
+commit. Concurrent identical retries return the first receipt. The
+receipt contains no evidence bytes or answer text.
+
+Verification on 7 November 2026, Python 3.12 and disposable PostgreSQL 16.2
+with the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **213 passed**. New tests
+  cover concurrent replay, conflicting actor or evidence, stale snapshots,
+  missing answers, blocked or unscanned evidence, organisation and tenant
+  isolation, policy changes and restricted grants.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. Direct Chromium launch
+  reproduced the socket permission error. The browser test is unchanged.
+- `git diff --check`: passed.
+
+Next: show supporting evidence references in the scoped decision page,
+with current eligibility and no original bytes. Keep historical links
+separate from any later correction or posting decision.

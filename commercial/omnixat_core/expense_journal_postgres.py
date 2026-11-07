@@ -375,3 +375,57 @@ def record_expense_journal_clarification(
             raise RuntimeError("Journal clarification receipt unavailable")
         return ExpenseJournalClarificationReceipt(journal, snapshot_sha256, reason, row["correction_reviewer"],
                                                   actor_id, row["recorded_at"])
+
+
+class ExpenseJournalEvidenceLinkConflict(Exception):
+    """A different evidence link already exists for this clarification."""
+
+
+@dataclass(frozen=True)
+class ExpenseJournalEvidenceLink:
+    journal_id: UUID
+    snapshot_sha256: str
+    reason: JournalCorrectionReason
+    evidence_id: UUID
+    content_sha256: str = field(repr=False)
+    scan_policy_version: str
+    linked_by: str = field(repr=False)
+    linked_at: datetime
+
+
+def link_expense_journal_clarification_evidence(
+    connection, actor, tenant_id, organisation_id, journal_id, *,
+    snapshot_sha256: str, reason: JournalCorrectionReason, evidence_id: UUID,
+) -> ExpenseJournalEvidenceLink:
+    """Record a supporting evidence reference for an answered journal correction."""
+    tenant = _authorize(actor, tenant_id, "records:write")
+    _authorize(actor, tenant_id, "evidence:read")
+    if actor.actor_kind != "human" or actor.api_scopes is not None:
+        raise PermissionError("Interactive tenant journal clarification required")
+    actor_id = actor.user_id
+    if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
+        raise ValueError("Invalid journal clarification attribution")
+    if type(snapshot_sha256) is not str or not re.fullmatch(r"[0-9a-f]{64}", snapshot_sha256):
+        raise ValueError("An exact journal snapshot digest is required")
+    if type(reason) is not str or reason not in ("amount", "account", "funding", "accounting_date", "source_evidence"):
+        raise ValueError("Unsupported journal correction reason")
+    organisation, journal, evidence = (UUID(str(value)) for value in (organisation_id, journal_id, evidence_id))
+
+    with _tenant_transaction(connection, tenant, write=True, tables_required=(
+        *_DRAFT_TABLES, "expense_journal_review_decisions", "expense_journal_correction_requests",
+        "expense_journal_clarification_answers", "expense_journal_clarification_evidence",
+    )):
+        with connection.cursor(row_factory=dict_row) as cursor:
+            _require_draft_role(cursor, "link_expense_journal_clarification_evidence")
+            cursor.execute("""
+                SELECT * FROM omnixat_extraction.link_expense_journal_clarification_evidence(%s,%s,%s,%s,%s,%s)
+            """, (organisation, journal, bytes.fromhex(snapshot_sha256), reason, evidence, actor_id))
+            row = cursor.fetchone()
+        if row["outcome"] == "unavailable":
+            raise EvidenceNotEligible("Journal clarification or supporting evidence is unavailable")
+        if row["outcome"] == "conflict":
+            raise ExpenseJournalEvidenceLinkConflict("A different evidence link already exists")
+        if row["outcome"] != "stored":
+            raise RuntimeError("Journal clarification evidence receipt unavailable")
+        return ExpenseJournalEvidenceLink(journal, snapshot_sha256, reason, evidence, row["fingerprint"].hex(),
+                                          row["scan_policy"], actor_id, row["recorded_at"])

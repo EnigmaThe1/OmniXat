@@ -554,3 +554,22 @@ Grant the dedicated writer USAGE on `omnixat_extraction` and EXECUTE on
 `omnixat_extraction.record_expense_journal_clarification(uuid,uuid,bytea,text,text,text,text)`
 only. The answer does not alter the journal, the correction request or
 the review decision, and carries no approval or posting authority.
+
+## Linking supporting evidence to a journal clarification
+
+Migration 0038 adds `link_expense_journal_clarification_evidence`. An
+interactive tenant owner or editor with records write and evidence read
+permission can link one supporting original per answered reason on the
+eligible journal snapshot. The evidence must belong to the same tenant
+and organisation and pass the active scan policy. The receipt records the
+exact fingerprint, scan policy, author and time. The active policy and
+supporting evidence scan state are held through the write.
+
+An eligible retry with the same evidence and author returns the original
+receipt. A different eligible link conflicts. The link is an attributed
+reference for review. Bookkeeping treatment remains a separate decision.
+
+Grant the dedicated writer USAGE on `omnixat_extraction` and EXECUTE on
+`omnixat_extraction.link_expense_journal_clarification_evidence(uuid,uuid,bytea,text,uuid,text)`
+only. The receipt carries no original bytes or answer text. Displaying
+the link in the scoped review is a separate read increment.

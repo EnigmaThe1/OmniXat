@@ -520,3 +520,12 @@ Replace the dedicated reader grant as documented in EVIDENCE.md. **46 core,
 21 identity and 211 PostgreSQL/HTTP tests pass**. The unchanged prototype
 passes 19 of 20 tests with the known Chromium socket failure. Next: let an
 authorised user link eligible evidence to an answered correction for review.
+
+## Latest journal clarification evidence link checkpoint
+
+Migration 0038 stores one attributed supporting original per answered
+reason and eligible journal snapshot. The writer records the exact
+fingerprint and scan policy through a dedicated grant. See EVIDENCE.md.
+**46 core, 21 identity and 213 PostgreSQL/HTTP tests pass**. The unchanged
+prototype passes 19 of 20 tests with the known Chromium socket failure.
+Next: show eligible evidence links in the scoped review page.
