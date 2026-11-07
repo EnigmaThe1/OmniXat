@@ -27,6 +27,10 @@ class AuthenticatedJobStore:
     def get_evidence_task(self, token, tenant, job_id):
         return self._jobs.get_evidence_task(self._actor(token, tenant), tenant, job_id)
 
+    def get_claimed_evidence_task(self, token, tenant, job_id, lease_token):
+        actor = self._actor(token, tenant, write=True)
+        return self._jobs.get_claimed_evidence_task(actor, tenant, job_id, lease_token)
+
     def retry_state(self, token, tenant, job_id):
         return self._jobs.retry_state(self._actor(token, tenant), tenant, job_id)
 
@@ -34,9 +38,10 @@ class AuthenticatedJobStore:
         actor = self._actor(token, tenant, write=True)
         return self._jobs.claim(actor, tenant, job_id, lease_seconds=lease_seconds)
 
-    def checkpoint(self, token, tenant, job_id, lease_token, progress, *, complete=False):
+    def checkpoint(self, token, tenant, job_id, lease_token, progress, *, complete=False, expected_progress=None):
         actor = self._actor(token, tenant, write=True)
-        return self._jobs.checkpoint(actor, tenant, job_id, lease_token, progress, complete=complete)
+        return self._jobs.checkpoint(actor, tenant, job_id, lease_token, progress,
+                                     complete=complete, expected_progress=expected_progress)
 
     def cancel(self, token, tenant, job_id):
         return self._jobs.cancel(self._actor(token, tenant, write=True), tenant, job_id)

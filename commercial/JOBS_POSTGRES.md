@@ -258,3 +258,61 @@ maintained-provider provisioning and production qualification remain unfinished.
 
 Transaction visibility rechecked on 7 November 2026 against PostgreSQL 16
 [transaction isolation](https://www.postgresql.org/docs/16/transaction-iso.html).
+
+## Bounded evidence inspection
+
+`omnixat_core.preparation_postgres.inspect_preparation_evidence(jobs,
+gate_connection, access_token, tenant, job_id, lease_token)` explicitly runs one
+inspection step. Supply the server's `AuthenticatedJobStore`, an exclusive idle
+autocommit execute-only extraction-gate connection, and the current worker lease.
+No task scheduler starts on import or construction.
+
+The step obtains the immutable task and current checkpoint together through
+`get_claimed_evidence_task`. That method requires records read/write permission,
+current running state, matching verified worker/token and an unexpired database
+lease. A single read-only statement observes the task and job. Wrong scope,
+legacy hash-only jobs and stale claims cannot reach the evidence gate.
+
+It then uses the existing current-policy `read_evidence_for_extraction` service,
+including quarantine fingerprint/length validation, clean verdict and live scan
+claim checks. The admitted evidence ID and fingerprint must match the pinned task.
+Original bytes remain in trusted process memory. The returned `EvidenceInspection`
+contains only job/organisation/evidence references, fingerprint, observed policy,
+media type and byte count. No document contents, prompts or credentials are saved
+in the checkpoint or returned by this step.
+
+The saved checkpoint is `{"step":"evidence_inspected","inspection":{...}}`.
+Identity is resolved again before saving; the existing checkpoint transaction
+rechecks current worker/token/lease under the job lock. The new optional
+`expected_progress` keyword compares the previously observed JSON object with
+current saved progress in that same update. A mismatch rolls back without changing
+progress, completion or lease. Omit it for the existing unconditional checkpoint
+contract. Expected objects follow the existing JSON validity and 65,536-byte bound.
+The comparison uses PostgreSQL JSONB equality.
+
+Inspection accepts empty progress or its own inspection stage. It refuses other
+stages before reading, and conditional saving preserves a later stage committed
+during the read. Retrying after recovery rereads the source through the current
+gate and can refresh the observation; it cannot rely on a prior checkpoint as
+proof of current eligibility. The job remains running, with the normal 60-second
+checkpoint renewal. This is an inspection observation, not extracted figures,
+processing completion or continuing permission to use the evidence.
+
+Identity resolution, task read, evidence admission and checkpoint are separate
+transactions. Revocation/cancellation/expiry during admission prevents the later
+checkpoint when observed by its checks, but cannot retract bytes already read into
+the trusted process. A scan-policy change after admission does not rewrite that
+historical observation. Every subsequent extraction/effect needs its own current
+identity, live-lease and evidence-eligibility checks. Failures propagate to the
+caller without completing, cancelling or automatically retrying the job.
+
+No migration or extra grants on the job login are required. Provision a separate
+non-owner gate login with only USAGE on `omnixat_extraction` and EXECUTE on
+`omnixat_extraction.read_eligible_original(uuid,uuid)`, as in EVIDENCE.md. Do not
+grant it direct original-byte table reads or broaden the identity/job logins.
+The existing bounded original-size and transaction timeouts apply. This is an
+internal preparation step, with no provider, posting, approval or HTTP route.
+
+Checkpoint visibility and database-clock semantics rechecked on 7 November 2026:
+PostgreSQL 16 [transaction isolation](https://www.postgresql.org/docs/16/transaction-iso.html)
+and [time functions](https://www.postgresql.org/docs/16/functions-datetime.html).

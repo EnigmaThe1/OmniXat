@@ -13,6 +13,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from .access import require_tenant
+from .job_tasks import EvidencePreparationTask
 from .postgres import CreationConflict, TenantRecords, _tenant_transaction, validate_creation_key
 
 
@@ -50,6 +51,12 @@ class JobRetryState:
     retry_at: datetime | None
     failure_code: str | None
     failed_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ClaimedEvidenceTask:
+    task: "EvidencePreparationTask"
+    checkpoint: dict = field(repr=False)
 
 
 class PostgresJobStore:
@@ -97,7 +104,6 @@ class PostgresJobStore:
 
     def create_evidence_task(self, actor, tenant, request_key, task, *, max_attempts=3):
         """Persist reference-only inputs and the job atomically; no evidence is read."""
-        from .job_tasks import EvidencePreparationTask
         scope = self._scope(actor, tenant, "records:write")
         require_tenant(actor, tenant, "records:read")
         self._validate_creation(request_key, max_attempts)
@@ -131,7 +137,6 @@ class PostgresJobStore:
 
     def get_evidence_task(self, actor, tenant, job_id):
         """Recover immutable inputs only. Execution must use the evidence read gate."""
-        from .job_tasks import EvidencePreparationTask
         scope = self._scope(actor, tenant, "records:read")
         job = UUID(str(job_id))
         with _tenant_transaction(self.connection, scope, tables_required=("agent_job_evidence_tasks",)):
@@ -144,6 +149,26 @@ class PostgresJobStore:
                 if row is None:
                     raise KeyError("Task specification unavailable")
                 return EvidencePreparationTask(**row)
+
+    def get_claimed_evidence_task(self, actor, tenant, job_id, token) -> ClaimedEvidenceTask:
+        """Read task/progress together only for the current live verified worker."""
+        scope = self._scope(actor, tenant, "records:write")
+        require_tenant(actor, tenant, "records:read")
+        job, lease = UUID(str(job_id)), UUID(str(token))
+        with _tenant_transaction(self.connection, scope, tables_required=("agent_jobs", "agent_job_evidence_tasks")):
+            with self.connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute("""
+                    SELECT t.organisation_id,t.evidence_id,t.content_sha256,j.checkpoint
+                    FROM omnixat.agent_jobs j JOIN omnixat.agent_job_evidence_tasks t
+                      ON (t.tenant_id,t.job_id)=(j.tenant_id,j.id)
+                    WHERE j.tenant_id=%s AND j.id=%s AND j.status='running'
+                      AND j.claimed_by=%s AND j.lease_token=%s AND j.lease_until > clock_timestamp()
+                """, (scope, job, actor.user_id, lease))
+                row = cursor.fetchone()
+                if row is None:
+                    raise ValueError("Claim expired, superseded or task unavailable")
+                progress = row.pop("checkpoint")
+                return ClaimedEvidenceTask(EvidencePreparationTask(**row), progress)
 
     def get(self, actor, tenant, job_id):
         scope = self._scope(actor, tenant, "records:read")
@@ -186,13 +211,21 @@ class PostgresJobStore:
             raise ValueError("Job unavailable, delayed, exhausted or already claimed")
         return str(token)
 
-    def checkpoint(self, actor, tenant, job_id, token, progress, *, complete=False):
+    def checkpoint(self, actor, tenant, job_id, token, progress, *, complete=False, expected_progress=None):
         scope = self._scope(actor, tenant, "records:write")
         if not isinstance(progress, dict) or type(complete) is not bool:
             raise ValueError("Structured progress and explicit completion flag required")
         encoded = json.dumps(progress, sort_keys=True, allow_nan=False)
         if len(encoded.encode()) > 65536:
             raise ValueError("Checkpoint too large; store evidence references")
+        expected = None
+        if expected_progress is not None:
+            if not isinstance(expected_progress, dict):
+                raise ValueError("Structured expected progress required")
+            expected_encoded = json.dumps(expected_progress, sort_keys=True, allow_nan=False)
+            if len(expected_encoded.encode()) > 65536:
+                raise ValueError("Expected checkpoint too large")
+            expected = Jsonb(json.loads(expected_encoded))
         job, lease = UUID(str(job_id)), UUID(str(token))
         with _tenant_transaction(self.connection, scope, write=True, tables_required=("agent_jobs",)):
             # Acquire the row before checking the database clock. A lock wait
@@ -204,10 +237,11 @@ class PostgresJobStore:
                     lease_until=CASE WHEN %s THEN NULL ELSE clock_timestamp() + interval '60 seconds' END
                 WHERE tenant_id=%s AND id=%s AND status='running' AND claimed_by=%s
                   AND lease_token=%s AND lease_until > clock_timestamp()
+                  AND (%s::jsonb IS NULL OR checkpoint=%s::jsonb)
             """, (Jsonb(json.loads(encoded)), "completed" if complete else "running", None if complete else lease,
-                  complete, scope, job, actor.user_id, lease)).rowcount
+                  complete, scope, job, actor.user_id, lease, expected, expected)).rowcount
             if changed != 1:
-                raise ValueError("Claim expired, superseded or job unavailable")
+                raise ValueError("Claim expired, superseded, progress changed or job unavailable")
 
 
     def cancel(self, actor, tenant, job_id) -> JobCancellationReceipt:

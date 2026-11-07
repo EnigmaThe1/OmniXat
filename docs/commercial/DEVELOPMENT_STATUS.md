@@ -2210,3 +2210,48 @@ an executor or production-qualified identity integration. Next: connect recovere
 task inputs to the current evidence gate under a live worker lease, and execute
 one bounded restart-safe preparation step. Scheduling, external providers, ledger
 posting and final-package approval remain unfinished.
+
+## C1 bounded evidence inspection step — completed
+
+Recovered clean `192d6a5`; no unfinished implementation or competing writer found.
+Inspect one recoverable task through the current scan/read gate after checking its
+verified worker and live lease. Compare the exact source fingerprint, retain only
+metadata in progress and recheck identity/lease before saving. Add a conditional
+checkpoint to prevent this step overwriting newer progress. No provider, ledger,
+filing, scheduler or UI is activated.
+
+
+`inspect_preparation_evidence` now runs one explicit bounded inspection using the
+immutable task, fresh signed identity and the existing current-policy evidence
+read gate. `get_claimed_evidence_task` reads the exact task/progress together only
+for a live verified worker. Inspection checks the pinned evidence ID/fingerprint
+and returns/saves only metadata. Conditional `expected_progress` checkpoints
+prevent stale inspection from overwriting newer preparation; existing callers
+retain their unconditional checkpoint behaviour. The job stays running.
+No migration is required. See JOBS_POSTGRES.md for roles and snapshot limits.
+
+Verification on 7 November 2026 with Python 3.12, disposable PostgreSQL 16.2
+and the pinned psycopg 3.3.8 source adapter:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **46 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`
+  with disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **294 passed**.
+  Nine new tests cover metadata-only recovery/retry, initial claim/scope checks,
+  disabled or changed scan policies, blocked verdicts/live scan claims, exact
+  fingerprint matching, cancellation/expiry/reclaim during read, fresh authority
+  before checkpoint, newer-stage preservation and concurrent conditional writes.
+  Existing revocation, role-downgrade and wrong-worker cases include claimed reads.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest
+  discover -s tests`: **19 passed, 1 failed**. The unchanged browser test receives
+  503 with Chromium unavailable. No test was skipped or removed.
+- `git diff --check`: passed.
+
+The checkpoint records an inspection observation, not continuing evidence
+eligibility or completed processing. Transactions remain separate; checks cannot
+retract bytes already admitted into trusted memory, and later effects must recheck
+the current gate/authority. No original bytes leave this step and no external work
+is executed. Next: persist a validated source-specific extraction plan and connect
+the existing bounded decimal extraction service to a fenced retry-safe job effect.
+Scheduling, providers, ledger posting, final approval and production qualification
+remain unfinished.

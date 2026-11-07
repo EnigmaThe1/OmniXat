@@ -722,3 +722,19 @@ Next: use recovered references, fresh identity, a live lease and the current evi
 gate for one bounded preparation execution step. No scheduler, provider, UI,
 posting or filing integration is wired by this checkpoint. No active implementation
 remains in this increment.
+
+## Latest bounded inspection checkpoint
+
+`inspect_preparation_evidence` recovers one task under the current worker lease,
+uses the existing policy-gated original read, checks exact source binding and saves
+metadata-only inspection progress. Identity/lease are checked again before saving.
+Conditional `expected_progress` prevents stale writes replacing a newer checkpoint.
+The step leaves the job running and returns no document bytes. No migration is needed.
+**46 core, 21 identity and 294 PostgreSQL/HTTP tests pass**. The unchanged prototype
+passes 19 of 20 tests with Chromium unavailable. See JOBS_POSTGRES.md for dedicated
+identity/job/gate grants and the separate-transaction observation boundary.
+Next: persist a validated source-specific extraction plan and connect the existing
+bounded decimal extractor to a fenced, retry-safe job effect. A saved inspection
+is not current eligibility; later work must recheck the gate, identity and lease.
+No scheduler, provider, UI, ledger posting or filing is wired. No active
+implementation remains in this increment.
