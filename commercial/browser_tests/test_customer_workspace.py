@@ -25,6 +25,9 @@ class CustomerWorkspaceBrowserTests(CustomerWebFixture):
         expect(page.locator('#notes')).to_contain_text('<script>window.untrusted = true</script>')
         self.assertIsNone(page.evaluate('window.untrusted'))
         self.assertEqual(page.evaluate('Object.keys(localStorage).length + Object.keys(sessionStorage).length'),0)
+        if os.environ.get('OMNIXAT_BROWSER_ARTIFACTS'):
+            Path(os.environ['OMNIXAT_BROWSER_ARTIFACTS']).mkdir(parents=True,exist_ok=True)
+            page.screenshot(path=str(Path(os.environ['OMNIXAT_BROWSER_ARTIFACTS'])/'customer-notes.png'),full_page=True)
         page.get_by_role('button',name='← All organisations').click()
         expect(page.get_by_role('heading',name='Everything starts here.')).to_be_visible()
         page.get_by_role('searchbox',name='Filter loaded organisations').fill('Fictional Studio')
@@ -83,4 +86,28 @@ class CustomerWorkspaceBrowserTests(CustomerWebFixture):
         page.reload()
         expect(page.get_by_role('alert')).to_contain_text('Your access has changed')
         expect(page.locator('#content')).to_be_hidden()
+        self.assertEqual(errors,[])
+
+    def test_chromium_public_entry_and_expired_save_have_accessible_sign_in(self):
+        from playwright.sync_api import expect
+        page,errors = self.browser()
+        page.goto(self.origin+'/')
+        expect(page.get_by_role('heading').filter(has_text='A clearer place')).to_be_visible()
+        expect(page.get_by_role('link',name='Sign in',exact=True)).to_have_attribute('href','/oauth2/start?rd=/app')
+        self.assertEqual(page.locator('.skip').get_attribute('href'),'#welcome-main')
+        artifacts = os.environ.get('OMNIXAT_BROWSER_ARTIFACTS')
+        if artifacts:
+            Path(artifacts).mkdir(parents=True,exist_ok=True)
+            page.screenshot(path=str(Path(artifacts)/'customer-entry.png'),full_page=True)
+        page.goto(self.origin+'/app')
+        expect(page.get_by_role('heading',name='Everything starts here.')).to_be_visible()
+        page.get_by_role('button',name='+ New organisation').click()
+        page.get_by_label('Organisation name',exact=True).fill('Fictional expired-session organisation')
+        self.gateway_token = self.token(iat=self.iat-60,exp=self.iat-1)
+        page.get_by_role('button',name='Create organisation',exact=True).click()
+        expect(page.locator('#dialog-reauth')).to_be_visible()
+        expect(page.locator('#dialog-reauth')).to_have_attribute('href','/oauth2/start?rd=/app')
+        expect(page.get_by_role('button',name='Retry save',exact=True)).to_be_visible()
+        expect(page.get_by_label('Organisation name',exact=True)).to_be_disabled()
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.organisations WHERE tenant_id=%s AND display_name='Fictional expired-session organisation'",(self.a,)).fetchone(),(0,))
         self.assertEqual(errors,[])

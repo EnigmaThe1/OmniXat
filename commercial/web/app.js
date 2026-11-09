@@ -166,7 +166,7 @@ async function save(kind, url, payload, input, button) {
   if (state.saving) return;
   const pending = state.pending[kind] || {url, payload, key: crypto.randomUUID()};
   state.pending[kind] = pending; state.saving = true;
-  input.disabled = true; button.disabled = true; clearMessage(); show('dialog-error', false);
+  input.disabled = true; button.disabled = true; clearMessage(); show('dialog-error', false); show('dialog-reauth', false);
   try {
     const record = await request(pending.url, {method: 'POST', headers: {'Content-Type': 'application/json',
       'Idempotency-Key': pending.key}, body: JSON.stringify(pending.payload)});
@@ -182,7 +182,7 @@ async function save(kind, url, payload, input, button) {
     const definiteRejection = [400,403,404,409,413,415,422].includes(error.status);
     if (definiteRejection) { delete state.pending[kind]; input.disabled = false; }
     const message = errorMessage(error) + (definiteRejection ? '' : ' Use Retry save to confirm this same request before editing.');
-    if (kind === 'organisation') { $('dialog-error').textContent = message; show('dialog-error', true); }
+    if (kind === 'organisation') { $('dialog-error').textContent = message; show('dialog-error', true); show('dialog-reauth', error.status === 401); }
     else { $('error-message').textContent = message; show('error', true); show('retry', false); show('reauth', error.status === 401); }
     if (error.status === 403) fail(error);
   } finally {
@@ -207,7 +207,7 @@ $('note-form').addEventListener('submit', event => {
 });
 $('add-organisation').addEventListener('click', () => {
   if (Object.keys(state.pending).length) { tell('Confirm the pending save before creating another record.'); return; }
-  show('dialog-error', false); $('organisation-dialog').showModal(); $('organisation-display-name').focus();
+  show('dialog-error', false); show('dialog-reauth', false); $('organisation-dialog').showModal(); $('organisation-display-name').focus();
 });
 $('close-dialog').addEventListener('click', closeDialog); $('cancel-dialog').addEventListener('click', closeDialog);
 $('organisation-dialog').addEventListener('cancel', event => { if (state.saving || state.pending.organisation) event.preventDefault(); });
@@ -232,5 +232,5 @@ async function boot() {
   try { await directory(); await loadRoute(); }
   catch (error) { show('loading', false); fail(error); }
 }
-if (location.pathname === '/') { show('welcome', true); }
+if (location.pathname === '/') { show('welcome', true); document.querySelector('.skip').href = '#welcome-main'; }
 else { show('workspace-app', true); boot(); }

@@ -137,7 +137,11 @@ CI in `.github/workflows/commercial.yml` runs the services, real-browser workflo
 container build and unchanged prototype suite on a PostgreSQL/Chromium runner. A
 workflow definition is not proof of a successful run; inspect its actual checks.
 The current workspace blocks Chromium Unix sockets and supplied a truncated
-headless-shell download, so browser verification remains blocked locally. The
+headless-shell download, so browser verification remains blocked locally. GitHub
+run [42711977745](https://github.com/EnigmaThe1/OmniXat/actions/runs/42711977745)
+for `51a1ba8` subsequently passed 440 service tests, both real Chromium customer
+tests, all 20 unchanged prototype tests and the container build. The captured
+desktop/mobile screenshots were inspected for readable layout and overflow. The
 existing fictional-demo browser test remains intact and must also run in CI.
 
 Primary technical sources checked 9 November 2026:

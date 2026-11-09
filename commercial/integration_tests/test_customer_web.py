@@ -65,7 +65,7 @@ class CustomerWebFixture(MembershipFixture):
         browser = manager.chromium.launch(headless=True,**({'executable_path':executable} if executable else {}))
         self.addCleanup(browser.close)
         context = browser.new_context(viewport={'width':1440,'height':1000})
-        gateway_token = token or self.token()
+        self.gateway_token = token or self.token()
         def dispatch(route):
             request = route.request
             url = urlsplit(request.url)
@@ -73,7 +73,7 @@ class CustomerWebFixture(MembershipFixture):
                 route.abort(); return
             headers = dict(request.all_headers())
             if url.path.startswith('/v1/'):
-                headers['X-Forwarded-Access-Token'] = gateway_token
+                headers['X-Forwarded-Access-Token'] = self.gateway_token
             response = self.client.request(request.method,url.path+('?' + url.query if url.query else ''),
                                            headers=headers,content=request.post_data_buffer)
             route.fulfill(status=response.status_code,headers=dict(response.headers),body=response.content)

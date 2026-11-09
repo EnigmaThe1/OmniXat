@@ -950,3 +950,12 @@ original input DSNs. The complete **371 integration tests pass** on a separate
 SCRAM-required disposable cluster after this fix. Authentication was not relaxed.
 Inspect the follow-up CI for actual customer browser and container results; it also
 retains fictional desktop/mobile screenshots. Continue the website priority above.
+
+Supported-runner evidence: [run 42711977745](https://github.com/EnigmaThe1/OmniXat/actions/runs/42711977745)
+for `51a1ba8` passed **462 tests** (440 services, 2 real Chromium customer, all 20
+unchanged prototype), plus the customer Docker build, on PostgreSQL 16.15. Actual
+desktop/mobile screenshots were inspected. A final follow-up adds in-dialog sign-in
+recovery after an expired-token 401, fixes the public entry skip target, and adds a
+third actual-browser regression and entry/notes screenshots. Check the latest CI
+before claiming that extra case passed. Real provider/session qualification and
+remaining customer/owner accounting workflows remain the next production work.

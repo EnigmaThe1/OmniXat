@@ -2762,3 +2762,23 @@ health probe now names its database. CI also retains fictional desktop/mobile
 screenshots for visual review when the real customer browser suite succeeds.
 Next: inspect the new CI run, resolve any actual UI/build failures, and then qualify
 real maintained sign-in before extending evidence/draft-review journeys.
+
+### Supported-runner browser and build evidence
+
+GitHub run https://github.com/EnigmaThe1/OmniXat/actions/runs/42711977745 for
+`51a1ba8` completed successfully on Ubuntu 24.04, Python 3.12.16, PostgreSQL 16.15:
+**48 core + 21 identity + 371 integration + 2 real Chromium customer + 20 unchanged
+prototype tests = 462 passed**, plus a successful non-root customer container build.
+The service integration run took 68.283s and the customer browser run 2.676s.
+The actual desktop/mobile screenshots were downloaded and visually inspected:
+readable layout, working filtered organisation view, no horizontal mobile overflow.
+This closes the environment-only browser/build blocker for that tested commit;
+it does not qualify a real OIDC provider/gateway or the entire SaaS.
+
+A final session-expiry review identified that the organisation dialog needed its
+own accessible sign-in link after a 401. It now exposes that recovery action while
+preserving the unconfirmed retry state. The public entry page's skip link targets
+its visible main content. A third real-browser test uses an actually expired signed
+JWT to verify the dialog's sign-in/retry state and zero created organisations.
+CI now also captures the public entry and notes screen. Inspect the latest run for
+this additional regression; do not confuse the prior 462 result with this new case.
