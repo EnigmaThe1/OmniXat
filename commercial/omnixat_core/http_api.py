@@ -6,6 +6,7 @@ Bearer only: no cookies, role headers, browser login or filing/approval endpoint
 import json
 import re
 from uuid import UUID, uuid4
+from datetime import datetime
 from urllib.parse import urlsplit
 
 import anyio
@@ -121,7 +122,7 @@ class Boundary:
             await self.app(scope, receive, safe_send)
 
 
-def create_app(*, verifier, connection_factory, allowed_hosts):
+def create_app(*, verifier, connection_factory, allowed_hosts, directory_connection_factory=None):
     """Return ASGI app only. Factory must bound acquisition and lease exclusively."""
     if (not isinstance(allowed_hosts, (list, tuple)) or not allowed_hosts
             or any(not isinstance(h, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]{0,252}', h)
@@ -130,11 +131,21 @@ def create_app(*, verifier, connection_factory, allowed_hosts):
     if not callable(connection_factory):
         raise ValueError('Server-owned connection factory required')
 
-    def operate(token, tenant, action, object_id, value, key):
+    def operate(token, tenant, action, object_id, value, key, page):
         try:
+            if action == 'list_workspaces':
+                from .workspace_directory_postgres import list_workspaces
+                with directory_connection_factory() as connection:
+                    return list_workspaces(connection,verifier,token,**page)
             with connection_factory() as connection:
                 with authenticated_records(connection, verifier, token, tenant,
                                            write=action.startswith('create')) as records:
+                    if action == 'workspace_context':
+                        return records.workspace_context()
+                    if action == 'list_organisations':
+                        return records.list_organisations(**page)
+                    if action == 'list_notes':
+                        return records.list_notes(object_id,**page)
                     if action == 'create_organisation':
                         return records.create_organisation(value, idempotency_key=key)
                     if action == 'get_organisation':
@@ -166,14 +177,31 @@ def create_app(*, verifier, connection_factory, allowed_hosts):
                 verifier.verify(token)
             except AuthenticationError:
                 raise ApiError(401, 'invalid_token') from None
-            if request.query_params:
-                raise ApiError(400, 'unsupported_parameter')
+            action = request.scope['endpoint'].action
+            page = {}
+            if action.startswith('list_'):
+                pairs = list(request.query_params.multi_items())
+                if any(key not in ('after','limit') for key,value in pairs) or len(dict(pairs)) != len(pairs):
+                    raise ApiError(400,'unsupported_parameter')
+                try:
+                    if 'after' in request.query_params:
+                        raw = request.query_params['after']
+                        page['after'] = str(UUID(raw))
+                        if page['after'] != raw:
+                            raise ValueError()
+                    raw_limit = request.query_params.get('limit','50')
+                    if not re.fullmatch(r'[1-9][0-9]?',raw_limit) or not 1 <= int(raw_limit) <= 50:
+                        raise ValueError()
+                    page['limit'] = int(raw_limit)
+                except ValueError:
+                    raise ApiError(400,'invalid_page') from None
+            elif request.query_params:
+                raise ApiError(400,'unsupported_parameter')
             try:
-                tenant = str(UUID(request.path_params['tenant']))
+                tenant = str(UUID(request.path_params['tenant'])) if 'tenant' in request.path_params else None
                 object_id = str(UUID(request.path_params['object_id'])) if 'object_id' in request.path_params else None
             except ValueError:
                 raise ApiError(400, 'invalid_identifier') from None
-            action = request.scope['endpoint'].action
             keys = request.headers.getlist('idempotency-key')
             if keys and not action.startswith('create'):
                 raise ApiError(400, 'unsupported_parameter')
@@ -188,8 +216,18 @@ def create_app(*, verifier, connection_factory, allowed_hosts):
                 value = await _payload(request, 'display_name', 200)
             elif action == 'create_note':
                 value = await _payload(request, 'body', 10000)
-            result = await run_in_threadpool(operate, token, tenant, action, object_id, value, key)
-            data = {key: str(value) if isinstance(value, UUID) else value for key, value in result.items()}
+            result = await run_in_threadpool(operate, token, tenant, action, object_id, value, key, page)
+            def serialise(value):
+                if isinstance(value,UUID):
+                    return str(value)
+                if isinstance(value,datetime):
+                    return value.isoformat()
+                if isinstance(value,dict):
+                    return {key:serialise(item) for key,item in value.items()}
+                if isinstance(value,list):
+                    return [serialise(item) for item in value]
+                return value
+            data = serialise(result)
             return JSONResponse({'data': data, 'request_id': request.scope['request_id']},
                                 status_code=201 if action.startswith('create') else 200)
         except ApiError as exc:
@@ -213,10 +251,18 @@ def create_app(*, verifier, connection_factory, allowed_hosts):
         return response
 
     base = '/v1/workspaces/{tenant}'
-    app = Starlette(debug=False, routes=[
+    routes = [
+        route(base + '/context', 'workspace_context', 'GET'),
+        route(base + '/organisations', 'list_organisations', 'GET'),
         route(base + '/organisations', 'create_organisation', 'POST'),
+        route(base + '/organisations/{object_id}/notes', 'list_notes', 'GET'),
         route(base + '/organisations/{object_id}', 'get_organisation', 'GET'),
         route(base + '/organisations/{object_id}/notes', 'create_note', 'POST'),
         route(base + '/notes/{object_id}', 'get_note', 'GET'),
-    ], exception_handlers={HTTPException: http_error})
+    ]
+    if directory_connection_factory is not None:
+        if not callable(directory_connection_factory):
+            raise ValueError('Server-owned directory connection factory required')
+        routes.append(route('/v1/workspaces','list_workspaces','GET'))
+    app = Starlette(debug=False,routes=routes,exception_handlers={HTTPException:http_error})
     return Boundary(app, allowed_hosts)

@@ -2653,3 +2653,92 @@ checkout without overwriting its dirty files, fetch and deliberately integrate t
 published migration increment before publication. Continue database qualification
 on the maintained target version, including constrained-owner service execution and
 restore. Job-backed journal preparation remains an independent product increment.
+
+## C2 customer website — implemented; browser/provider qualification pending (9 November 2026)
+
+Owner priority now explicitly includes the complete functional customer website.
+Recovered clean `2c19c46`; no other active writer recorded. Focus this increment on
+an authenticated, responsive customer workspace using the existing PostgreSQL
+record services: discover only current memberships, browse/create organisations,
+read/create persistent notes, preserve creation retry keys, and enforce viewer,
+revocation, tenant and browser-origin boundaries. Add real Chromium coverage and
+run the unchanged fictional-demo browser case. No billing activation, filing,
+deployment or fabricated dashboard figures. Further accounting/evidence, billing
+and owner journeys remain required production work, not pretend navigation.
+
+Implemented the commercial customer website (`commercial/web`, `customer_web` and
+an explicitly configured ASGI server factory), not a replacement of the old demo.
+It provides a public entry page, workspace discovery/switching, paginated
+organisation browsing/creation and persistent organisation notes. Desktop/mobile
+layouts, keyboard labels/dialog, empty/loading/error/read-only states and filters
+are included. UI counts are loaded rows, not financial/owner metrics. User text is
+rendered with textContent. Bearers and private drafts never enter browser storage.
+Pending saves retain an immutable payload/key in page memory; a lost response can
+be retried without a second record. Pending/unsaved notes block context switching.
+Closing a page still needs manual record reconciliation before re-entry.
+
+Migration 0063 adds a bounded, subject-scoped directory capability with a dedicated
+execute-only login and owner-only RLS directory policies. Existing record runtime
+remains tenant scoped. A user/tenant index supports membership lookup. Directory
+and record reads resolve current identity/membership, including revocation/cutoff;
+creation reuses existing validated/audited/idempotent services. Context and bounded
+cursor lists are shared API capabilities, not separate frontend database logic.
+An additional test executes the directory under a non-bypassing migration owner.
+
+The same-origin browser boundary independently verifies access tokens passed by an
+operator-managed maintained OIDC gateway; it does not trust role/email/tenant
+headers. Exact Origin/Fetch Metadata checks protect writes. CSP, no-store,
+no-referrer, allowlisted assets and private DSN files are enforced. The app factory
+bounds database admission/connect waits; a non-root Dockerfile and operator gateway
+template are supplied. See CUSTOMER_WEB.md for required setup and exact limits.
+No provider realm, customer credential, public host or container was activated.
+
+Remote movement was reviewed before publishing: `5660349` added bounded migration
+execution and six tests while this website was being written. Website changes were
+preserved in stash `69f8a6eccbc2c33570eee781ede6f49645375607`, the clean checkout
+fast-forwarded, and the stash reapplied. Only the append-only status conflicted;
+both complete histories were retained. The migration function changes and its tests
+are preserved. The final combined suite below includes both increments.
+
+Verification on 9 November 2026 (Python 3.12, PostgreSQL 16.2, existing pinned
+psycopg/HTTP/identity dependencies; Uvicorn 0.52.1 and Playwright 1.62.0):
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **48 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`, with
+  disposable OMNIXAT_TEST_ADMIN_DSN: **371 passed** in **52.112 seconds** on the
+  reconciled branch; **440 service tests total**. Seven new tests cover directory
+  scope, revocation/cutoff, RLS cleanup/direct grants, constrained-owner execution,
+  paging/parent/tenant/role checks, browser origin/headers and startup configuration.
+- Supplemental JSDOM 26.1.0 interaction diagnostic against actual ASGI/PostgreSQL
+  services: **passed**, including organisation creation, note save, a response lost
+  after commit and same-key retry yielding one row, navigation/filtering, unsaved
+  note protection, safe literal untrusted text and no browser storage. This is DOM
+  logic evidence, not actual-browser/layout or OIDC-provider qualification.
+- `node --check commercial/web/app.js`, gateway-template TOML parse and
+  `git diff --check`: passed.
+- `cd commercial && PYTHONPATH=.:integration_tests OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest discover -s browser_tests -v`:
+  **2 errors**, both blocked before page load by host policy (`socket() failed:
+  Operation not permitted`). The supported Playwright headless-shell download also
+  failed as a truncated archive. These are retained real Chromium tests, not skipped
+  or replaced by the DOM diagnostic. No actual browser/visual success is claimed.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**;
+  unchanged approval/idempotency browser case returns 503 with Chromium unavailable.
+- Local Docker build: **not run**, Docker is unavailable. A CI build step is included.
+
+`.github/workflows/commercial.yml` defines PostgreSQL service tests, the real Chromium
+customer workflow, container build and unchanged prototype suite on a supported
+runner, with read-only repository permission and pinned checkout/setup actions.
+Its actual run status must be inspected after publication; merely adding CI does
+not establish a passing check. Existing prototype tests were not changed/skipped.
+
+Next resumable step: inspect this commit's CI and resolve any real browser/container
+failures, then qualify the maintained browser sign-in/gateway with the exact access
+profile, session expiry/logout and revocation. Continue the customer-facing evidence
+upload and draft-review journey against existing services, then subscription and
+owner workflows. Do not return to unrelated worker micro-increments. The complete
+platform is not yet production ready: live login qualification, remaining accounting
+and UI flows, private draft recovery, accessibility/security/load/restore evidence,
+billing/provider and statutory module qualification remain required. No active
+writer remains after publication; the preserved stash is a recovery backup, not
+an unfinished competing implementation.

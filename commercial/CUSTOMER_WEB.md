@@ -1,0 +1,147 @@
+# Customer website
+
+The commercial website now serves a responsive workspace at `/app`, backed by the
+same authenticated PostgreSQL services as the developer API. It discovers current
+memberships, switches workspaces, lists/creates organisations, lists/adds notes and
+reopens saved records. Viewer controls are read-only. Empty, loading, permission,
+expiry and retry states are explicit. Lists use bounded cursor pagination; the
+organisation filter applies to loaded rows and is labelled accordingly. Counts
+are loaded records, not invented financial or platform metrics.
+
+This is a real record workflow, not the old fictional household prototype. Evidence,
+expense/journal review, reconciliation, subscription management, owner administration
+and statutory packages still need complete customer journeys. The whole platform
+is not production qualified merely because this workflow exists.
+
+## Authentication and deployment boundary
+
+Use a maintained OIDC gateway, such as OAuth2 Proxy, for the browser login/session
+and refresh flow. The operator template is
+`config/oauth2-proxy.customer.example.cfg`. Fill the environment-specific issuer,
+client ID, redirect URL, approved email domains, verified TLS upstream and secret
+mounts. It is intentionally not a working public deployment configuration. There
+is no built-in password store, test-token login, provider contract or self-enrolment.
+Provision identity/membership links through the existing trusted operator process.
+
+Protect **every** `/app` and `/v1` request at the gateway. Only the public landing
+page and two allowlisted static assets may bypass authentication. Forward the
+provider **access token** in `X-Forwarded-Access-Token`; do not forward the ID token
+in Authorization. The API independently verifies its pinned issuer, audience,
+RS256 key, `at+jwt` profile, timestamps, lifetime and required claims, then resolves
+current database membership and role. A provider's default token profile is not
+assumed compatible: qualify that exact realm/client first, including required
+`jti`, `client_id`, record scopes, header type, expiry, revocation and key rotation.
+Email/group/role headers confer no authority. Ambiguous token headers are rejected.
+The original bearer API remains available as a separate app factory.
+
+The app does not receive the gateway's cookie secret or OIDC client secret. No
+bearer token enters HTML, JavaScript, localStorage or sessionStorage. Browser API
+requests are same-origin. Writes require one exact configured HTTPS Origin, reject
+cross-site Fetch Metadata, and retain strict JSON/body limits. No CORS is enabled.
+The gateway must strip incoming authentication headers before setting its own.
+Keep the app network private behind it and validate host/TLS/proxy settings before
+release; application code does not trust forwarded host/protocol headers.
+
+## Database grants and directory
+
+Apply the normal checksum-checked migrations, including 0063, with the separate
+migration owner. Retain the existing constrained record-runtime grants from
+POSTGRES.md and IDENTITY.md. Add a **separate execute-only directory login**:
+
+```sql
+GRANT USAGE ON SCHEMA omnixat_directory TO customer_directory_runtime;
+GRANT EXECUTE ON FUNCTION omnixat_directory.list_workspaces(text,text,bigint,uuid,integer) TO customer_directory_runtime;
+```
+
+Alongside CONNECT, these are its only required grants. No direct omnixat schema or
+table privileges are needed. The Python service rejects a directory connection
+with direct schema privileges, owner or RLS-bypassing authority. This is a trusted
+server capability, never customer SQL access or a model tool.
+
+0063 adds directory SELECT policies restricted to the migration/function owner;
+ordinary record-runtime policies remain tenant-scoped. Under forced RLS, the
+function sees only the configured verified subject's identity/memberships and
+related tenants. Its explicit query also requires matching issuer/subject, active
+identity/membership and an issue time newer than the identity cutoff. A test runs
+this with a non-superuser, non-bypassing migration owner. Context settings are
+transaction-local and cleared before connection release. The directory returns
+only workspace ID/name/role and a derived can-write flag. Permission checks still
+run on each actual record operation; discovery is not continuing authority.
+
+## Run or build
+
+Install `requirements-web.txt`. Set these operator-owned variables; keep all
+credentials outside this public repository:
+
+| Variable | Value |
+|---|---|
+| `OMNIXAT_PUBLIC_ORIGIN` | Canonical `https://` hostname, without a trailing slash/port |
+| `OMNIXAT_ACCESS_ISSUER` | Independently approved access-token issuer |
+| `OMNIXAT_ACCESS_AUDIENCE` | Approved record API audience |
+| `OMNIXAT_ACCESS_KEYS_FILE` | JSON object mapping approved key IDs to public RSA PEM strings |
+| `OMNIXAT_RECORD_DSN_FILE` | Private record-runtime libpq DSN file |
+| `OMNIXAT_DIRECTORY_DSN_FILE` | Private directory-runtime libpq DSN file |
+
+DSN files must have no group/other permissions (for example 0600); mounted files
+must be readable by the runtime UID. Startup fails closed for missing/invalid
+configuration. The factory opens no connection/listener on import. It admits at
+most 16 concurrent database leases per process, waits at most two seconds for a
+slot, uses a two-second connection timeout and the existing transaction timeouts.
+
+From `commercial/`, after configuring an isolated environment and gateway:
+
+```bash
+uvicorn omnixat_core.customer_server:create_configured_app --factory \
+  --host 127.0.0.1 --port 8443 --no-proxy-headers --no-access-log \
+  --limit-concurrency 64 --timeout-keep-alive 5 \
+  --ssl-keyfile /run/secrets/web-key.pem --ssl-certfile /run/secrets/web-cert.pem
+```
+
+TLS remains required on the upstream ASGI scope; use a trusted upstream certificate.
+`docker build -f commercial/Dockerfile.web -t omnixat-customer-web commercial`
+builds the same app as UID 10001. Mount credentials and TLS material read-only;
+no credentials or test data are built into the image. No container was deployed.
+Image/base pinning, vulnerability review, restore rehearsal, load/security and
+accessibility qualification remain release work.
+
+## Verification and retry limits
+
+Install `requirements-web-tests.txt` and run `python -m playwright install --with-deps
+chromium` in a supported test environment. All fixtures are fictional. With a
+disposable-cluster `OMNIXAT_TEST_ADMIN_DSN`, from `commercial/`:
+
+```bash
+python -m unittest discover -s tests -q
+python -m unittest discover -s identity_tests -q
+python -m unittest discover -s integration_tests -v
+PYTHONPATH=.:integration_tests python -m unittest discover -s browser_tests -v
+```
+
+The browser suite uses real Chromium, actual ASGI routes and actual PostgreSQL
+services, with a server-side generated-token gateway stand-in. It covers creation,
+reload, viewer/revocation handling, desktop/mobile layout, untrusted note text,
+unsaved-note navigation and a response lost after commit followed by idempotent
+retry. It does **not** qualify an actual provider's login, gateway cookies, live
+network/TLS or MFA. No test is skipped when a browser is missing.
+
+A pending save keeps its original random idempotency key and exact payload in page
+memory. Editing/navigation is blocked while confirmation is pending. Retry rechecks
+authority and recovers the same record; it cannot duplicate that keyed creation.
+Unsaved notes block switching records and trigger the native leave-page warning.
+There is no background retry and no private draft/token storage in browser storage.
+Closing/reloading an unconfirmed page loses its in-memory draft/key: check persisted
+records before entering it again. Durable private draft/recovery UX remains to
+qualify. Normal UUID cursor pages are not an immutable snapshot of concurrent writes.
+
+CI in `.github/workflows/commercial.yml` runs the services, real-browser workflow,
+container build and unchanged prototype suite on a PostgreSQL/Chromium runner. A
+workflow definition is not proof of a successful run; inspect its actual checks.
+The current workspace blocks Chromium Unix sockets and supplied a truncated
+headless-shell download, so browser verification remains blocked locally. The
+existing fictional-demo browser test remains intact and must also run in CI.
+
+Primary technical sources checked 9 November 2026:
+[OAuth2 Proxy configuration](https://oauth2-proxy.github.io/oauth2-proxy/configuration/overview/),
+[Playwright browsers](https://playwright.dev/python/docs/browsers),
+[Starlette responses](https://www.starlette.dev/responses/),
+[Uvicorn](https://pypi.org/project/uvicorn/0.52.1/).

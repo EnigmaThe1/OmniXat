@@ -1,0 +1,11 @@
+__pycache__/
+**/__pycache__/
+*.pyc
+.env*
+*.dsn
+*.pem
+*secrets*
+tests/
+integration_tests/
+identity_tests/
+browser_tests/

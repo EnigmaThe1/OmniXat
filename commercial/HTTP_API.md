@@ -40,7 +40,7 @@ as nonexistent IDs when the caller has membership in the requested workspace.
 
 POST returns 201; reads return 200. Responses contain `data` and a generated
 `request_id`. IDs are JSON strings. Creation attribution comes from the verified
-internal actor. There is no list/search endpoint, ledger posting or automatic retry.
+internal actor. Cursor-paginated lists and workspace context are now available (see below); ledger posting and automatic retry are absent.
 Unknown routes, including filing/approval/billing/admin paths, return 404.
 
 POST requires application/json with identity content encoding. Only the specified
@@ -60,7 +60,7 @@ parent must still be accessible. JSON formatting does not affect the input diges
 A matching retry returns 201 with the same record and a new request ID. Reuse with
 different valid inputs returns 409 `idempotency_conflict`. Membership, revocation
 and scopes are checked before replay. GET does not accept this header. Query
-parameters remain unsupported.
+parameters remain unsupported on creation and single-object routes.
 
 Migration 0003 adds a creation receipt for each successful shared-service creation.
 The receipt and record commit together; it stores workspace, actor, operation,
@@ -132,3 +132,26 @@ Primary technical references checked 5 November 2026:
 - [Starlette exception handling](https://starlette.dev/exceptions/)
 - [PostgreSQL client timeouts](https://www.postgresql.org/docs/current/runtime-config-client.html)
 - [Psycopg transaction handling](https://www.psycopg.org/psycopg3/docs/basic/transactions.html)
+
+
+## Customer website list/context extension
+
+The [customer website](CUSTOMER_WEB.md) uses these additional read routes through
+the same signed identity/membership services:
+
+| Route | Result |
+|---|---|
+| `GET /v1/workspaces` | Current subject's active memberships, name, role and can-write flag; opt-in separate execute-only directory factory |
+| `GET /v1/workspaces/{tenant}/context` | Current workspace name/role and can-write flag |
+| `GET /v1/workspaces/{tenant}/organisations` | Organisation IDs, names and creation timestamps |
+| `GET /v1/workspaces/{tenant}/organisations/{id}/notes` | Parent-scoped note IDs, text and creation timestamps |
+
+Lists return `data.items` and `data.next_cursor` (null on the final page). Optional
+`limit` is a decimal integer 1–50 (default 50); `after` is the canonical lower-case
+UUID cursor from the previous page. Duplicate/unknown parameters and malformed
+cursors/limits fail. Ordering is by immutable UUID, not a concurrent snapshot.
+Notes validate the parent under the requested tenant, including empty lists.
+Revocation/scopes are checked on each call. Context is advisory UI metadata, never
+permission to skip a write check. `create_app` takes an optional separate
+`directory_connection_factory`; without it the global directory route is absent.
+The bearer-only factory itself gains no cookie authentication or CORS.

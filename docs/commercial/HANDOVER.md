@@ -10,6 +10,16 @@ The owner explicitly authorised continuing development and commits/pushes to Git
 on 5 November 2026. This does not authorise paid contracts, production deployment,
 customer data publication or statutory submissions.
 
+## Current delivery priority (9 November 2026)
+
+The owner now explicitly prioritises production readiness and a complete functional
+website. Finish end-to-end customer and owner journeys connected to the existing
+services. Do not default back to isolated worker/backend increments unless they
+block the selected journey. The earlier UI deferral no longer applies. Production
+claims require actual browser/provider/security/restore evidence, not backend test
+counts or placeholder screens. Deployment, billing activation and statutory
+submission remain unauthorised.
+
 ## Canonical work
 
 - Repository: https://github.com/EnigmaThe1/OmniXat
@@ -898,3 +908,37 @@ They were left untouched. Migration work used the isolated worktree
 `/srv/playground_dev/OmniXat-persistence-20261109` based on `2c19c46`.
 Before continuing that website, fetch, inspect its dirty diff and reconcile this
 migration commit; never reset/overwrite it. The migration increment itself is complete.
+
+## Latest customer-website checkpoint (9 November 2026)
+
+The commercial website now connects workspace discovery/switching, paginated
+organisations and persistent notes to the existing authenticated PostgreSQL
+services. It includes permission-aware controls, responsive layouts, loading/error/
+empty states, save confirmation/retry and unsaved-note guards. No fake dashboard
+figures or inactive feature navigation were added. See CUSTOMER_WEB.md for the
+server factory, private configuration, non-root Dockerfile and maintained OIDC
+operator-gateway boundary. Provider integration remains to qualify; no password or
+token-paste login was added, and browser code never receives a bearer token.
+
+0063 adds subject-scoped directory execution with a dedicated login, owner-only
+RLS directory policies and a user/tenant index. Every actual record operation still
+checks persisted membership/scopes and tenant isolation. The concurrent migration
+commit `5660349` was reviewed and fast-forwarded while preserving website work;
+both increments are included in the combined verification.
+
+**48 core + 21 identity + 371 PostgreSQL/HTTP tests pass (440 service total)**.
+Supplemental DOM interaction checks against real services passed, including lost
+response/retry without duplicate notes. The two real Chromium customer tests are
+retained but locally blocked by the host's Unix-socket policy; browser installation
+also returned a truncated download. The unchanged prototype remains 19/20 because
+its browser case cannot launch. No browser/visual or full-suite-green claim.
+Docker is absent locally. CI defines services, real browser, build and prototype
+checks; inspect actual results after publication before claiming qualification.
+
+Resume with CI/browser/container failures and exact maintained sign-in/session
+qualification, then build the customer evidence-upload/draft-review workflow using
+existing services, followed by subscription/owner journeys. Keep focus on the
+complete functional website and production acceptance. Current UI is a working
+record workflow, not the whole accounting SaaS. Deployment, live billing and all
+statutory submissions remain disabled. No active writer remains; the local stash
+`69f8a6e` preserves pre-reconciliation edits as a recovery backup only.

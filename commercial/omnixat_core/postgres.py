@@ -215,3 +215,33 @@ class TenantRecords:
         self._check()
         return self._one("""SELECT id, organisation_id, body, created_by FROM omnixat.notes
             WHERE tenant_id=%s AND id=%s""", (self._tenant, UUID(str(note_id))))
+
+    def workspace_context(self):
+        self._check()
+        row = self._one('SELECT id,display_name FROM omnixat.tenants WHERE id=%s',(self._tenant,))
+        return dict(row,role=self._actor.tenant_role,
+                    can_write=self._actor.tenant_role in ('owner','editor')
+                    and (self._actor.api_scopes is None or 'records:write' in self._actor.api_scopes))
+
+    def _page(self, query, params, after, limit):
+        self._check()
+        if type(limit) is not int or not 1 <= limit <= 50:
+            raise ValueError('Invalid page size')
+        after_id = UUID(str(after)) if after is not None else None
+        with self._connection.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(query,(*params,after_id,after_id,limit+1))
+            rows = cursor.fetchall()
+        return {'items':rows[:limit],'next_cursor':str(rows[limit-1]['id']) if len(rows)>limit else None}
+
+    def list_organisations(self, *, after=None, limit=50):
+        return self._page('''SELECT id,display_name,created_at FROM omnixat.organisations
+            WHERE tenant_id=%s AND (%s::uuid IS NULL OR id > %s) ORDER BY id LIMIT %s''',
+            (self._tenant,),after,limit)
+
+    def list_notes(self, organisation_id, *, after=None, limit=50):
+        self._check()
+        parent = UUID(str(organisation_id))
+        self._organisation(parent)
+        return self._page('''SELECT id,organisation_id,body,created_at FROM omnixat.notes
+            WHERE tenant_id=%s AND organisation_id=%s AND (%s::uuid IS NULL OR id > %s)
+            ORDER BY id LIMIT %s''',(self._tenant,parent),after,limit)

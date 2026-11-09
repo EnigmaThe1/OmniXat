@@ -1,0 +1,10 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements-postgres.txt requirements-identity.txt requirements-http.txt requirements-web.txt ./
+RUN pip install --no-cache-dir -r requirements-web.txt
+COPY omnixat_core ./omnixat_core
+COPY migrations ./migrations
+COPY web ./web
+USER 10001:10001
+EXPOSE 8443
+CMD ["uvicorn","omnixat_core.customer_server:create_configured_app","--factory","--host","0.0.0.0","--port","8443","--no-proxy-headers","--no-access-log","--limit-concurrency","64","--timeout-keep-alive","5","--ssl-keyfile","/run/secrets/web-key.pem","--ssl-certfile","/run/secrets/web-cert.pem"]

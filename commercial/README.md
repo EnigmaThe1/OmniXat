@@ -1,4 +1,10 @@
-# Commercial foundation — development slice C0
+# Commercial foundation
+
+The [customer website](CUSTOMER_WEB.md) now provides a responsive PostgreSQL-backed
+workspace for organisations and notes, with membership discovery, role-aware
+controls and creation retries. Its OIDC gateway/provider and full accounting,
+billing and owner workflows still require production qualification. The sections
+below retain the history of earlier development slices.
 
 This is **working internal Python domain code**, not a deployable SaaS or filing service. It is separate from the fictional family demo. Python 3.11+; the offline core has no third-party dependencies. The optional PostgreSQL adapter uses psycopg.
 

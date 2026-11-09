@@ -1,0 +1,2 @@
+-r requirements-http.txt
+uvicorn==0.52.1
