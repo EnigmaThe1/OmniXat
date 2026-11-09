@@ -997,3 +997,18 @@ local Chromium is still host-blocked. No source/test assertion was changed to by
 that restriction. No unfinished work or failed CI remains in this increment.
 Resume with maintained login/gateway and authorised scanner/draft-review integration;
 quarantine, storage/retention/restore, quotas and production qualification gates remain.
+
+
+## Latest evidence recovery hardening (9 November 2026)
+
+A token expiring between evidence intake and storage now returns sign-in recovery
+(401), retaining the exact File/format retry; current-token membership denial stays
+403. Conflict/size/format messages explain corrections. **48 core + 21 identity +
+384 integration = 453 service tests pass** locally. Two additional real Chromium
+cases await CI (seven customer cases total); local browser remains host-blocked.
+Base evidence CI passed 477 tests and container build; do not reuse that count as
+proof for this follow-up. Read the latest status for commands, concurrency recovery
+and limits. Worktree: `/srv/playground_dev/OmniXat-recovery-20261109`, with a preserved
+pre-fast-forward stash. No active implementation remains. Resume with CI, maintained
+login/session qualification and authorised scanning/draft review; no live operation
+or statutory approval is enabled.

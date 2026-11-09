@@ -66,3 +66,49 @@ class CustomerEvidenceBrowserTests(CustomerEvidenceFixture):
         self.assertEqual(self.rows('evidence_quarantine'),1)
         self.assertEqual(self.rows('evidence_registrations'),1)
         self.assertEqual(errors,[])
+
+    def test_chromium_expired_upload_keeps_exact_file_until_authenticated_retry(self):
+        from playwright.sync_api import expect
+        page,errors = self.browser(token=self.token(scope=SCOPES))
+        page.goto(self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}')
+        expect(page.get_by_role('heading',name='Evidence',exact=True)).to_be_visible()
+        page.get_by_label('Document or image',exact=True).set_input_files(
+            {'name':'fictional-expiry.csv','mimeType':'text/csv','buffer':self.original})
+        self.gateway_token = self.token(scope=SCOPES,iat=self.iat-60,exp=self.iat-1)
+        page.get_by_role('button',name='Upload to quarantine',exact=True).click()
+        expect(page.locator('#error-message')).to_contain_text('Your session has ended.')
+        expect(page.locator('#reauth')).to_be_visible()
+        expect(page.get_by_label('Document or image',exact=True)).to_be_disabled()
+        expect(page.get_by_label('Document format',exact=True)).to_be_disabled()
+        expect(page.get_by_role('button',name='Clear selection',exact=True)).to_be_disabled()
+        expect(page.get_by_role('button',name='Retry upload',exact=True)).to_be_visible()
+        self.assertEqual(self.rows('evidence_registrations'),0)
+        self.gateway_token = self.token(scope=SCOPES)
+        page.get_by_role('button',name='Retry upload',exact=True).click()
+        expect(page.get_by_role('status').filter(has_text='Evidence stored in quarantine.')).to_be_visible()
+        expect(page.locator('#evidence-list li')).to_have_count(1)
+        self.assertEqual(self.rows('evidence_quarantine'),1)
+        self.assertEqual(errors,[])
+
+    def test_chromium_rejected_format_can_be_corrected_without_losing_file(self):
+        from playwright.sync_api import expect
+        page,errors = self.browser(token=self.token(scope=SCOPES))
+        page.goto(self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}')
+        expect(page.get_by_role('heading',name='Evidence',exact=True)).to_be_visible()
+        page.get_by_label('Document or image',exact=True).set_input_files(
+            {'name':'fictional-format.csv','mimeType':'text/csv','buffer':self.original})
+        page.get_by_role('button',name='Upload to quarantine',exact=True).click()
+        expect(page.get_by_role('status').filter(has_text='Evidence stored in quarantine.')).to_be_visible()
+        page.get_by_label('Document or image',exact=True).set_input_files(
+            {'name':'fictional-format.csv','mimeType':'text/csv','buffer':self.original})
+        page.get_by_label('Document format',exact=True).select_option('application/pdf')
+        page.get_by_role('button',name='Upload to quarantine',exact=True).click()
+        expect(page.locator('#error-message')).to_contain_text('Check the format and saved evidence')
+        expect(page.get_by_label('Document or image',exact=True)).to_be_enabled()
+        self.assertEqual(page.locator('#evidence-file').evaluate('(input) => input.files.length'),1)
+        page.get_by_label('Document format',exact=True).select_option('text/csv')
+        page.get_by_role('button',name='Upload to quarantine',exact=True).click()
+        expect(page.get_by_role('status').filter(has_text='Evidence stored in quarantine.')).to_be_visible()
+        expect(page.locator('#evidence-list li')).to_have_count(1)
+        self.assertEqual(self.rows('evidence_quarantine'),1)
+        self.assertEqual(errors,[])

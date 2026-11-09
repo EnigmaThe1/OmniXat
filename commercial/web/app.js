@@ -264,7 +264,11 @@ $('evidence-form').addEventListener('submit', async event => {
   } catch (error) {
     const definite = [400,403,404,409,413,415,422].includes(error.status);
     if (definite) delete state.pending.evidence;
-    $('error-message').textContent = errorMessage(error) + (definite ? '' : ' Use Retry upload to confirm the same file.');
+    const uploadMessage = error.status === 413 ? 'The upload exceeds the server size limit. Choose a file no larger than 20 MiB.'
+      : error.status === 415 ? 'Choose PDF, JPEG, PNG or CSV and select the matching document format.'
+      : error.status === 409 ? 'This upload conflicts with an existing evidence record. Check the format and saved evidence before trying again.'
+      : errorMessage(error);
+    $('error-message').textContent = uploadMessage + (definite ? '' : ' Use Retry upload to confirm the same file.');
     show('error',true); show('retry',false); show('reauth',error.status===401);
     if (error.status===403) fail(error);
   } finally {

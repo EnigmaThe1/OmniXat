@@ -172,6 +172,13 @@ class CustomerEvidence:
         except ClientDisconnect:
             return error_response(request.scope,400,'incomplete_upload')
         except PermissionError:
+            # A valid token at admission may expire while the body is received
+            # or between persistence units. Keep membership denial distinct from
+            # token expiry so the browser retains its exact-file retry state.
+            try:
+                self.verifier.verify(token)
+            except AuthenticationError:
+                return error_response(request.scope,401,'invalid_token')
             return error_response(request.scope,403,'access_denied')
         except KeyError:
             return error_response(request.scope,404,'not_found')

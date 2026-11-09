@@ -229,3 +229,45 @@ class CustomerEvidenceTests(CustomerEvidenceFixture):
         self.assertEqual(self.rows('evidence_quarantine'),1)
         self.assertEqual(self.upload().status_code,201)
         self.assertEqual(list(Path(self.spool.name).iterdir()),[])
+
+    def test_token_expiry_after_staging_or_registration_returns_sign_in_recovery(self):
+        from contextlib import contextmanager
+        from datetime import datetime, timedelta, timezone
+        original_stage = customer_evidence.stage_evidence
+        original_register = customer_evidence.register_evidence
+        # Advance only JWT validation's clock, using a genuinely signed token.
+        class Clock(datetime):
+            instant = datetime.now(timezone.utc)
+
+            @classmethod
+            def now(cls, tz=None):
+                return cls.instant.astimezone(tz)
+        expired_time = datetime.now(timezone.utc) + timedelta(seconds=600)
+        for phase in ('staged', 'registered'):
+            with self.subTest(phase=phase):
+                self.owner.execute('DELETE FROM omnixat.evidence_registrations WHERE tenant_id=%s',(self.a,))
+                Clock.instant = datetime.now(timezone.utc)
+                @contextmanager
+                def staged(*args, **kwargs):
+                    with original_stage(*args, **kwargs) as result:
+                        if phase == 'staged':
+                            Clock.instant = expired_time
+                        yield result
+                def registered(*args, **kwargs):
+                    result = original_register(*args, **kwargs)
+                    if phase == 'registered':
+                        Clock.instant = expired_time
+                    return result
+                with patch('jwt.api_jwt.datetime', Clock), patch.object(customer_evidence, 'stage_evidence', staged), patch.object(
+                        customer_evidence, 'register_evidence', registered):
+                    response = self.upload()
+                self.assertEqual(response.status_code,401,response.text)
+                self.assertEqual(response.json()['error']['code'],'invalid_token')
+                self.assertEqual(self.rows('evidence_quarantine'),0)
+                self.assertEqual(self.rows('evidence_registrations'),int(phase=='registered'))
+                self.assertEqual(list(Path(self.spool.name).iterdir()),[])
+                # A fresh token and the same original finish any partial receipt.
+                self.assertEqual(self.upload().status_code,201)
+                self.assertEqual(self.rows('evidence_registrations'),1)
+                self.assertEqual(self.rows('evidence_quarantine'),1)
+                self.owner.execute('DELETE FROM omnixat.evidence_quarantine WHERE tenant_id=%s',(self.a,))

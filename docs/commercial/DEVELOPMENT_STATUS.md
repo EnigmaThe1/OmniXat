@@ -2883,3 +2883,52 @@ scanner, storage/retention/restore or the complete accounting platform. No activ
 implementation or failed CI remains for this increment. Next: qualify maintained
 login/gateway, then connect authorised scanning and customer evidence/draft review
 against the existing validated services; retain quarantine and human approval gates.
+
+## Customer evidence recovery hardening — implemented; CI pending (9 November 2026)
+
+Recovered the unpublished evidence tree and verified it equals remote `7d87fcf`.
+A concurrent writer published that increment; its checkout is left untouched.
+This follow-up uses `/srv/playground_dev/OmniXat-recovery-20261109` from that remote.
+Scope: preserve exact-file retry and sign-in recovery when a signed token expires
+between upload admission and storage, distinguish membership denial, and give
+useful format/size rejection messages. Add real PostgreSQL and Chromium regressions.
+No provider, scanner, billing, deployment or statutory action is enabled.
+
+Implemented token revalidation on a denied evidence operation: an expired/invalid
+bearer returns 401 so the browser keeps the original File/format for sign-in and
+exact-file retry. A still-valid token with revoked membership remains 403. Upload
+conflict, size and format errors now explain the corrective action without exposing
+server diagnostics. No identity, scope, expiry or human-only gate was relaxed.
+
+Verification in the isolated worktree (9 November 2026):
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **48 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -p test_customer_evidence.py -v`:
+  **13 passed** on disposable PostgreSQL 16.2, including signed-token expiry after
+  staging and after registration, cleanup and same-original recovery. JWT time is
+  advanced only in that fixture; signatures and expiry validation remain real.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`:
+  **384 passed**, **453 service tests total**, using disposable local cluster DSN
+  and existing pinned dependencies supplied through PYTHONPATH. Initial fixture
+  clock lifetime/type failures were corrected before this complete passing rerun.
+- `node --check commercial/web/app.js`, Python compilation and `git diff --check`:
+  passed. Two additional actual Chromium regressions cover expired-token retry and
+  correcting a conflicting format without losing the selected file. Local Chromium
+  remains blocked by the previously confirmed host Unix-socket restriction; these
+  new cases must pass on CI before a combined-suite success claim. No test skipped.
+- Base `7d87fcf` CI run 42717514445 independently passed 477 tests and Docker build.
+  The concurrent documentation-only `b3a372e` was reviewed and fast-forwarded while
+  preserving this scope in a recovery stash; both status histories are retained.
+
+Checked primary references on 9 November 2026: [HTTP status semantics](https://www.rfc-editor.org/rfc/rfc9110.html#name-status-codes)
+and [PyJWT expiration validation](https://pyjwt.readthedocs.io/en/stable/usage.html#expiration-time-claim-exp).
+No dependency versions, provider or legal rules were changed.
+
+Limits: a fresh token in a browser fixture is a gateway stand-in, not a qualified
+maintained-provider refresh/login. Retry state remains page-memory only. Existing
+quarantine, private storage, retention/restore and scanning prerequisites persist.
+No deployment, billing activation, posting or statutory action occurred.
+Next: inspect this follow-up's CI including all seven customer Chromium cases and
+the unchanged 20-test prototype, then qualify maintained sign-in/session and the
+scanner/draft-review journey. No active implementation remains in this follow-up.
