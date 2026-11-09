@@ -36,10 +36,22 @@ def _idle(connection):
         raise ValueError("Exclusive idle autocommit connection required")
 
 
-def migrate(connection):
-    """Atomic, checksum-checked migrations; explicitly invoked with migration owner."""
+def migrate(connection, *, lock_timeout_ms=5000, statement_timeout_ms=60000):
+    """Atomic migrations with bounded database waits; invoke as migration owner.
+
+    Limits apply per lock/statement, not to the entire migration batch. Exceptions
+    propagate after rollback; callers must investigate contention before retrying.
+    """
+    for value in (lock_timeout_ms, statement_timeout_ms):
+        if type(value) is not int or not 1 <= value <= 3_600_000:
+            raise ValueError("Migration timeouts require 1..3600000 integer milliseconds")
+    if lock_timeout_ms >= statement_timeout_ms:
+        raise ValueError("Migration lock timeout must be below statement timeout")
     _idle(connection)
     with connection.transaction():
+        connection.execute("""SELECT set_config('lock_timeout', %s, true),
+                                     set_config('statement_timeout', %s, true)""",
+                           (str(lock_timeout_ms), str(statement_timeout_ms)))
         connection.execute("SELECT pg_advisory_xact_lock(724190026)")
         connection.execute("""CREATE TABLE IF NOT EXISTS public.omnixat_schema_migrations (
             version text PRIMARY KEY, digest text NOT NULL,
@@ -52,6 +64,8 @@ def migrate(connection):
             raise ValueError("Migration files unavailable")
         if set(applied) - {p.name for p in files}:
             raise ValueError("Database contains unknown migrations")
+        if set(applied) != {p.name for p in files[:len(applied)]}:
+            raise ValueError("Applied migration history is not a contiguous prefix")
         for path in files:
             source = path.read_bytes()
             digest = sha256(source).hexdigest()

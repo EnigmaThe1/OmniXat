@@ -21,6 +21,29 @@ checksums on repeat calls. Applied SQL files are immutable; add new numbered
 migrations. Unknown versions or missing/changed files fail. Do not run migrations
 on application startup or pass migration credentials to runtime workers.
 
+Migration execution uses transaction-local `lock_timeout` (5,000 ms) and
+`statement_timeout` (60,000 ms), set before acquiring the migration advisory lock.
+Explicit keyword overrides `lock_timeout_ms` and `statement_timeout_ms` must be
+integer milliseconds between 1 and 3,600,000, with the lock limit below the
+statement limit. Zero/boolean values cannot disable these bounds. These are
+per-lock/per-statement bounds, **not** a whole-batch deadline or an assurance that
+all production DDL fits within them. Choose limits during a migration rehearsal.
+PostgreSQL lock/cancellation errors propagate after atomic rollback, including any
+DDL and version receipts; investigate the blocker before explicitly retrying.
+Connection-level settings are restored on commit or rollback. Applied versions
+must be a contiguous prefix of the available migrations: a missing history row
+or a newly inserted earlier migration is rejected before pending SQL executes.
+Do not repair history by deleting rows or rewriting applied SQL.
+
+Qualification added 9 November 2026 covers real advisory/table lock contention,
+statement cancellation with DDL rollback and retry, and installation/repeat of the
+complete schema as a NOSUPERUSER/NOBYPASSRLS database owner without role/database
+creation privileges. This tests migration execution, not every function under that
+owner, production restoration, upgrades on maintained server versions or launch
+readiness. The operational timeout behaviour was checked against
+[PostgreSQL 16 client connection defaults](https://www.postgresql.org/docs/16/runtime-config-client.html)
+on 9 November 2026; no dependency version or legal rule was changed.
+
 Provision a distinct runtime LOGIN role with NOSUPERUSER, NOBYPASSRLS, NOCREATEDB
 and NOCREATEROLE. It must not own tables or belong to an owner/migration role, nor
 have CREATE on `public` or `omnixat`. Supply credentials through the deployment's

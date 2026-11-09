@@ -2606,3 +2606,50 @@ preparation with atomic retry receipts and fresh policy/claim checks; qualify th
 agent preparation authority explicitly while preserving human review, posting and
 statutory approval boundaries. Human handoff, scheduling, providers and production
 qualification remain unfinished. No active implementation remains in this increment.
+
+## C1 PostgreSQL migration execution bounds — completed (9 November 2026)
+
+Recovered remote `2c19c46` and detected a concurrent customer-website writer in the
+canonical checkout. This task uses isolated worktree
+`/srv/playground_dev/OmniXat-persistence-20261109`; do not change that writer's work.
+Scope: bound migration lock/statement waits, reject gaps in applied migration
+history before executing SQL, and exercise migration with a non-superuser owner.
+Validate real lock contention, timed-out DDL rollback and retry, session-setting
+restoration and existing suites. No schema replacement, live integration or deployment.
+
+Implemented transaction-local 5,000 ms lock / 60,000 ms statement defaults before
+migration advisory locking, explicit validated bounded overrides, and rejection of
+non-prefix migration history before pending SQL. Existing migration SQL is unchanged.
+Six new real PostgreSQL tests cover competing migrators, table locks, timed-out DDL
+and receipt rollback, explicit retry, setting restoration, history gaps, invalid
+configuration, and complete schema install/repeat under a constrained database owner.
+
+Verification (9 November 2026), in the isolated worktree:
+
+- `cd commercial && python3 -m unittest discover -s tests -v`: **48 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -v`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -p test_migration_execution.py -v`:
+  **6 passed** against disposable PostgreSQL **16.2**, psycopg **3.3.8**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`:
+  **364 passed**, including those six tests; **433 commercial tests total**.
+  Optional dependencies came from an existing local directory via PYTHONPATH;
+  OMNIXAT_TEST_ADMIN_DSN was set only for a temporary local cluster.
+- `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest discover -s tests -v`:
+  **19 passed, 1 failed**, unchanged browser approval/idempotency case returning 503.
+  Direct Chromium launch confirms `socket() failed: Operation not permitted`.
+  No tests removed or skipped; no full-suite-green claim.
+- `git diff --check`: passed. Official PostgreSQL 16 timeout documentation rechecked
+  on 9 November 2026; see commercial/POSTGRES.md.
+
+Limits: timeouts bound individual database lock/statement operations, not the whole
+batch or connection acquisition. Constrained-owner tests prove schema installation,
+not complete production definer-function/restore qualification. PostgreSQL 16.2 is
+the available test runtime, not a maintained production-version recommendation.
+No credentials, real records, schema replacement, provider, billing, filing or
+public service was introduced. No active work remains in this isolated increment.
+
+Next resumable step: recover the separate customer-website work from the canonical
+checkout without overwriting its dirty files, fetch and deliberately integrate this
+published migration increment before publication. Continue database qualification
+on the maintained target version, including constrained-owner service execution and
+restore. Job-backed journal preparation remains an independent product increment.

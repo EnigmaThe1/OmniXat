@@ -880,3 +880,21 @@ source/accounting/funding/claim checks and explicit qualification of agent prepa
 authority. Preserve human review, posting and final-package approval boundaries.
 Production qualification, providers, scheduling and human handoff remain unfinished.
 No UI/live integration or active implementation remains in this increment.
+
+## Latest migration execution checkpoint (9 November 2026)
+
+`migrate` now bounds lock/statement execution with validated operator overrides
+and rejects gaps in applied migration history. Existing SQL migrations are unchanged.
+Six real PostgreSQL tests cover contention, DDL/receipt rollback, retry, restored
+settings and complete schema installation by a constrained database owner.
+**48 core + 21 identity + 364 PostgreSQL/HTTP tests pass (433 commercial total)**.
+The unchanged demo remains **19/20**, with Chromium launch denied by the host's
+socket policy; no test was skipped. See DEVELOPMENT_STATUS.md and POSTGRES.md for
+exact commands and scope. This does not qualify restoration, maintained production
+server versions, all definer-function execution or launch readiness.
+
+Concurrency: customer-website edits were actively changing in the canonical checkout.
+They were left untouched. Migration work used the isolated worktree
+`/srv/playground_dev/OmniXat-persistence-20261109` based on `2c19c46`.
+Before continuing that website, fetch, inspect its dirty diff and reconcile this
+migration commit; never reset/overwrite it. The migration increment itself is complete.
