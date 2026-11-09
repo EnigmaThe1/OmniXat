@@ -2549,3 +2549,60 @@ remains separate. Next: persist explicit validated funding/counterpart intent be
 connecting shared journal preparation to job-effect receipts. Human handoff,
 scheduling, providers, posting, final-package approval and production qualification
 remain unfinished. No active implementation remains in this increment.
+
+## C1 saved funding/counterpart intent — completed (9 November 2026)
+
+Recovered clean remote `fdf4b08`; no active task or competing writer recorded.
+Persist explicit payer/funding kind/source/counterpart intent for the exact
+job-backed expense under fresh identity and a live worker lease. Preserve first
+attribution and parent plan digests on retry. This increment must neither record
+actual funding nor create/post a journal or approve a package.
+
+Migration 0062 adds forced-RLS intent storage with composite organisation, mapping
+and exact expense-effect references. `JournalPreparationPlan` requires explicit
+nonzero source/payer/counterpart IDs and a supported funding kind; strict canonical
+serialization accepts neither an amount nor approval fields. The signed service
+recovers both parent plans, resolves identity again, and admits the write through
+a dedicated execute-only login. SQL locks the job, reuses the shared expense read
+gate and checks the exact enabled source/payer/kind/counterpart mapping. Funding
+and counterpart policy rows remain share-locked through commit. Same-account
+counterparts are rejected. Retries preserve first attribution and both parent
+digests; changed intent conflicts without overwriting. Decode failure or actual
+lease expiry during insertion rolls back new intent. Historical read validates
+the saved plan digest and requires fresh record-read authority. Grants and limits
+are documented in commercial/JOBS_POSTGRES.md.
+
+Verification on 9 November 2026 with Python 3.12, disposable PostgreSQL 16.2,
+psycopg 3.3.8 and the existing pinned requirements-http.txt environment:
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **48 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`, with
+  disposable-cluster OMNIXAT_TEST_ADMIN_DSN: **358 passed** in 48.018 seconds.
+  Nine new integration tests cover reclaimed-worker attribution, exact mapping and
+  expense eligibility, changed intent/parent digest conflicts, scopes/revocation/
+  tenant/terminal claims, concurrent retry and decode rollback, dedicated grants,
+  real lease expiry rollback, identity revocation during parent recovery, forced
+  tenant filtering, composite binding and historical read after cancellation.
+  Tests verify that no actual funding, journal or review-decision rows are created.
+  Upgrade preserves old jobs/plans and creates an empty intent table.
+  One new test initially compared a returned UUID to a string; its expectation was
+  corrected before this final successful full run.
+- `cd prototype && python3 -m unittest discover -s tests`: **19 passed, 1 failed**;
+  unchanged browser case returns 503 because Chromium is unavailable. No test was
+  skipped or removed. No prototype or commercial UI code changed.
+- `git diff --check` and staged whitespace review: passed.
+
+This stores proposed intent only. It does not record funding, create/post a journal,
+complete a job or approve a package. Existing human-only services remain unchanged.
+Expense eligibility is observed at the shared read statement snapshot, not reserved
+through later execution. Identity revocation governs subsequent admission; the final
+lease check precedes commit, not a guarantee of commit before expiry. The dedicated
+SQL role is a trusted server capability, not customer/model authentication. No live
+provider, dependency upgrade or legal-rule change is included.
+
+Next resumable step: connect saved explicit intent to job-bound shared journal
+preparation with atomic retry receipts and fresh policy/claim checks; qualify the
+agent preparation authority explicitly while preserving human review, posting and
+statutory approval boundaries. Human handoff, scheduling, providers and production
+qualification remain unfinished. No active implementation remains in this increment.

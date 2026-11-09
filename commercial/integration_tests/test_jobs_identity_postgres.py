@@ -14,7 +14,7 @@ from psycopg.conninfo import make_conninfo
 
 from omnixat_core.identity import AuthenticationError
 from omnixat_core.jobs_identity_postgres import AuthenticatedJobStore
-from omnixat_core.job_tasks import EvidencePreparationTask, CSVExtractionPlan, ExpensePreparationPlan
+from omnixat_core.job_tasks import EvidencePreparationTask, CSVExtractionPlan, ExpensePreparationPlan, JournalPreparationPlan
 from omnixat_core.evidence_csv import AmountCell
 from omnixat_core.postgres import CreationConflict
 from omnixat_core.preparation_postgres import inspect_preparation_evidence, execute_preparation_csv
@@ -30,6 +30,8 @@ class AuthenticatedJobsTests(MembershipFixture):
             'job_gate': ['USAGE ON SCHEMA omnixat_extraction',
                          'EXECUTE ON FUNCTION omnixat_extraction.read_eligible_original(uuid,uuid)',
                          'EXECUTE ON FUNCTION omnixat_extraction.store_job_csv_result(uuid,text,uuid,uuid,bytea,text,bytea,jsonb)'],
+            'job_journal_plan': ['USAGE ON SCHEMA omnixat_extraction',
+                            'EXECUTE ON FUNCTION omnixat_extraction.save_job_journal_plan(uuid,text,uuid,bytea,bytea,uuid,uuid,text,uuid,bytea)'],
             'job_expense_summary': ['USAGE ON SCHEMA omnixat_extraction',
                             'EXECUTE ON FUNCTION omnixat_extraction.read_job_expense_summary(uuid,text,uuid,bytea,bytea)'],
             'job_expense': ['USAGE ON SCHEMA omnixat_extraction',
@@ -41,7 +43,7 @@ class AuthenticatedJobsTests(MembershipFixture):
             'job_auth': ['USAGE ON SCHEMA omnixat', 'SELECT ON omnixat.identities,omnixat.memberships'],
             'job_data': ['USAGE ON SCHEMA omnixat',
                          'SELECT,INSERT,UPDATE ON omnixat.agent_jobs',
-                         'SELECT ON omnixat.tenants,omnixat.organisations,omnixat.evidence_registrations,'
+                         'SELECT ON omnixat.agent_job_journal_plans,omnixat.tenants,omnixat.organisations,omnixat.evidence_registrations,'
                          'omnixat.expense_accounting_periods,omnixat.expense_account_policy',
                          'SELECT,INSERT ON omnixat.notes,omnixat.record_creations,omnixat.agent_job_note_effects,'
                          'omnixat.agent_job_failures,omnixat.agent_job_evidence_tasks,omnixat.agent_job_csv_plans,'
@@ -80,6 +82,8 @@ class AuthenticatedJobsTests(MembershipFixture):
         self.addCleanup(self.expense_connection.close)
         self.expense_summary_connection = psycopg.connect(self.job_expense_summary_dsn, autocommit=True)
         self.addCleanup(self.expense_summary_connection.close)
+        self.journal_plan_connection = psycopg.connect(self.job_journal_plan_dsn, autocommit=True)
+        self.addCleanup(self.journal_plan_connection.close)
         self.owner.execute("DELETE FROM omnixat_extraction.active_scan_policy")
         self.original = b'Fictional document,12.34\r\n'
         evidence = uuid4()
@@ -1535,3 +1539,173 @@ class AuthenticatedJobsTests(MembershipFixture):
             self.expense_summary(token,job,lease)
         self.owner.execute('UPDATE omnixat.agent_job_expense_effects SET expense_id=%s WHERE job_id=%s',(first.expense_id,job))
         self.assertEqual(self.expense_summary(token,job,lease).receipt,first)
+
+    def journal_plan_setup(self):
+        token,job,lease,expense_plan = self.expense_execution_setup()
+        receipt = self.execute_expense(token,job,lease)
+        plan = JournalPreparationPlan(uuid4(),uuid4(),'personal_funds',uuid4())
+        self.owner.execute("""INSERT INTO omnixat.expense_funding_sources
+            (tenant_id,organisation_id,id,payer_id,funding_kind,eligible_for_drafts)
+            VALUES (%s,%s,%s,%s,%s,true)""",(self.a,self.org,plan.funding_source_id,plan.payer_id,plan.funding_kind))
+        self.owner.execute("""INSERT INTO omnixat.expense_counterpart_policy
+            (tenant_id,organisation_id,funding_source_id,account_id,eligible_for_drafts)
+            VALUES (%s,%s,%s,%s,true)""",(self.a,self.org,plan.funding_source_id,plan.counterpart_account_id))
+        return token,job,lease,plan,receipt,expense_plan
+
+    def save_journal_plan(self, token, job, lease, plan):
+        return self.jobs.save_journal_plan(self.journal_plan_connection,token,self.a,job,lease,plan)
+
+    def test_journal_intent_is_only_proposed_and_preserves_first_actor_after_reclaim(self):
+        token,job,lease,plan,expense,_ = self.journal_plan_setup()
+        before = self.owner.execute('SELECT * FROM omnixat.agent_jobs WHERE id=%s',(job,)).fetchone()
+        first = self.save_journal_plan(token,job,lease,plan)
+        self.assertEqual((first.expense_id,first.plan,first.created_by),(expense.expense_id,plan,str(self.user)))
+        self.assertEqual(self.save_journal_plan(token,job,lease,plan),first)
+        self.assertEqual(self.jobs.get_journal_plan(token,self.a,job),first)
+        self.assertEqual(self.owner.execute('SELECT * FROM omnixat.agent_jobs WHERE id=%s',(job,)).fetchone(),before)
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.expense_funding_context WHERE tenant_id=%s',(self.a,)).fetchone(),(0,))
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=%s",(job,))
+        second = uuid4()
+        self.owner.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,'journal-recovery','agent')",(second,self.issuer))
+        self.owner.execute("INSERT INTO omnixat.memberships(tenant_id,user_id,role) VALUES (%s,%s,'editor')",(self.a,second))
+        token2 = self.token(sub='journal-recovery')
+        with self.assertRaises(ValueError):
+            self.save_journal_plan(token2,job,lease,plan)
+        new = self.jobs.claim(token2,self.a,job)
+        self.assertEqual(self.save_journal_plan(token2,job,new,plan),first)
+        with self.assertRaises(ValueError):
+            self.save_journal_plan(token,job,lease,plan)
+
+    def test_journal_intent_rechecks_expense_and_exact_funding_mapping(self):
+        token,job,lease,plan,expense,ep = self.journal_plan_setup()
+        for changed in [replace(plan,payer_id=uuid4()),replace(plan,funding_kind='business_funds'),
+                        replace(plan,funding_source_id=uuid4()),replace(plan,counterpart_account_id=uuid4())]:
+            with self.assertRaises(ValueError):
+                self.save_journal_plan(token,job,lease,changed)
+        for table,flag in [('expense_funding_sources','eligible_for_drafts'),
+                           ('expense_counterpart_policy','eligible_for_drafts'),
+                           ('expense_accounting_periods','open_for_drafts'),('expense_account_policy','eligible_for_drafts')]:
+            self.owner.execute('UPDATE omnixat.'+table+' SET '+flag+'=false WHERE tenant_id=%s',(self.a,))
+            with self.assertRaises(ValueError):
+                self.save_journal_plan(token,job,lease,plan)
+            self.owner.execute('UPDATE omnixat.'+table+' SET '+flag+'=true WHERE tenant_id=%s',(self.a,))
+        self.owner.execute("""INSERT INTO omnixat.expense_counterpart_policy VALUES (%s,%s,%s,%s,true)""",
+                           (self.a,self.org,plan.funding_source_id,ep.context.expense_account_id))
+        with self.assertRaises(ValueError):
+            self.save_journal_plan(token,job,lease,replace(plan,counterpart_account_id=ep.context.expense_account_id))
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_journal_plans WHERE job_id=%s',(job,)).fetchone(),(0,))
+        first = self.save_journal_plan(token,job,lease,plan)
+        self.owner.execute("UPDATE omnixat_extraction.active_scan_policy SET policy_version='fictional-v2'")
+        with self.assertRaises(ValueError):
+            self.save_journal_plan(token,job,lease,plan)
+        self.assertEqual(self.jobs.get_journal_plan(token,self.a,job),first)  # historical intent, not eligibility
+
+    def test_journal_intent_conflict_and_parent_digest_corruption_preserve_original(self):
+        token,job,lease,plan,expense,_ = self.journal_plan_setup()
+        first = self.save_journal_plan(token,job,lease,plan)
+        account = uuid4()
+        self.owner.execute('INSERT INTO omnixat.expense_counterpart_policy VALUES (%s,%s,%s,%s,true)',
+                           (self.a,self.org,plan.funding_source_id,account))
+        with self.assertRaises(CreationConflict):
+            self.save_journal_plan(token,job,lease,replace(plan,counterpart_account_id=account))
+        self.assertEqual(self.jobs.get_journal_plan(token,self.a,job),first)
+        self.owner.execute('UPDATE omnixat.agent_job_journal_plans SET expense_plan_digest=%s WHERE job_id=%s',(b'x'*32,job))
+        with self.assertRaises(CreationConflict):
+            self.save_journal_plan(token,job,lease,plan)
+        self.owner.execute('UPDATE omnixat.agent_job_journal_plans SET plan_digest=%s WHERE job_id=%s',(b'y'*32,job))
+        with self.assertRaises(CreationConflict):
+            self.jobs.get_journal_plan(token,self.a,job)
+
+    def test_journal_intent_scopes_membership_tenant_and_terminal_claims(self):
+        token,job,lease,plan,expense,_ = self.journal_plan_setup()
+        for invalid in [self.token(scope='records:read'),self.token(scope='records:write')]:
+            with self.assertRaises(PermissionError):
+                self.save_journal_plan(invalid,job,lease,plan)
+        with self.assertRaises(AuthenticationError):
+            self.jobs.save_journal_plan(self.journal_plan_connection,token,self.b,job,lease,plan)
+        self.owner.execute("INSERT INTO omnixat.memberships(tenant_id,user_id,role) VALUES (%s,%s,'editor')",(self.b,self.user))
+        with self.assertRaises(KeyError):
+            self.jobs.get_journal_plan(token,self.b,job)
+        with self.assertRaises(ValueError):
+            self.save_journal_plan(token,job,uuid4(),plan)
+        self.owner.execute("UPDATE omnixat.memberships SET role='viewer' WHERE tenant_id=%s AND user_id=%s",(self.a,self.user))
+        with self.assertRaises(PermissionError):
+            self.save_journal_plan(token,job,lease,plan)
+        self.owner.execute("UPDATE omnixat.memberships SET role='editor',revoked_at=now() WHERE tenant_id=%s AND user_id=%s",(self.a,self.user))
+        with self.assertRaises(AuthenticationError):
+            self.save_journal_plan(token,job,lease,plan)
+        self.owner.execute('UPDATE omnixat.memberships SET revoked_at=NULL WHERE tenant_id=%s AND user_id=%s',(self.a,self.user))
+        self.jobs.cancel(token,self.a,job)
+        with self.assertRaises(ValueError):
+            self.save_journal_plan(token,job,lease,plan)
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_journal_plans WHERE job_id=%s',(job,)).fetchone(),(0,))
+
+    def test_journal_intent_concurrent_retries_and_receipt_failure_are_atomic(self):
+        token,job,lease,plan,expense,_ = self.journal_plan_setup()
+        with patch('omnixat_core.job_journal_plans_postgres._receipt',side_effect=RuntimeError('fictional failure')):
+            with self.assertRaises(RuntimeError):
+                self.save_journal_plan(token,job,lease,plan)
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_journal_plans WHERE job_id=%s',(job,)).fetchone(),(0,))
+        barrier = Barrier(2)
+        def save():
+            with psycopg.connect(self.job_auth_dsn,autocommit=True) as auth, psycopg.connect(self.job_data_dsn,autocommit=True) as data, psycopg.connect(self.job_journal_plan_dsn,autocommit=True) as gate:
+                service = AuthenticatedJobStore(auth,data,self.verifier)
+                barrier.wait(timeout=5)
+                return service.save_journal_plan(gate,token,self.a,job,lease,plan)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            a,b = [f.result(timeout=10) for f in [pool.submit(save),pool.submit(save)]]
+        self.assertEqual(a,b)
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_journal_plans WHERE job_id=%s',(job,)).fetchone(),(1,))
+        self.assertEqual(self.journal_plan_connection.execute("SELECT current_setting('omnixat.tenant_id',true)").fetchone(),('',))
+
+    def test_journal_intent_requires_dedicated_grants_and_rejects_missing_expense(self):
+        token,job,lease,plan,expense,_ = self.journal_plan_setup()
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.journal_plan_connection.execute('SELECT * FROM omnixat.agent_job_journal_plans')
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.job_connection.execute('DELETE FROM omnixat.agent_job_journal_plans')
+        with self.assertRaises(PermissionError):
+            self.jobs.save_journal_plan(self.gate_connection,token,self.a,job,lease,plan)
+        self.owner.execute('DELETE FROM omnixat.agent_job_expense_effects WHERE job_id=%s',(job,))
+        with self.assertRaises(ValueError):
+            self.save_journal_plan(token,job,lease,plan)
+
+    def test_journal_intent_expiry_during_insert_rolls_back_new_plan(self):
+        token,job,lease,plan,expense,_ = self.journal_plan_setup()
+        self.owner.execute("""CREATE FUNCTION omnixat.fictional_slow_journal_plan() RETURNS trigger LANGUAGE plpgsql
+            AS $$ BEGIN PERFORM pg_sleep(1.1); RETURN NEW; END; $$""")
+        self.owner.execute('CREATE TRIGGER fictional_slow_journal_plan BEFORE INSERT ON omnixat.agent_job_journal_plans FOR EACH ROW EXECUTE FUNCTION omnixat.fictional_slow_journal_plan()')
+        self.addCleanup(self.owner.execute,'DROP FUNCTION omnixat.fictional_slow_journal_plan() CASCADE')
+        self.owner.execute("UPDATE omnixat.agent_jobs SET lease_until=clock_timestamp()+interval '1 second' WHERE id=%s",(job,))
+        with self.assertRaises(ValueError):
+            self.save_journal_plan(token,job,lease,plan)
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_journal_plans WHERE job_id=%s',(job,)).fetchone(),(0,))
+
+    def test_journal_intent_reauthenticates_after_recovering_parent_plans(self):
+        token,job,lease,plan,expense,_ = self.journal_plan_setup()
+        original = self.jobs.get_expense_plan
+        def revoke_after_plan(*args):
+            saved = original(*args)
+            self.owner.execute('UPDATE omnixat.memberships SET revoked_at=now() WHERE tenant_id=%s AND user_id=%s',(self.a,self.user))
+            return saved
+        with patch.object(self.jobs,'get_expense_plan',side_effect=revoke_after_plan):
+            with self.assertRaises(AuthenticationError):
+                self.save_journal_plan(token,job,lease,plan)
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.agent_job_journal_plans WHERE job_id=%s',(job,)).fetchone(),(0,))
+
+    def test_journal_intent_rls_historical_read_and_composite_binding(self):
+        from omnixat_core.postgres import _tenant_transaction
+        token,job,lease,plan,expense,_ = self.journal_plan_setup()
+        first = self.save_journal_plan(token,job,lease,plan)
+        for tenant,expected in [(self.b,[]),(self.a,[(first.job_id,)])]:
+            with _tenant_transaction(self.job_connection,tenant,tables_required=('agent_job_journal_plans',)):
+                self.assertEqual(self.job_connection.execute('SELECT job_id FROM omnixat.agent_job_journal_plans').fetchall(),expected)
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.owner.execute('UPDATE omnixat.agent_job_journal_plans SET organisation_id=%s WHERE job_id=%s',(uuid4(),job))
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.owner.execute('UPDATE omnixat.agent_job_journal_plans SET expense_id=%s WHERE job_id=%s',(uuid4(),job))
+        self.jobs.cancel(token,self.a,job)
+        self.owner.execute("UPDATE omnixat.memberships SET role='viewer' WHERE tenant_id=%s AND user_id=%s",(self.a,self.user))
+        self.assertEqual(self.jobs.get_journal_plan(self.token(scope='records:read'),self.a,job),first)
+        for table in ['expense_funding_context','expense_journal_drafts','expense_journal_review_decisions']:
+            self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.'+table+' WHERE tenant_id=%s',(self.a,)).fetchone(),(0,))

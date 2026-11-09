@@ -79,3 +79,37 @@ class ExpensePreparationPlan:
         if plan.payload() != payload:
             raise ValueError('Non-canonical saved expense preparation plan')
         return plan
+
+
+@dataclass(frozen=True)
+class JournalPreparationPlan:
+    """Explicit proposed funding references; no default payer, amount or approval."""
+    funding_source_id: UUID
+    payer_id: UUID = field(repr=False)
+    funding_kind: str
+    counterpart_account_id: UUID
+    format_version: int = field(default=1, init=False)
+
+    def __post_init__(self):
+        if any(type(value) is not UUID or value.int == 0 for value in (
+            self.funding_source_id, self.payer_id, self.counterpart_account_id,
+        )):
+            raise ValueError('Nonzero funding source, payer and counterpart UUIDs required')
+        if type(self.funding_kind) is not str or self.funding_kind not in ('business_funds', 'personal_funds'):
+            raise ValueError('Explicit supported funding kind required')
+
+    def payload(self):
+        return {'funding_source_id': str(self.funding_source_id), 'payer_id': str(self.payer_id),
+                'funding_kind': self.funding_kind, 'counterpart_account_id': str(self.counterpart_account_id)}
+
+    @classmethod
+    def from_payload(cls, payload):
+        if (type(payload) is not dict or set(payload) != {
+            'funding_source_id', 'payer_id', 'funding_kind', 'counterpart_account_id',
+        } or any(type(value) is not str for value in payload.values())):
+            raise ValueError('Invalid saved journal preparation plan')
+        plan = cls(UUID(payload['funding_source_id']), UUID(payload['payer_id']),
+                   payload['funding_kind'], UUID(payload['counterpart_account_id']))
+        if plan.payload() != payload:
+            raise ValueError('Non-canonical saved journal preparation plan')
+        return plan

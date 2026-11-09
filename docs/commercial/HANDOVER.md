@@ -853,3 +853,30 @@ expense review and statutory approval remain separate. Next: validated explicit
 funding/counterpart intent, then job-backed shared journal preparation. Human
 handoff, providers, scheduling, posting, final approval and production qualification
 remain unfinished. No UI/live integration or active increment remains.
+
+## Latest explicit funding-intent checkpoint (9 November 2026)
+
+Migration 0062 and `AuthenticatedJobStore.save_journal_plan` persist one canonical,
+immutable proposed payer/funding/source/counterpart choice for the exact job-backed
+expense. Fresh signed authority, both record scopes, live job worker/lease, parent
+plan digests, current expense eligibility and exact enabled funding/counterpart
+mapping are required. The dedicated execute-only role locks job/configuration rows;
+retries preserve first attribution and reject changed intent. Forced RLS and
+composite foreign keys bind tenant, organisation, mappings and expense effect.
+Historical `get_journal_plan` requires current read authority and checks the saved
+plan digest, without claiming current execution eligibility. See JOBS_POSTGRES.md
+for grants and snapshot/lease limitations.
+
+**48 core + 21 identity + 358 PostgreSQL/HTTP tests pass (427 commercial total)**.
+The unchanged prototype passes 19/20; Chromium is unavailable for its browser case.
+No tests were skipped. New tests cover concurrency, rollback on receipt failure and
+actual lease expiry, policy/mapping checks, fresh identity after parent recovery,
+RLS/composite binding, cancellation/history and unchanged funding/journal/review
+rows. Existing human-only funding/journal services remain unchanged; this operation
+stores intent only, changes no progress and records no approval.
+
+Next: job-bound shared journal preparation with atomic effect receipts, fresh
+source/accounting/funding/claim checks and explicit qualification of agent preparation
+authority. Preserve human review, posting and final-package approval boundaries.
+Production qualification, providers, scheduling and human handoff remain unfinished.
+No UI/live integration or active implementation remains in this increment.

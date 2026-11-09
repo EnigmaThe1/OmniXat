@@ -599,3 +599,54 @@ scheduler, provider, posting or statutory transport is activated.
 Technical references rechecked 7 November 2026: PostgreSQL 16
 [function snapshots](https://www.postgresql.org/docs/16/xfunc-volatility.html) and
 [security-definer functions](https://www.postgresql.org/docs/16/sql-createfunction.html).
+
+## Saved funding and counterpart intent
+
+Migration 0062 and `AuthenticatedJobStore.save_journal_plan` save one immutable
+`JournalPreparationPlan` per exact job-backed expense. The caller supplies every
+reference: funding source, payer, `business_funds` or `personal_funds`, and counterpart
+account. No default payer or account mapping is inferred. Canonical input rejects
+amounts and approval fields. The receipt exposes references and first attribution,
+not evidence contents or monetary values. Use a dedicated execute-only login:
+
+```sql
+GRANT USAGE ON SCHEMA omnixat_extraction TO journal_plan_runtime;
+GRANT EXECUTE ON FUNCTION omnixat_extraction.save_job_journal_plan(uuid,text,uuid,bytea,bytea,uuid,uuid,text,uuid,bytea) TO journal_plan_runtime;
+GRANT SELECT ON omnixat.agent_job_journal_plans TO job_runtime;
+```
+
+Alongside CONNECT, the plan login needs only the first two grants. `job_runtime`
+is the existing job-data login and needs its existing schema usage. The adapter
+rejects extraction logins with broader schema/function grants. The function is a
+trusted server capability; callers must resolve signed identity and membership
+through the service, never expose database access to a model or customer.
+
+The service recovers both parent plans then rechecks current signed identity and
+both record scopes. SQL serializes on the job, verifies current worker/token/lease,
+uses the shared metadata-only expense gate, and checks the configured exact
+source/payer/kind and counterpart mapping. Disabled mappings and an expense account
+selected as its own counterpart are rejected. Source/counterpart configuration
+rows are share-locked through commit. Composite foreign keys bind tenant,
+organisation, expense effect and both mapping tuples; forced RLS scopes the table.
+
+Retries preserve the first receipt/actor and require identical references and
+parent plan digests. Changed intent conflicts rather than overwriting. Failure in
+receipt decoding or the final lease check rolls back new intent. Historical
+`get_journal_plan` requires fresh record-read authority, validates the saved plan
+digest, and does not assert current execution eligibility. It can recover intent
+after cancellation or a policy change.
+
+Saving is a proposed preparation choice only. It does not populate
+`expense_funding_context`, create/review/post a journal, change job progress or
+approve a filing. Existing human-only funding/journal services remain unchanged.
+Expense eligibility is observed through a shared statement snapshot, not reserved
+through later work. Membership changes after admission cannot stop that admitted
+transaction. The final lease check precedes commit; no promise is made that commit
+finishes before expiry. Later execution must recheck identity, claim, source,
+accounting and funding policies and bind an atomic effect receipt.
+
+Next: connect explicit saved intent to qualified shared journal preparation with
+job-bound effects, preserving human review and posting/approval boundaries.
+Technical references rechecked 9 November 2026: PostgreSQL 16
+[row locks](https://www.postgresql.org/docs/16/explicit-locking.html) and
+[security-definer functions](https://www.postgresql.org/docs/16/sql-createfunction.html).

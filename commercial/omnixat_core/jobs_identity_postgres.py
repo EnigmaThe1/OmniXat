@@ -94,3 +94,14 @@ class AuthenticatedJobStore:
         expense_plan = self.get_expense_plan(token, tenant, job_id).plan
         actor = self._actor(token, tenant, write=True)
         return read_job_expense_summary(summary_connection, actor, tenant, job_id, lease_token, csv_plan, expense_plan)
+
+    def save_journal_plan(self, plan_connection, token, tenant, job_id, lease_token, plan):
+        from .job_journal_plans_postgres import save_journal_plan
+        csv_plan = self.get_csv_plan(token, tenant, job_id).plan
+        expense_plan = self.get_expense_plan(token, tenant, job_id).plan
+        actor = self._actor(token, tenant, write=True)
+        return save_journal_plan(plan_connection, actor, tenant, job_id, lease_token, csv_plan, expense_plan, plan)
+
+    def get_journal_plan(self, token, tenant, job_id):
+        from .job_journal_plans_postgres import get_journal_plan
+        return get_journal_plan(self._jobs, self._actor(token, tenant), tenant, job_id)
