@@ -987,3 +987,13 @@ Work was isolated at `/srv/playground_dev/OmniXat-evidence-20261109`, based on c
 `6d6ffde`; canonical checkout was left untouched. Resume with CI/browser/screenshots,
 then exact maintained sign-in and authorised scanner/draft-review qualification.
 Private storage/quotas/retention/restore and provider production gates remain open.
+
+Evidence intake is now CI-verified: [run 42717514445](https://github.com/EnigmaThe1/OmniXat/actions/runs/42717514445)
+for `7d87fcf` passed **477 tests** (452 service, all 5 real Chromium customer, all 20
+unchanged prototype) and the customer container build on PostgreSQL 16.15. The
+actual mobile evidence screenshot was inspected for readable receipts/form and
+wrapping with no overflow. This supersedes the preceding pending-CI instruction;
+local Chromium is still host-blocked. No source/test assertion was changed to bypass
+that restriction. No unfinished work or failed CI remains in this increment.
+Resume with maintained login/gateway and authorised scanner/draft-review integration;
+quarantine, storage/retention/restore, quotas and production qualification gates remain.

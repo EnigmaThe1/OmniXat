@@ -2795,7 +2795,7 @@ Chromium/Chrome the runner provides. Test code, assertions and timeouts are unch
 This removes a browser-version variable; it does not prove the cause of the prior
 timeout. Inspect the next CI result rather than describing a rerun as prior success.
 
-## C2 customer evidence intake — implemented; CI qualification pending (9 November 2026)
+## C2 customer evidence intake — completed and CI verified (9 November 2026)
 
 Recovered clean remote `6d6ffde`; its GitHub verify check passed, including the
 retained prototype browser test. No open PR targets this development head. Work
@@ -2861,3 +2861,25 @@ screenshots, fix any failure, then qualify the maintained login/gateway and conn
 an authorised scanner and evidence/draft-review journey. No local implementation is
 unfinished; real-browser qualification is pending publication. Preserve the full
 customer website rather than returning to unrelated worker-only increments.
+
+### Supported-runner evidence intake verification
+
+[GitHub run 42717514445](https://github.com/EnigmaThe1/OmniXat/actions/runs/42717514445)
+for published implementation `7d87fcf` completed successfully on 9 November 2026:
+**48 core + 21 identity + 383 PostgreSQL/HTTP + 5 real Chromium customer + 20
+unchanged prototype tests = 477 passed**, with a successful customer container build.
+PostgreSQL was **16.15**; service integration took **60.630s**, customer browser
+**6.127s**, prototype **3.161s**. All steps passed; no skipped tests or prototype
+assertion/timeout changes. The published tree was fetched and exactly matched the
+locally tested source. The captured mobile evidence screenshot was downloaded and
+visually inspected: readable saved receipt and format/upload controls, wrapping
+record identifier and no horizontal overflow. The browser test additionally asserts
+no overflow, duplicate suppression, viewer controls and memory-only selection state.
+
+This closes the new upload browser/build qualification for that code revision.
+Local host Chromium restrictions persist; CI is the actual-browser evidence. The
+server-side gateway stand-in does not qualify an external OIDC realm/session,
+scanner, storage/retention/restore or the complete accounting platform. No active
+implementation or failed CI remains for this increment. Next: qualify maintained
+login/gateway, then connect authorised scanning and customer evidence/draft review
+against the existing validated services; retain quarantine and human approval gates.
