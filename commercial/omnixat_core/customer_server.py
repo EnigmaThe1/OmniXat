@@ -52,4 +52,5 @@ def create_configured_app():
                 admission.release()
         return lease
     return create_app(verifier=verifier,connection_factory=factory(record_dsn),
-                      directory_connection_factory=factory(directory_dsn),public_origin=origin)
+                      directory_connection_factory=factory(directory_dsn),public_origin=origin,
+                      evidence_quarantine_dir=os.environ.get("OMNIXAT_EVIDENCE_SPOOL_DIR"))

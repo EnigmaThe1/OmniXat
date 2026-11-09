@@ -2794,3 +2794,70 @@ OMNIXAT_CHROMIUM_PATH configuration, instead of falling back to whatever system
 Chromium/Chrome the runner provides. Test code, assertions and timeouts are unchanged.
 This removes a browser-version variable; it does not prove the cause of the prior
 timeout. Inspect the next CI result rather than describing a rerun as prior success.
+
+## C2 customer evidence intake — implemented; CI qualification pending (9 November 2026)
+
+Recovered clean remote `6d6ffde`; its GitHub verify check passed, including the
+retained prototype browser test. No open PR targets this development head. Work
+uses isolated `/srv/playground_dev/OmniXat-evidence-20261109` to avoid other writers.
+Scope: opt-in bounded raw-file upload into existing evidence staging/registry/
+quarantine services and a paginated customer evidence list. Resolve fresh signed
+human membership and explicit evidence scopes; preserve same-content retry receipts,
+viewer/tenant/revocation boundaries and private spool cleanup. Show quarantine
+status without claiming scanner/extraction/accounting completion. Add database/API
+and real-browser regressions; no provider, billing, posting, filing or deployment.
+
+Implemented opt-in raw-file POST and cursor-paginated GET on each organisation's
+`/evidence` resource, plus a responsive evidence panel in the customer website.
+Uploads use the existing staging, fingerprint registry and write-only PostgreSQL
+quarantine services; there is no replacement schema or direct original-byte read.
+A private service-owned spool, constrained grants and explicit record/evidence scopes
+are required. All writes preserve human-only evidence registration. Fresh database
+identity/membership checks run before body intake, after staging and before storing
+payload; caller role/actor claims cannot elevate access. Limits cover actual bytes,
+Content-Length, duplicate/unsupported headers, 15-second body receipt and four active
+uploads per app/process. Anonymous spools close on errors, timeout and disconnect.
+
+The evidence list distinguishes metadata-only interrupted uploads from stored
+quarantine receipts. Exact same-file/type retry preserves the first registration and
+storage receipt. The UI holds an uncertain File/type in memory, blocks edits and
+navigation until retry resolves, safely displays metadata, and hides upload controls
+for viewers or missing scopes. Filename, content and tokens never enter browser
+storage. Upload does not schedule processing, release an original, scan, extract,
+post accounting entries or record human approval.
+
+Verification on 9 November 2026 (isolated worktree, Python 3.12, PostgreSQL 16.2):
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **48 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -p test_customer_evidence.py -v`:
+  **12 passed**, including actual concurrent uploads, payload-read privilege denial,
+  tenant/parent binding, role/scopes/agent denial, expiry/revocation, partial receipt
+  recovery, paging/conflicts, duplicate/truncated headers and ASGI timeout/disconnect.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`:
+  **383 passed in 43.249s**, including all 12 new cases; **452 service tests total**.
+  Tests used an explicitly disposable local cluster and existing pinned dependencies
+  through PYTHONPATH; no DSN/credential/log was committed.
+- `cd commercial && PYTHONPATH=.:integration_tests OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest discover -s browser_tests -v`:
+  **5 errors before page load**, host Unix-socket denial. The two new real Chromium
+  cases exercise upload/reload/duplicate/viewer/mobile and a response lost after commit
+  followed by exact-file retry. CI must prove them; no browser success claimed here.
+- Unchanged prototype suite with explicit Chromium: **19 passed, 1 failed** at the
+  browser approval test returning 503 under the same host restriction. No skip,
+  assertion, timeout or prototype-source change.
+- `node --check commercial/web/app.js` and `git diff --check`: passed.
+
+Limits: declared format is not validation or a malware verdict. Intake commits
+registration separately from payload and makes interruption visible; revocation
+cannot retract already admitted transactions. Browser selections/retry state are
+memory-only. Four uploads is a per-process bound, not a tenant quota. Private storage,
+capacity, encrypted backups, retention, payload-free logs, gateway buffering, scanner
+and exact provider access-token/session qualification remain real-use prerequisites.
+See CUSTOMER_WEB.md for setup/grants and checked primary technical references.
+No live bank/model/scanner, billing, ledger posting, filing or deployment was enabled.
+
+Next: inspect this commit's CI services/browser/container/prototype checks and actual
+screenshots, fix any failure, then qualify the maintained login/gateway and connect
+an authorised scanner and evidence/draft-review journey. No local implementation is
+unfinished; real-browser qualification is pending publication. Preserve the full
+customer website rather than returning to unrelated worker-only increments.

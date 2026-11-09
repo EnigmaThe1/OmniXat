@@ -966,3 +966,24 @@ previous CI had passed 20/20. CI now explicitly configures the pinned Playwright
 browser through the existing OMNIXAT_CHROMIUM_PATH setting for the prototype too.
 No test/assertion/timeout was changed or skipped. Inspect the newest check before
 reporting the combined suite result; the timeout cause itself is not established.
+
+## Latest customer evidence intake checkpoint (9 November 2026)
+
+Opt-in customer evidence upload/list connects to the shared staging, registry and
+write-only quarantine services. Configure a private spool and narrow grants/scopes
+as documented in CUSTOMER_WEB.md; existing deployments/factories keep routes disabled
+without that option. The UI shows stored/incomplete upload receipts, same-file retry
+and viewer restrictions. No filename/token/bytes enter browser storage. No scanner,
+extraction, ledger posting, final approval or live integration was enabled.
+
+**48 core + 21 identity + 383 integration tests pass (452 services total)**, including
+12 new real database/HTTP cases. All five retained/new real customer browser tests
+were attempted locally and fail at Chromium startup due to host Unix-socket policy;
+the unchanged prototype remains 19/20 locally. The preceding remote `6d6ffde` check
+passed on the supported CI runner. Inspect the new commit's CI before claiming its
+additional upload UI or combined 477-test result passed. No test was skipped.
+
+Work was isolated at `/srv/playground_dev/OmniXat-evidence-20261109`, based on clean
+`6d6ffde`; canonical checkout was left untouched. Resume with CI/browser/screenshots,
+then exact maintained sign-in and authorised scanner/draft-review qualification.
+Private storage/quotas/retention/restore and provider production gates remain open.

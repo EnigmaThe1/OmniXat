@@ -838,3 +838,5 @@ dialog .error {
     max-width:600px;
   }
 }
+
+#evidence-panel{margin-top:24px;padding:24px}.evidence-list{list-style:none;padding:0}.evidence-list li{padding:16px 0;border-bottom:1px solid #e4e7e5;overflow-wrap:anywhere}.evidence-list p{margin:6px 0}.evidence-list small{color:#52635d}#evidence-form{max-width:600px;padding:20px 0}#evidence-type{width:100%;padding:12px;margin:8px 0 16px;border:1px solid #ccd5d1;border-radius:8px;background:white}

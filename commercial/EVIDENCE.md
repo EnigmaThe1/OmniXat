@@ -16,8 +16,10 @@ not change the original. Identical data elsewhere creates separate records.
 Owner and editor tenant principals may register; agents, staff principals
 and current records bearer scopes cannot. Owner, editor and viewer principals
 can read scoped metadata with `get_evidence`, subject to any explicit scopes.
-No route or bearer scope is added. Organisation-specific grants are not yet
-implemented within a tenant.
+The internal registry originally added no route or bearer scope. The opt-in
+[customer evidence intake](CUSTOMER_WEB.md#opt-in-evidence-intake) now verifies
+explicit signed evidence scopes and current membership before calling these same
+services. Organisation-specific grants are not yet implemented within a tenant.
 
 Apply migrations as the migration owner. For a non-owner, non-BYPASSRLS
 runtime grant schema USAGE, SELECT on organisations and SELECT/INSERT on the

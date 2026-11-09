@@ -9,14 +9,15 @@ _CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 's
         "img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 
 
-def create_app(*, verifier, connection_factory, directory_connection_factory, public_origin):
+def create_app(*, verifier, connection_factory, directory_connection_factory, public_origin, evidence_quarantine_dir=None):
     origin = urlsplit(public_origin)
     if (origin.scheme != 'https' or not origin.hostname or origin.username or origin.password
             or origin.path or origin.query or origin.fragment or origin.port not in (None,443)
             or public_origin != 'https://' + origin.hostname):
         raise ValueError('Canonical HTTPS public origin required')
     api = create_records_app(verifier=verifier,connection_factory=connection_factory,
-                             directory_connection_factory=directory_connection_factory,allowed_hosts=[origin.hostname])
+                             directory_connection_factory=directory_connection_factory,allowed_hosts=[origin.hostname],
+                             evidence_quarantine_dir=evidence_quarantine_dir)
 
     async def application(scope, receive, send):
         if scope['type'] != 'http':

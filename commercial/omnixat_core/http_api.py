@@ -122,7 +122,7 @@ class Boundary:
             await self.app(scope, receive, safe_send)
 
 
-def create_app(*, verifier, connection_factory, allowed_hosts, directory_connection_factory=None):
+def create_app(*, verifier, connection_factory, allowed_hosts, directory_connection_factory=None, evidence_quarantine_dir=None):
     """Return ASGI app only. Factory must bound acquisition and lease exclusively."""
     if (not isinstance(allowed_hosts, (list, tuple)) or not allowed_hosts
             or any(not isinstance(h, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]{0,252}', h)
@@ -141,7 +141,12 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
                 with authenticated_records(connection, verifier, token, tenant,
                                            write=action.startswith('create')) as records:
                     if action == 'workspace_context':
-                        return records.workspace_context()
+                        context = records.workspace_context()
+                        scopes = verifier.verify(token).scopes
+                        context['evidence_access'] = evidence_quarantine_dir is not None and 'evidence:read' in scopes
+                        context['can_upload_evidence'] = (context['evidence_access'] and context['can_write']
+                            and records._actor.actor_kind == 'human' and 'evidence:register' in scopes)
+                        return context
                     if action == 'list_organisations':
                         return records.list_organisations(**page)
                     if action == 'list_notes':
@@ -264,5 +269,8 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
         if not callable(directory_connection_factory):
             raise ValueError('Server-owned directory connection factory required')
         routes.append(route('/v1/workspaces','list_workspaces','GET'))
+    if evidence_quarantine_dir is not None:
+        from .customer_evidence import CustomerEvidence
+        routes.extend(CustomerEvidence(verifier, connection_factory, evidence_quarantine_dir).routes())
     app = Starlette(debug=False,routes=routes,exception_handlers={HTTPException:http_error})
     return Boundary(app, allowed_hosts)

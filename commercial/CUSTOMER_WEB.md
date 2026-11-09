@@ -149,3 +149,63 @@ Primary technical sources checked 9 November 2026:
 [Playwright browsers](https://playwright.dev/python/docs/browsers),
 [Starlette responses](https://www.starlette.dev/responses/),
 [Uvicorn](https://pypi.org/project/uvicorn/0.52.1/).
+
+## Opt-in evidence intake
+
+Set `OMNIXAT_EVIDENCE_SPOOL_DIR` to a pre-provisioned private directory owned by
+the runtime UID (mode 0700), on an unserved private volume with trusted ancestors.
+The app factory accepts the equivalent `evidence_quarantine_dir` argument. Without
+this option there are no evidence routes or controls. The gateway/client must be
+separately qualified for `evidence:read` and `evidence:register` access-token scopes;
+requesting a scope does not grant a membership or role. Record scopes are still
+required. Only human owners/editors with all four read/write/register scopes may
+upload; viewers with record/evidence read scopes may browse metadata. Agents cannot
+upload or use token claims to change their persisted actor kind. The record-runtime
+role additionally needs these constrained grants:
+
+```sql
+GRANT SELECT, INSERT ON omnixat.evidence_registrations TO customer_record_runtime;
+GRANT INSERT (tenant_id, evidence_id, original_bytes) ON omnixat.evidence_quarantine TO customer_record_runtime;
+GRANT SELECT (tenant_id, evidence_id, stored_at) ON omnixat.evidence_quarantine TO customer_record_runtime;
+```
+
+Do not grant SELECT on original_bytes or any UPDATE/DELETE/TRUNCATE. There is no
+customer download or extraction endpoint. Existing scanner credentials remain
+separate. No new database migration is required.
+
+`GET /v1/workspaces/{tenant}/organisations/{id}/evidence` lists at most 50 scoped
+registrations with ID, declared type, byte count, registration time and optional
+quarantine storage time. `after` is the last UUID; `limit` is 1–50. It exposes no
+originals, source names, hashes, locators or extracted figures. A registration
+without a storage receipt is explicitly an incomplete upload, not a stored file.
+
+`POST` on the same route accepts raw bytes with exactly one allowlisted Content-Type
+(PDF, JPEG, PNG or CSV), identity encoding, no query parameters and no client digest
+or Idempotency-Key. It enforces the actual 20 MiB limit even without Content-Length,
+checks declared length, and bounds streamed body receipt to 15 seconds. There are
+at most four active uploads per app/process, then 503; database admission remains
+bounded separately. This is not a tenant quota or a fleet-wide storage limit.
+Provider/gateway request-body buffering and size/time controls must also be qualified.
+
+Before receiving bytes it checks current human authority and the parent. It stages
+into anonymous temporary files, computes the fingerprint from bytes using the shared
+intake service, registers metadata and stores through the existing write-only
+quarantine service. Membership is rechecked after receiving bytes and again before
+payload storage. The registry and quarantine commit separately: interruption can
+leave a visible metadata registration; retrying the exact same bytes/type finishes
+it and preserves the first ID/storage receipt. Same bytes with conflicting metadata
+return 409. Concurrent revocation governs subsequent checks, not an already admitted
+transaction. No automatic background retry occurs.
+
+The browser keeps an uncertain upload's File and type in page memory and disables
+editing/navigation until the same-file retry resolves. Reload loses that selection;
+browse the stored list or reselect the same file to reconcile. No filename, token,
+file bytes or draft enters local/session storage. Stored files are labelled as
+quarantined; no scan, extraction, ledger posting or official approval is claimed.
+Declared format is not proof of a valid file. The 20 MiB original may temporarily
+occupy two private spool files and a bounded memory buffer during PostgreSQL storage.
+Disk/database capacity, encryption, payload-free logs/backups, retention, tenant
+quotas and a qualified scanner/processing path remain prerequisites for real use.
+
+Technical sources checked 9 November 2026: [Starlette streaming requests](https://www.starlette.dev/requests/)
+and [Python temporary-file cleanup](https://docs.python.org/3.12/library/tempfile.html).

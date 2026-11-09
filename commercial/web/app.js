@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const state = {workspaces: [], directoryCursor: null, tenant: null, org: null, context: null,
-  organisations: [], orgCursor: null, notes: [], noteCursor: null, epoch: 0, pending: {}, saving: false};
+  organisations: [], orgCursor: null, notes: [], noteCursor: null, evidence: [], evidenceCursor: null, epoch: 0, pending: {}, saving: false};
 const uuidPattern = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const routePattern = new RegExp(`^/app/workspaces/(${uuidPattern})(?:/organisations/(${uuidPattern}))?$`);
 const tenantPath = tenant => `/app/workspaces/${tenant}`;
@@ -65,8 +65,8 @@ function navigate(path) {
   if (state.saving || Object.keys(state.pending).length) {
     tell('Please confirm the pending save before changing records.'); workspaceOptions(); return;
   }
-  if (state.org && $('note-body').value.trim()) {
-    tell('Save or clear the note before leaving this organisation.'); workspaceOptions(); return;
+  if (state.org && ($('note-body').value.trim() || $('evidence-file').files.length)) {
+    tell('Save or clear the note or selected file before leaving this organisation.'); workspaceOptions(); return;
   }
   history.pushState({}, '', path); loadRoute();
 }
@@ -106,6 +106,12 @@ async function loadRoute() {
       $('organisation-name').textContent = record.display_name;
       document.title = `${record.display_name} · OmniXAT`;
       state.notes = page.items; state.noteCursor = page.next_cursor; renderNotes();
+      show('evidence-panel', context.evidence_access); show('evidence-form', context.can_upload_evidence);
+      if (context.evidence_access) {
+        const evidence = await request(`${apiBase()}/organisations/${organisation}/evidence`);
+        if (epoch !== state.epoch) return;
+        state.evidence = evidence.items; state.evidenceCursor = evidence.next_cursor; renderEvidence();
+      }
     } else {
       const page = await request(`${apiBase()}/organisations`);
       if (epoch !== state.epoch) return;
@@ -146,16 +152,30 @@ function renderNotes() {
   $('note-count').textContent = `${state.notes.length} loaded`;
   show('empty-notes', state.notes.length === 0); show('more-notes', Boolean(state.noteCursor));
 }
+function renderEvidence() {
+  const list = $('evidence-list'); list.replaceChildren();
+  const formats = {'application/pdf':'PDF', 'image/jpeg':'JPEG image', 'image/png':'PNG image', 'text/csv':'CSV'};
+  for (const item of state.evidence) {
+    const row = element('li');
+    row.append(element('strong', `${formats[item.media_type] || 'Document'} · ${item.byte_size.toLocaleString('en-GB')} bytes`),
+      element('p', item.stored_at ? 'Stored in quarantine' : 'Upload incomplete — upload the same file again to finish'),
+      element('small', `Evidence ${item.id} · ${dateText(item.registered_at)}`));
+    list.append(row);
+  }
+  $('evidence-count').textContent = `${state.evidence.length} loaded`;
+  show('empty-evidence', state.evidence.length === 0); show('more-evidence', Boolean(state.evidenceCursor));
+}
 async function loadMore(kind, button) {
   const epoch = state.epoch; button.disabled = true; clearMessage();
   try {
     if (kind === 'workspaces') await directory(true);
     else {
-      const cursor = kind === 'organisations' ? state.orgCursor : state.noteCursor;
-      const url = kind === 'organisations' ? `${apiBase()}/organisations` : `${apiBase()}/organisations/${state.org}/notes`;
+      const cursor = kind === 'organisations' ? state.orgCursor : kind === 'evidence' ? state.evidenceCursor : state.noteCursor;
+      const url = kind === 'organisations' ? `${apiBase()}/organisations` : `${apiBase()}/organisations/${state.org}/${kind === 'evidence' ? 'evidence' : 'notes'}`;
       const page = await request(`${url}?after=${cursor}`);
       if (epoch !== state.epoch) return;
       if (kind === 'organisations') { state.organisations.push(...page.items); state.orgCursor = page.next_cursor; renderOrganisations(); }
+      else if (kind === 'evidence') { for (const item of page.items) if (!state.evidence.some(old => old.id === item.id)) state.evidence.push(item); state.evidenceCursor = page.next_cursor; renderEvidence(); }
       else { for (const note of page.items) if (!state.notes.some(item => item.id === note.id)) state.notes.push(note);
         state.noteCursor = page.next_cursor; renderNotes(); }
     }
@@ -164,6 +184,7 @@ async function loadMore(kind, button) {
 }
 async function save(kind, url, payload, input, button) {
   if (state.saving) return;
+  if (Object.keys(state.pending).some(key => key !== kind)) { tell('Confirm the pending save before starting another.'); return; }
   const pending = state.pending[kind] || {url, payload, key: crypto.randomUUID()};
   state.pending[kind] = pending; state.saving = true;
   input.disabled = true; button.disabled = true; clearMessage(); show('dialog-error', false); show('dialog-reauth', false);
@@ -213,7 +234,46 @@ $('close-dialog').addEventListener('click', closeDialog); $('cancel-dialog').add
 $('organisation-dialog').addEventListener('cancel', event => { if (state.saving || state.pending.organisation) event.preventDefault(); });
 $('workspace-select').addEventListener('change', () => navigate(tenantPath($('workspace-select').value)));
 $('filter').addEventListener('input', renderOrganisations);
-for (const kind of ['workspaces','organisations','notes']) $('more-' + kind).addEventListener('click', event => loadMore(kind, event.currentTarget));
+for (const kind of ['workspaces','organisations','notes','evidence']) $('more-' + kind).addEventListener('click', event => loadMore(kind, event.currentTarget));
+$('clear-evidence').addEventListener('click', () => {
+  if (!state.saving && !state.pending.evidence) { $('evidence-file').value = ''; $('evidence-type').value = ''; }
+});
+$('evidence-file').addEventListener('change', () => {
+  const file = $('evidence-file').files[0];
+  $('evidence-type').value = file && ['application/pdf','image/jpeg','image/png','text/csv'].includes(file.type) ? file.type : '';
+});
+$('evidence-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (state.saving || Object.keys(state.pending).some(key => key !== 'evidence')) return;
+  const input = $('evidence-file'), format = $('evidence-type'), button = $('upload-evidence');
+  const pending = state.pending.evidence || {file:input.files[0], media:format.value,
+    url:`${apiBase()}/organisations/${state.org}/evidence`};
+  if (!pending.file || !pending.file.size || pending.file.size > 20 * 1024 * 1024) {
+    tell('Choose a non-empty file no larger than 20 MiB.'); return;
+  }
+  state.pending.evidence = pending; state.saving = true;
+  input.disabled = true; format.disabled = true; $('clear-evidence').disabled = true; button.disabled = true; clearMessage();
+  try {
+    const receipt = await request(pending.url, {method:'POST', headers:{'Content-Type':pending.media},
+      body:pending.file, signal:AbortSignal.timeout(30000)});
+    delete state.pending.evidence; input.value = ''; format.value = '';
+    const item = receipt;
+    const old = state.evidence.findIndex(row => row.id === item.id);
+    if (old >= 0) state.evidence[old] = {...state.evidence[old], ...item}; else state.evidence.unshift(item);
+    renderEvidence(); tell('Evidence stored in quarantine. Processing is not enabled here.');
+  } catch (error) {
+    const definite = [400,403,404,409,413,415,422].includes(error.status);
+    if (definite) delete state.pending.evidence;
+    $('error-message').textContent = errorMessage(error) + (definite ? '' : ' Use Retry upload to confirm the same file.');
+    show('error',true); show('retry',false); show('reauth',error.status===401);
+    if (error.status===403) fail(error);
+  } finally {
+    state.saving = false; button.disabled = false;
+    input.disabled = format.disabled = $('clear-evidence').disabled = Boolean(state.pending.evidence);
+    button.textContent = state.pending.evidence ? 'Retry upload' : 'Upload to quarantine';
+    $('workspace-select').disabled = Boolean(Object.keys(state.pending).length);
+  }
+});
 $('back').addEventListener('click', () => navigate(tenantPath(state.tenant)));
 $('retry').addEventListener('click', () => boot());
 document.addEventListener('click', event => {
@@ -221,12 +281,12 @@ document.addEventListener('click', event => {
   if (link && !event.ctrlKey && !event.metaKey && event.button === 0) { event.preventDefault(); navigate(link.getAttribute('href')); }
 });
 window.addEventListener('popstate', () => {
-  if (state.tenant && (state.saving || Object.keys(state.pending).length || $('note-body').value.trim())) {
+  if (state.tenant && (state.saving || Object.keys(state.pending).length || $('note-body').value.trim() || $('evidence-file').files.length)) {
     history.pushState({}, '', tenantPath(state.tenant) + (state.org ? `/organisations/${state.org}` : ''));
-    tell('Save or clear the note before leaving this organisation.');
+    tell('Save or clear the note or selected file before leaving this organisation.');
   } else loadRoute();
 });
-window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || $('note-body').value.trim()) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
 async function boot() {
   clearMessage(); show('loading', true); show('content', false);
   try { await directory(); await loadRoute(); }
