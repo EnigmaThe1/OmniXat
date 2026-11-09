@@ -372,7 +372,7 @@ class PostgresJobsTests(PostgresFixture):
         self.admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
         self.addCleanup(lambda: self.admin.execute(
             sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database))))
-        with psycopg.connect(self.admin.info.dsn, dbname=database, autocommit=True) as db:
+        with psycopg.connect(self.admin_dsn, dbname=database, autocommit=True) as db:
             with TemporaryDirectory() as directory:
                 previous = Path(directory)
                 for migration in MIGRATIONS.glob("[0-9]*.sql"):

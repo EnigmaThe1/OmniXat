@@ -472,7 +472,7 @@ class EvidenceScanTests(PostgresFixture):
 
     @classmethod
     def drop_role(cls, role):
-        with psycopg.connect(cls.admin.info.dsn, dbname=cls.database, autocommit=True) as db:
+        with psycopg.connect(cls.admin_dsn, dbname=cls.database, autocommit=True) as db:
             db.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role)))
         cls.admin.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
 

@@ -942,3 +942,11 @@ complete functional website and production acceptance. Current UI is a working
 record workflow, not the whole accounting SaaS. Deployment, live billing and all
 statutory submissions remain disabled. No active writer remains; the local stash
 `69f8a6e` preserves pre-reconciliation edits as a recovery backup only.
+
+CI follow-up: the first run for `b66f082` proved Chromium can run on GitHub and the
+unchanged prototype passed 20/20. Administrative test reconnects failed because
+Psycopg strips passwords from connection-info DSNs; fixtures now preserve their
+original input DSNs. The complete **371 integration tests pass** on a separate
+SCRAM-required disposable cluster after this fix. Authentication was not relaxed.
+Inspect the follow-up CI for actual customer browser and container results; it also
+retains fictional desktop/mobile screenshots. Continue the website priority above.

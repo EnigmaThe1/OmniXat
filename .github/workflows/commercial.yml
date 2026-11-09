@@ -22,7 +22,7 @@ jobs:
           POSTGRES_DB: postgres
         ports: ['127.0.0.1:5432:5432']
         options: >-
-          --health-cmd "pg_isready -U omnixat_test"
+          --health-cmd "pg_isready -U omnixat_test -d postgres"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       OMNIXAT_TEST_ADMIN_DSN: host=127.0.0.1 port=5432 user=omnixat_test password=fictional_ci_database_only dbname=postgres
@@ -47,7 +47,16 @@ jobs:
         working-directory: commercial
         env:
           PYTHONPATH: .:integration_tests
+          OMNIXAT_BROWSER_ARTIFACTS: ${{ runner.temp }}/omnixat-customer-browser
         run: python -m unittest discover -s browser_tests -v
+      - name: Preserve fictional website screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: customer-website-screenshots
+          path: ${{ runner.temp }}/omnixat-customer-browser
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Build customer container
         run: docker build --pull -f commercial/Dockerfile.web -t omnixat-customer-check commercial
       - name: Existing fictional-demo suite including browser approval

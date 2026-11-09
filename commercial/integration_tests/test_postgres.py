@@ -21,6 +21,8 @@ class PostgresFixture(unittest.TestCase):
         dsn = os.environ.get("OMNIXAT_TEST_ADMIN_DSN")
         if not dsn:
             raise RuntimeError("Set OMNIXAT_TEST_ADMIN_DSN to a disposable local PostgreSQL cluster")
+        # Connection.info.dsn omits passwords; retain the operator input for reconnects.
+        cls.admin_dsn = dsn
         cls.admin = psycopg.connect(dsn, autocommit=True)
         cls.addClassCleanup(cls.admin.close)
         cls.database = "omnixat_test_" + uuid4().hex
@@ -30,7 +32,8 @@ class PostgresFixture(unittest.TestCase):
             cls.admin.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(cls.database)))
             cls.admin.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(cls.role)))
         cls.addClassCleanup(cleanup_database)
-        cls.owner = psycopg.connect(dsn, dbname=cls.database, autocommit=True)
+        cls.owner_dsn = make_conninfo(dsn, dbname=cls.database)
+        cls.owner = psycopg.connect(cls.owner_dsn, autocommit=True)
         cls.addClassCleanup(cls.owner.close)
         migrate(cls.owner)
         password = uuid4().hex
@@ -238,7 +241,7 @@ class PostgresRecordsTests(PostgresFixture):
         database = 'omnixat_test_' + uuid4().hex
         self.admin.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(database)))
         try:
-            with psycopg.connect(self.admin.info.dsn, dbname=database, autocommit=True) as owner:
+            with psycopg.connect(self.admin_dsn, dbname=database, autocommit=True) as owner:
                 with TemporaryDirectory() as temp:
                     first = Path(temp)
                     source = postgres.MIGRATIONS / '0001_tenant_records.sql'

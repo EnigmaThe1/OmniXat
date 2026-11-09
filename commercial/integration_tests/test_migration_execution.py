@@ -25,7 +25,7 @@ class MigrationExecutionTests(PostgresFixture):
 
     def test_competing_migrator_times_out_then_retries_without_session_leak(self):
         before, settings = self.history(), self.settings()
-        with psycopg.connect(self.owner.info.dsn, autocommit=True) as blocker:
+        with psycopg.connect(self.owner_dsn, autocommit=True) as blocker:
             with blocker.transaction():
                 blocker.execute('SELECT pg_advisory_xact_lock(724190026)')
                 with self.assertRaises(psycopg.errors.LockNotAvailable):
@@ -39,7 +39,7 @@ class MigrationExecutionTests(PostgresFixture):
 
     def test_table_lock_contention_rolls_back_and_releases_advisory_lock(self):
         before, settings = self.history(), self.settings()
-        with psycopg.connect(self.owner.info.dsn, autocommit=True) as blocker:
+        with psycopg.connect(self.owner_dsn, autocommit=True) as blocker:
             with blocker.transaction():
                 blocker.execute('LOCK TABLE public.omnixat_schema_migrations IN ACCESS EXCLUSIVE MODE')
                 with self.assertRaises(psycopg.errors.LockNotAvailable):

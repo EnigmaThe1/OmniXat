@@ -2742,3 +2742,23 @@ and UI flows, private draft recovery, accessibility/security/load/restore eviden
 billing/provider and statutory module qualification remain required. No active
 writer remains after publication; the preserved stash is a recovery backup, not
 an unfinished competing implementation.
+
+### Password-authenticated CI follow-up
+
+The first published CI run for `b66f082` installed Chromium successfully and the
+unchanged prototype passed **20/20**, including its real browser approval test.
+Its service step ran 371 tests but reported 34 errors because several test/admin
+reconnects used `Connection.info.dsn`, which deliberately omits passwords. This
+was hidden by local trust authentication. No production authentication was weakened.
+Fixtures now retain the original operator-supplied DSNs in process for administrative
+reconnects; explicit constrained-role credentials remain separate. No credential
+value is committed or printed by this change.
+
+Verification after the fix: **371 integration tests passed in 53.312 seconds**
+against a separate disposable PostgreSQL 16.2 cluster with SCRAM-SHA-256 required
+for host/local authentication and a generated private test password. Together with
+48 core and 21 identity tests this remains **440 passing service tests**. The CI
+health probe now names its database. CI also retains fictional desktop/mobile
+screenshots for visual review when the real customer browser suite succeeds.
+Next: inspect the new CI run, resolve any actual UI/build failures, and then qualify
+real maintained sign-in before extending evidence/draft-review journeys.

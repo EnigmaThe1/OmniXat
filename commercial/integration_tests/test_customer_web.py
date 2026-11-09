@@ -191,7 +191,7 @@ class CustomerWebTests(CustomerWebFixture):
         with psycopg.connect(owner_dsn,autocommit=True) as owner:
             for file in ['0001_tenant_records.sql','0002_identity_memberships.sql','0063_customer_workspace_directory.sql']:
                 owner.execute((MIGRATIONS/file).read_text())
-        with psycopg.connect(self.admin.info.dsn,dbname=database,autocommit=True) as admin:
+        with psycopg.connect(self.admin_dsn,dbname=database,autocommit=True) as admin:
             admin.execute("INSERT INTO omnixat.tenants VALUES (%s,'Fictional directory A'),(%s,'Fictional directory B')",(self.a,self.b))
             admin.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,%s,'human')",(self.user,self.issuer,self.subject))
             admin.execute("INSERT INTO omnixat.memberships VALUES (%s,%s,'editor',NULL)",(self.a,self.user))
