@@ -959,3 +959,10 @@ recovery after an expired-token 401, fixes the public entry skip target, and add
 third actual-browser regression and entry/notes screenshots. Check the latest CI
 before claiming that extra case passed. Real provider/session qualification and
 remaining customer/owner accounting workflows remain the next production work.
+
+The `c05dd6d` CI passed 443 commercial tests (including all 3 actual-browser cases)
+and Docker build. One unchanged prototype browser request timed out in that run;
+previous CI had passed 20/20. CI now explicitly configures the pinned Playwright
+browser through the existing OMNIXAT_CHROMIUM_PATH setting for the prototype too.
+No test/assertion/timeout was changed or skipped. Inspect the newest check before
+reporting the combined suite result; the timeout cause itself is not established.

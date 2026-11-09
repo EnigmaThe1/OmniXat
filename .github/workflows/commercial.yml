@@ -62,4 +62,17 @@ jobs:
       - name: Existing fictional-demo suite including browser approval
         if: always()
         working-directory: prototype
-        run: python -m unittest discover -s tests -v
+        run: |
+          python - <<'PYTHON'
+          import os
+          import subprocess
+          import sys
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as playwright:
+              executable = playwright.chromium.executable_path
+          environment = dict(os.environ, OMNIXAT_CHROMIUM_PATH=executable)
+          raise SystemExit(subprocess.call(
+              [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v'],
+              env=environment,
+          ))
+          PYTHON

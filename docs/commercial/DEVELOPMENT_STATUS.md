@@ -2782,3 +2782,15 @@ its visible main content. A third real-browser test uses an actually expired sig
 JWT to verify the dialog's sign-in/retry state and zero created organisations.
 CI now also captures the public entry and notes screen. Inspect the latest run for
 this additional regression; do not confuse the prior 462 result with this new case.
+
+### Final customer regression and controlled prototype browser
+
+CI for `c05dd6d` passed **440 service tests + all 3 real Chromium customer tests**
+and the container build, including the expired signed-token dialog case. Its
+unchanged prototype suite ran all 20 tests but one browser HTTP request timed out;
+the previous supported-runner run had passed all 20. The workflow now explicitly
+selects the browser installed by pinned Playwright for that suite, using its existing
+OMNIXAT_CHROMIUM_PATH configuration, instead of falling back to whatever system
+Chromium/Chrome the runner provides. Test code, assertions and timeouts are unchanged.
+This removes a browser-version variable; it does not prove the cause of the prior
+timeout. Inspect the next CI result rather than describing a rerun as prior success.
