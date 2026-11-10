@@ -3721,3 +3721,30 @@ admitted work. Next: qualify extraction and human draft review through the exist
 evidence gate/shared services. Production scanner/security/restore gates remain
 open. No active writer after publication; fetch/check remote before resuming.
 No deployment, billing, contract, private record publication or statutory submission.
+
+### Verified re-authorisation handover — 10 November 2026
+
+Code cfccb77cd195024b9adea732a69bce74eaa2d4e5 passed full commercial workflow
+42862445809: **559 tests**, no failures/errors/skips, plus customer container build.
+Exact suites: 66 core (0.635s), 21 identity (0.255s), 418 PostgreSQL (56.855s),
+five native Keycloak (23.647s), two provider Chromium (20.756s), five gateway
+Chromium (57.742s), three real ClamAV (1.315s), 19 customer Chromium (18.814s),
+and all 20 retained prototype cases including browser approval (2.975s). This
+supersedes pending notes above. The new browser case proves request/cancel/reload/
+explicit re-authorisation, restored worker admission and preserved history. It uses
+the existing gateway stand-in; independent real provider/gateway suites also pass.
+No test removed, skipped or given a longer timeout.
+
+Request/cancel/re-authorise now forms an explicit customer lifecycle. Durable
+request history has no direct customer grants; stale re-authorisation retries
+cannot restart a later cancellation. Existing verdicts are retained, and already
+admitted scans cannot be interrupted by cancellation. The timestamp is a state
+precondition, not permission. No automatic scanner service, extraction or ledger
+posting is implied. Synthetic daemon rules do not qualify production malware
+coverage; security/restore/scanner qualification remains open.
+
+Next: connect qualified extraction and human draft review through the existing
+evidence gate and validated shared services. This final follow-up changes only
+documentation; runtime matches the passing revision. No active writer after
+publication. Fetch/check current branch and checks before resuming. No deployment,
+billing activation, paid contract, private record publication or statutory action.
