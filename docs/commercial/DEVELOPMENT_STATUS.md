@@ -4188,3 +4188,37 @@ persisted history after close/reload before replacing work. No daemon starts and
 ledger/filing effect is added. No active writer after publication; fetch/check remote
 and dirty/divergence before resuming. No deployment, billing activation, contract,
 private records or statutory submission occurred.
+
+## Verified CSV re-authorisation checkpoint — 10 November 2026
+
+Code aef2f2f92aad8c2dd3c12da2b88696ee343abb7a passed full workflow
+https://github.com/EnigmaThe1/OmniXat/actions/runs/42920956761 (job 130195373517).
+Reviewed logs: 620 tests passed, no failures/errors/skips: core 70 (0.104s),
+identity 21 (0.371s), PostgreSQL 458 (88.066s), native Keycloak 5 (32.647s),
+provider Chromium 2 (31.305s), gateway Chromium 5 (82.584s), actual ClamAV 5
+(5.055s), customer Chromium 34 (49.884s), retained prototype including browser
+approval 20 (3.533s). Customer container build passed. All three re-authorisation
+browser cases passed, including candidate inspection after dispatch, lost-receipt
+retry after later child cancellation, and expiry/viewer recovery. The previously
+failing cancellation expiry case also passed with its readiness prerequisite.
+This closes the observed 42912727812 failure for this revision and supersedes the
+pending notes above. No test/assertion/timeout was removed, skipped or relaxed.
+Final local six-case rerun passed (1.576s); compilation, syntax and diff checks passed.
+
+The parent cancellation/plan/history remain retained. One fresh linked replacement
+uses current human authority/source/policy; exact actor/job retries reconcile that
+receipt without restarting a later cancellation. Reader grants/signature remain
+and historical state adds reauthorised. New browser journeys use the gateway
+stand-in; independent real provider/gateway/ClamAV suites also passed. Synthetic
+scanner rules do not qualify production malware coverage. No daemon, ledger effect
+or statutory approval is implied. Pending attempt state remains tab-only; inspect
+history after close/reload before replacing an uncertain attempt.
+
+Next: bounded explicit extraction dispatch, then shared draft review/corrections.
+Full lineage/older-page UI, quotas, production scanner/security/restore/OCR/model and
+human final-package approval remain open. This documentation-only checkpoint leaves
+runtime identical to the passing code. Check its own CI rerun when recovering; the
+prior documentation-head failure is not silently ignored. No active writer remains
+after publication. Fetch/check current remote, dirty state and divergence before
+resuming. No deployment, billing activation, paid contract, private-record publication
+or statutory submission occurred.
