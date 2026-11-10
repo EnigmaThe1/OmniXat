@@ -124,13 +124,16 @@ class CustomerWorkspaceBrowserTests(CustomerWebFixture):
         expect(link).to_be_visible()
         expect(link).to_have_attribute('target','_blank')
         expect(link).to_have_attribute('rel','noopener noreferrer')
-        # Only the gateway's external login redirect is simulated. App/API/DB are real.
+        # Only the external gateway login is simulated. App/API/DB are real.
         page.context.route('**/oauth2/start?rd=/app/reauthenticated',lambda route:route.fulfill(
-            status=302,headers={'Location':self.origin+'/app/reauthenticated'}))
+            status=200,content_type='text/html',body='Fictional gateway sign-in'))
         self.gateway_token = self.token()
         with page.expect_popup() as opened:
             link.click()
         recovery = opened.value
+        # Complete the simulated hosted login as a new navigation; Playwright
+        # route handlers do not intercept a fulfilled redirect's follow-up URL.
+        recovery.goto(self.origin+'/app/reauthenticated')
         expect(recovery.locator('#recovery-ready')).to_be_visible()
         self.assertIsNone(recovery.evaluate('window.opener'))
         recovery.set_viewport_size({'width':390,'height':844})

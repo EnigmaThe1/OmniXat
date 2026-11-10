@@ -170,17 +170,21 @@ class CustomerEvidenceBrowserTests(CustomerEvidenceFixture):
         page,errors = self.browser(token=self.token(scope=SCOPES))
         url = self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}'
         page.goto(url)
+        expect(page.get_by_role('heading',name='Evidence',exact=True)).to_be_visible()
         page.get_by_label('Document or image',exact=True).set_input_files(
             {'name':'fictional-reauth.csv','mimeType':'text/csv','buffer':self.original})
         self.gateway_token = self.token(scope=SCOPES,iat=self.iat-60,exp=self.iat-1)
         page.get_by_role('button',name='Upload to quarantine',exact=True).click()
         expect(page.locator('#reauth')).to_be_visible()
         page.context.route('**/oauth2/start?rd=/app/reauthenticated',lambda route:route.fulfill(
-            status=302,headers={'Location':self.origin+'/app/reauthenticated'}))
+            status=200,content_type='text/html',body='Fictional gateway sign-in'))
         self.gateway_token = self.token(scope=SCOPES)
         with page.expect_popup() as opened:
             page.locator('#reauth').click()
         recovery = opened.value
+        # Complete the simulated hosted login as a new navigation; Playwright
+        # route handlers do not intercept a fulfilled redirect's follow-up URL.
+        recovery.goto(self.origin+'/app/reauthenticated')
         expect(recovery.locator('#recovery-ready')).to_be_visible()
         self.assertIsNone(recovery.evaluate('window.opener'))
         self.assertEqual(page.url,url)

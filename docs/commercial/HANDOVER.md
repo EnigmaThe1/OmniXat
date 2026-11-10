@@ -1054,3 +1054,10 @@ gateway/provider login, cookie renewal/revocation/logout and authorised scanning
 draft review. Stand-in gateway fixtures do not establish real provider qualification.
 Original-tab closure still loses memory-only work. No deployment, billing, filing
 or private records were introduced. No active implementation remains after publication.
+
+Recovery CI follow-up: e58d8bc run 42753788667 passed all services and the unchanged
+20-test prototype; two of 13 customer browser cases exposed fixture timing and
+fulfilled-redirect interception issues (11 passed). Fixtures now await initial
+evidence load and explicitly navigate the opened fictional gateway tab to the
+actual recovery page. Assertions/timeouts and application code remain intact.
+Inspect the follow-up CI; no browser/container success is claimed for that fix yet.

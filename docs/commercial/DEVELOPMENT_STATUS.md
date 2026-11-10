@@ -3062,3 +3062,18 @@ customer cases, unchanged prototype and container, then inspect the recovery mob
 screenshot and fix any failures. Qualify the exact maintained provider/gateway
 flow next, followed by authorised scanner and customer draft review. No active
 implementation remains after publication.
+
+### Recovery browser fixture follow-up
+
+Published `e58d8bc` CI run 42753788667 passed **461 service tests** and all **20
+unchanged prototype tests**. Customer Chromium ran all 13 cases: **11 passed**,
+one upload fixture raced its initial workspace load before expiring its token,
+and the separate-tab fixture's fulfilled 302 did not route its follow-up URL
+through the local ASGI stand-in. The container step was consequently skipped.
+The account-switch/lost-response and invalid-session regressions passed.
+
+Fixtures now wait for the evidence panel before expiring the token and explicitly
+complete the fictional hosted login in the opened tab before exercising the actual
+return page/API/database. No assertion, timeout, application guard or prototype
+code was removed or weakened. This remains gateway simulation, not live provider
+qualification. Inspect the follow-up CI and recovery mobile screenshot.
