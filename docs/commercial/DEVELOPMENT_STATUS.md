@@ -4011,3 +4011,14 @@ cancellation, then bounded dispatch and draft review/corrections. Production sca
 security/restore, OCR/model and statutory human approval gates remain open. No active
 writer after publication; fetch/check remote first. No deployment, billing activation,
 contract, private-record publication or statutory submission.
+
+### Pending request recovery under a viewer sign-in
+
+Review found that workspace context could hide an uncertain request form after
+sign-in as a viewer. Keep only the existing pending form visible and locked for
+reconciliation; normal viewer request controls remain absent. Server expected-actor
+and fresh membership checks still apply. The expiry Chromium case now signs in as
+a different viewer, verifies rejection and zero requests, then returns to the
+original actor for exact retry. No permission or scope is granted by displaying the
+pending form. Initial run 42902141169 is still in progress; final follow-up CI is
+required. JavaScript syntax and diff checks passed.

@@ -191,7 +191,7 @@ function renderEvidence() {
       if (state.pending.csvAnswer?.evidence === item.id) queueMicrotask(() => viewCSVCandidates(item, reviewButton, reviewPanel));
       row.append(reviewButton, reviewPanel);
     }
-    if (state.context.can_request_csv && item.media_type === 'text/csv') row.append(csvRequestForm(item));
+    if ((state.context.can_request_csv || state.pending.csvRequest?.evidence === item.id) && item.media_type === 'text/csv') row.append(csvRequestForm(item));
     if (state.context.scan_status_access) {
       const scanButton = element('button', 'Check scan status', 'button secondary');
       scanButton.type = 'button';
