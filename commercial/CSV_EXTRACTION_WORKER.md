@@ -77,3 +77,10 @@ provider/gateway suites remain separate from its gateway stand-in.
 
 Sources checked 10 November 2026: [Python csv documentation](https://docs.python.org/3/library/csv.html).
 No dependency, legal rule or financial amount was changed by this worker.
+
+## Customer-requested plans
+
+[Durable CSV requests](CSV_REQUESTS.md) now add an opt-in customer form/API and
+`--requested` execution path with separate narrower grants and fresh request/source
+checks before reading and storing. The ordinary operator path above is unchanged;
+it is not the credential/path for customer request dispatch. No daemon starts.

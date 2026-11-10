@@ -3962,3 +3962,52 @@ and corrections. Fetch/check current remote and dirty/divergence state before
 resuming; no active writer remains after this documentation-only checkpoint.
 Runtime matches the passing code revision. No deployment, billing activation,
 paid contract, private record publication or statutory submission occurred.
+
+## Durable customer CSV extraction requests — in progress (10 November 2026)
+
+Recovered clean remote 0805583 with successful CI 42894805740; one writer and no
+commercial-head PR. Add immutable scoped source-coordinate requests and a customer
+single-cell form, with stable job/body/actor retries. Separate request-only grants
+and requested-worker grants; recheck recorded authority and source eligibility at
+admission and result storage. Keep explicit operator processing, with no daemon,
+ledger posting or approval. Add API/database, CLI and Chromium journey tests.
+Cancellation, request-history browsing and batch UI remain subsequent work.
+
+## Customer CSV extraction request implementation — 10 November 2026
+
+Migration 0070 adds tenant-forced-RLS immutable coordinate requests and separate
+request/admission/result-store functions. Request-only human bearer service/API
+checks fresh persisted membership, cutoff and actor; pins current clean policy and
+source fingerprint/size. Same ordered plan/job/actor retries retain original time;
+conflicting plans/policies/actors and pre-existing operator results reject. The new
+--requested CLI uses separate narrower grants, binds exact request cells and rechecks
+recorded authority/source before reading and in the result-storage transaction.
+A revocation between parsing and persistence denies the write. No scope stripping
+into interactive approval; no automatic dispatch, ledger posting or filing effect.
+
+The opt-in single-cell customer form enters only label/record/column, keeps uncertain
+job/body/actor fixed for exact retry, and restores pending coordinates after a session
+check in the same tab. Receipt explains operator-run processing and candidate review.
+API supports up to 32 cells using the shared private-plan validator. See
+commercial/CSV_REQUESTS.md for grants/config, semantics and limits.
+
+Local validation: PYTHONPATH=commercial python -m unittest discover -s commercial/tests
+-q: 70 passed (0.102s); identity_tests: 21 passed (0.352s). Disposable PostgreSQL
+16.2, PYTHONPATH=commercial:commercial/integration_tests python -m unittest discover
+-s commercial/integration_tests -q: all 444 passed (74.203s). Eight new cases cover
+CLI/API round trip, concurrency, authority/source gates, pre-store revocation,
+strict payloads, conflicts and non-BYPASSRLS function-owner chain. Compilation,
+JavaScript syntax and diff checks passed. Final table constraint/direct-SQL validation
+follow-up reruns the eight targeted cases. Local Chromium executable is absent;
+three new Chromium cases, a new actual-ClamAV/request/CLI/Chromium qualification and
+retained full provider/scanner/browser/container/prototype suite await CI. No test
+removed/skipped. Prior head run 42894805740 passed.
+
+Limits/next: no request-history/status/listing or cancellation/re-authorisation UI,
+batch editor or daemon. Tab close/reload loses pending state and displayed receipt;
+retain/reconcile the durable job via the operator before starting another request.
+Retry cannot refresh original authorisation. Next: customer request inspection and
+cancellation, then bounded dispatch and draft review/corrections. Production scanner,
+security/restore, OCR/model and statutory human approval gates remain open. No active
+writer after publication; fetch/check remote first. No deployment, billing activation,
+contract, private-record publication or statutory submission.

@@ -24,7 +24,7 @@ async function request(url, options = {}) {
     let code = 'request_failed';
     try {
       const received = (await response.json()).error?.code;
-      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict'].includes(received)) code = received;
+      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict', 'extraction_request_conflict'].includes(received)) code = received;
     } catch (_) { /* Generic error on invalid responses. */ }
     throw new RequestError(response.status, code);
   }
@@ -35,6 +35,7 @@ async function request(url, options = {}) {
 function clearMessage() { show('error', false); show('notice', false); }
 function tell(text) { $('notice').textContent = text; show('notice', true); }
 function errorMessage(error) {
+  if (error.code === 'extraction_request_conflict') return 'This extraction job belongs to another recorded plan. Inspect the records before starting a new request.';
   if (error.code === 'answer_conflict') return 'An answer is already recorded. Refresh candidates to inspect it; recorded answers cannot be overwritten here.';
   if (error.code === 'scan_reauthorisation_unavailable') return 'This cancellation has changed or is unavailable. Refresh scan status before requesting again.';
   if (error.code === 'scan_request_unavailable') return 'A scan cannot be requested yet. The upload must be complete and an operator must configure the scan policy.';
@@ -49,7 +50,7 @@ function errorMessage(error) {
 function fail(error) {
   $('error-message').textContent = errorMessage(error); show('error', true);
   const denied = error.status === 401 || error.status === 403;
-  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer));
+  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer || state.pending.csvRequest));
   if (denied) { show('content', false); $('organisation-dialog').close(); state.context = null; }
 }
 function dateText(value) {
@@ -76,7 +77,7 @@ function navigate(path) {
   if (state.saving || Object.keys(state.pending).length) {
     tell('Please confirm the pending save before changing records.'); workspaceOptions(); return;
   }
-  if (document.querySelector('.csv-answer[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
+  if (document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
   if (state.org && ($('note-body').value.trim() || $('evidence-file').files.length)) {
     tell('Save or clear the note, selected file or answer before leaving this organisation.'); workspaceOptions(); return;
   }
@@ -190,6 +191,7 @@ function renderEvidence() {
       if (state.pending.csvAnswer?.evidence === item.id) queueMicrotask(() => viewCSVCandidates(item, reviewButton, reviewPanel));
       row.append(reviewButton, reviewPanel);
     }
+    if (state.context.can_request_csv && item.media_type === 'text/csv') row.append(csvRequestForm(item));
     if (state.context.scan_status_access) {
       const scanButton = element('button', 'Check scan status', 'button secondary');
       scanButton.type = 'button';
@@ -204,6 +206,60 @@ function renderEvidence() {
   }
   $('evidence-count').textContent = `${state.evidence.length} loaded`;
   show('empty-evidence', state.evidence.length === 0); show('more-evidence', Boolean(state.evidenceCursor));
+}
+function csvRequestForm(item) {
+  const pending = state.pending.csvRequest?.evidence === item.id ? state.pending.csvRequest : null;
+  const form = element('form', undefined, 'form-panel csv-request');
+  form.setAttribute('aria-label', `Request CSV extraction ${item.id}`);
+  const inputs = {};
+  form.append(element('h3', 'Request an amount from this CSV'),
+    element('p', 'Select one cell using record and column numbers, starting at 1 and including headers. Quoted multiline cells count as one record. No amount is entered here. A trusted worker must process the request.'));
+  for (const [key, title, maximum] of [['field_name', 'Amount label', 64], ['row', 'CSV record number', 5000], ['column', 'CSV column number', 64]]) {
+    const id = `csv-request-${item.id}-${key}`;
+    const label = element('label', title); label.htmlFor = id;
+    const input = element('input'); input.id = id; input.required = true;
+    if (key === 'field_name') { input.type = 'text'; input.maxLength = 64; input.pattern = '[a-z][a-z0-9_]{0,63}'; input.placeholder = 'gross_amount'; }
+    else { input.type = 'number'; input.min = 1; input.max = maximum; input.step = 1; }
+    if (pending) input.value = pending.payload.selections[0][key];
+    input.addEventListener('input', () => { form.dataset.dirty = 'true'; });
+    inputs[key] = input; form.append(label, input);
+  }
+  const save = element('button', pending ? 'Retry extraction request' : 'Request CSV extraction', 'button secondary'); save.type = 'submit';
+  const clear = element('button', 'Clear extraction selection', 'button secondary'); clear.type = 'button';
+  const status = element('p'); status.setAttribute('role', 'status');
+  function controls(locked) { for (const input of Object.values(inputs)) input.disabled = locked; clear.disabled = locked; }
+  controls(Boolean(pending));
+  clear.addEventListener('click', () => { for (const input of Object.values(inputs)) input.value = ''; delete form.dataset.dirty; });
+  form.append(save, clear, status);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (state.saving) return;
+    if (Object.keys(state.pending).some(key => key !== 'csvRequest')) { tell('Confirm the pending save before starting another.'); return; }
+    const operation = state.pending.csvRequest || {evidence: item.id, actor: state.context.actor_id,
+      url: `${apiBase()}/organisations/${state.org}/evidence/${item.id}/csv-requests`,
+      payload: {job_id: crypto.randomUUID(), selections: [{field_name: inputs.field_name.value,
+                row: Number(inputs.row.value), column: Number(inputs.column.value)}]}};
+    state.pending.csvRequest = operation; state.saving = true; controls(true); save.disabled = true; clearMessage();
+    try {
+      const receipt = await request(operation.url, {method: 'POST', headers: {'Content-Type': 'application/json',
+        'X-OmniXat-Expected-Actor': operation.actor}, body: JSON.stringify(operation.payload)});
+      delete state.pending.csvRequest; delete form.dataset.dirty;
+      status.textContent = `Extraction request ${receipt.job_id} recorded ${dateText(receipt.requested_at)} under policy ${receipt.policy_version}. Awaiting an operator-run worker. Inspect CSV candidates after processing; this request does not post or approve anything.`;
+      save.textContent = 'Extraction request recorded';
+      const another = element('button', 'Select another extraction cell', 'button secondary'); another.type = 'button';
+      another.addEventListener('click', () => form.replaceWith(csvRequestForm(item))); form.append(another);
+    } catch (error) {
+      const rejected = error.code !== 'session_changed' && [400,403,404,409,413,415,422].includes(error.status);
+      if (rejected) delete state.pending.csvRequest;
+      status.textContent = errorMessage(error) + (rejected ? '' : ' Retry this same selection to confirm its request.');
+      controls(!rejected); save.disabled = false; save.textContent = rejected ? 'Request CSV extraction' : 'Retry extraction request';
+      if (error.status === 401 || error.status === 403) { form.replaceChildren(); fail(error); }
+      else if (error.code === 'session_changed') { fail(error); show('reauth', true); }
+    } finally {
+      state.saving = false; $('workspace-select').disabled = Boolean(Object.keys(state.pending).length);
+    }
+  });
+  return form;
 }
 async function viewCSVCandidates(item, button, panel) {
   if (panel.querySelector('.csv-answer[data-dirty="true"]') && !state.pending.csvAnswer) { tell('Save or clear the answer before refreshing candidates.'); return; }
@@ -497,12 +553,12 @@ document.addEventListener('click', event => {
   if (link && !event.ctrlKey && !event.metaKey && event.button === 0) { event.preventDefault(); navigate(link.getAttribute('href')); }
 });
 window.addEventListener('popstate', () => {
-  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
+  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
     history.pushState({}, '', tenantPath(state.tenant) + (state.org ? `/organisations/${state.org}` : ''));
     tell('Save or clear the note, selected file or answer before leaving this organisation.');
   } else loadRoute();
 });
-window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
 async function boot() {
   clearMessage(); show('loading', true); show('content', false);
   try { await directory(); await loadRoute(); }

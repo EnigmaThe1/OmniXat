@@ -91,15 +91,19 @@ class CSVExtractionReceipt:
     stored_at: datetime
 
 
-def _store_csv_extraction(connection, tenant, organisation, job, result):
+def _amount_documents(result):
     # Persist decimal text, including the original scale; never convert to float.
-    amounts = [
+    return [
         {
             "field_name": value.cell.field_name, "row": value.cell.row, "column": value.cell.column,
             "status": value.status, "amount": str(value.amount) if value.amount is not None else None,
         }
         for value in result.amounts
     ]
+
+
+def _store_csv_extraction(connection, tenant, organisation, job, result):
+    amounts = _amount_documents(result)
     with _tenant_transaction(connection, tenant, write=True, tables_required=(*_TABLES, "csv_extraction_results")):
         with connection.cursor(row_factory=dict_row) as cursor:
             _require_extraction_role(cursor)

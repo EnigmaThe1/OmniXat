@@ -1710,3 +1710,31 @@ and corrections. Fetch/check current remote and dirty/divergence state before
 resuming; no active writer remains after this documentation-only checkpoint.
 Runtime matches the passing code revision. No deployment, billing activation,
 paid contract, private record publication or statutory submission occurred.
+
+## Durable customer CSV request checkpoint — 10 November 2026
+
+Added migration 0070, request-only bearer service/API and opt-in single-cell form,
+plus --requested worker mode using narrower credentials. Requests pin ordered cells,
+stable job, human attribution, policy and source fingerprint/size. Fresh persisted
+authority/source checks occur at request, worker admission and result storage;
+pre-store revocation blocks persistence. Exact retry is immutable; conflicting plans,
+actors/policies or pre-existing operator results deny. Original operator extraction
+remains separate. See commercial/CSV_REQUESTS.md for exact grants/config and limits.
+
+Local checks passed: 70 core (0.102s), 21 identity (0.352s), all 444 PostgreSQL
+integration tests (74.203s), compilation, JavaScript syntax and diff checks. Eight
+new API/CLI/database cases include concurrent retry, scope/actor/source guards,
+pre-store revocation and non-BYPASSRLS function owner. Final constraint/direct-SQL
+validation follow-up reruns targeted cases. Local Chromium is absent; three new
+browser cases and an actual-ClamAV/request/CLI/Chromium qualification case plus all
+retained full CI await publication. No test removed or skipped. Prior head CI
+42894805740 passed.
+
+Next: customer request inspection/cancellation, then bounded dispatch and draft
+review/corrections. No daemon, request-history/status/listing, cancellation/renewal
+UI, batch editor or production extraction qualification was added. Pending retry
+coordinates/receipt are tab-only; close/reload requires operator reconciliation of
+the durable request before replacing it. Retry does not renew recorded authority.
+Production scanner/security/restore, OCR/model and human statutory approval remain
+open. No active writer after publication; fetch/check remote/diff before resuming.
+No deployment, billing activation, contract, private records or statutory action.

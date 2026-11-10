@@ -143,3 +143,8 @@ with stable-job retries. It starts no automatic extraction or posting workflow.
 unavailable answers to a separate bearer-aware write capability, with immutable
 retries, current source/identity checks and persisted attribution. It does not
 post entries or approve drafts/filings.
+
+[Durable CSV extraction requests](CSV_REQUESTS.md) connect a single-cell customer
+form and scoped immutable request API to explicitly invoked requested-worker
+processing. The worker rechecks recorded authority/source at admission and storage;
+no automatic processing, ledger posting or approval is enabled.
