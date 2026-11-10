@@ -160,10 +160,48 @@ function renderEvidence() {
     row.append(element('strong', `${formats[item.media_type] || 'Document'} · ${item.byte_size.toLocaleString('en-GB')} bytes`),
       element('p', item.stored_at ? 'Stored in quarantine' : 'Upload incomplete — upload the same file again to finish'),
       element('small', `Evidence ${item.id} · ${dateText(item.registered_at)}`));
-    list.append(row);
+    const button = element('button', 'View receipt', 'button secondary');
+    button.type = 'button'; button.setAttribute('aria-expanded', 'false');
+    const receipt = element('div', undefined, 'evidence-receipt');
+    receipt.id = `receipt-${item.id}`; receipt.hidden = true;
+    receipt.setAttribute('role', 'region'); receipt.setAttribute('aria-label', `Evidence receipt ${item.id}`);
+    button.setAttribute('aria-controls', receipt.id);
+    button.addEventListener('click', () => viewReceipt(item, button, receipt));
+    row.append(button, receipt); list.append(row);
   }
   $('evidence-count').textContent = `${state.evidence.length} loaded`;
   show('empty-evidence', state.evidence.length === 0); show('more-evidence', Boolean(state.evidenceCursor));
+}
+async function viewReceipt(item, button, panel) {
+  if (!panel.hidden) {
+    panel.hidden = true; panel.replaceChildren(); button.setAttribute('aria-expanded', 'false');
+    button.textContent = 'View receipt'; return;
+  }
+  const epoch = state.epoch;
+  const url = `${apiBase()}/organisations/${state.org}/evidence/${item.id}`;
+  panel.hidden = false; panel.replaceChildren(element('p', 'Loading receipt…'));
+  panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
+  try {
+    const receipt = await request(url);
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    const fields = element('dl');
+    for (const [label, value] of [
+      ['Evidence ID', receipt.id], ['Organisation ID', receipt.organisation_id],
+      ['Declared format', receipt.media_type], ['Byte count', receipt.byte_size.toLocaleString('en-GB')],
+      ['SHA-256 of original bytes', receipt.content_sha256],
+      ['Registered', dateText(receipt.registered_at)],
+      ['Quarantine storage', receipt.stored_at ? dateText(receipt.stored_at) : 'Incomplete — upload the same file again to finish']
+    ]) fields.append(element('dt', label), element('dd', value));
+    panel.replaceChildren(fields, element('p', 'This fingerprint identifies the uploaded bytes. It does not establish a valid file, malware scan, extracted figures, accounting entry or filing approval.'));
+    button.textContent = 'Hide receipt';
+  } catch (error) {
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    const message = element('p', errorMessage(error) + ' Close and reopen this receipt to try again.');
+    message.setAttribute('role', 'alert'); panel.replaceChildren(message); button.textContent = 'Close receipt';
+    if (error.status === 401 || error.status === 403) { panel.replaceChildren(); fail(error); }
+  } finally {
+    panel.setAttribute('aria-busy', 'false'); button.disabled = false;
+  }
 }
 async function loadMore(kind, button) {
   const epoch = state.epoch; button.disabled = true; clearMessage();

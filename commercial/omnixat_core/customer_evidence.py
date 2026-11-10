@@ -83,6 +83,25 @@ class CustomerEvidence:
                   for key,value in row.items()} for row in rows[:limit]]
         return {'items':items, 'next_cursor':items[-1]['id'] if len(rows)>limit else None}
 
+    def receipt(self, token, tenant, organisation, evidence):
+        self.authorize(token, tenant, organisation)
+        with self.connections() as connection:
+            evidence_actor(connection, self.verifier, token, tenant)
+            with _tenant_transaction(connection, UUID(tenant), tables_required=(
+                    'evidence_registrations', 'evidence_quarantine')):
+                with connection.cursor(row_factory=dict_row) as cursor:
+                    cursor.execute('''SELECT e.id,e.organisation_id,e.media_type,e.byte_size,
+                            encode(e.content_sha256,'hex') AS content_sha256,e.registered_at,q.stored_at
+                        FROM omnixat.evidence_registrations e LEFT JOIN omnixat.evidence_quarantine q
+                          ON q.tenant_id=e.tenant_id AND q.evidence_id=e.id
+                        WHERE e.tenant_id=%s AND e.organisation_id=%s AND e.id=%s''',
+                        (tenant, organisation, evidence))
+                    row = cursor.fetchone()
+        if row is None:
+            raise KeyError('Evidence not found')
+        return {key: value.isoformat() if hasattr(value, 'isoformat') else
+                str(value) if isinstance(value, UUID) else value for key, value in row.items()}
+
     def persist(self, token, tenant, organisation, source, media_type, size):
         source.seek(0)
         with stage_evidence(source, media_type=media_type, quarantine_dir=self.directory,
@@ -112,11 +131,17 @@ class CustomerEvidence:
             try:
                 tenant = str(UUID(request.path_params['tenant']))
                 organisation = str(UUID(request.path_params['object_id']))
+                evidence = str(UUID(request.path_params['evidence_id'])) if 'evidence_id' in request.path_params else None
             except ValueError:
                 raise ApiError(400, 'invalid_identifier') from None
             if request.headers.getlist('idempotency-key'):
                 raise ApiError(400, 'unsupported_parameter')
             if request.method in ('GET', 'HEAD'):
+                if evidence is not None:
+                    if request.query_params:
+                        raise ApiError(400, 'unsupported_parameter')
+                    result = await run_in_threadpool(self.receipt, token, tenant, organisation, evidence)
+                    return JSONResponse({'data':result,'request_id':request.scope['request_id']})
                 pairs = list(request.query_params.multi_items())
                 if any(k not in ('after','limit') for k,v in pairs) or len(dict(pairs))!=len(pairs):
                     raise ApiError(400, 'unsupported_parameter')
@@ -193,4 +218,6 @@ class CustomerEvidence:
 
     def routes(self):
         return [Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence',
-                      self.endpoint,methods=['GET','POST'])]
+                      self.endpoint,methods=['GET','POST']),
+                Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}',
+                      self.endpoint,methods=['GET'])]

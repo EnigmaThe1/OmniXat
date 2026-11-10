@@ -121,7 +121,7 @@ provenance and safe retries. Scoped review shows attributed answers alongside
 original candidates and prompts only for unanswered cells. No real scanner, OCR, model or upload route is wired.
 
 [Optional customer evidence intake](CUSTOMER_WEB.md#opt-in-evidence-intake) connects
-bounded file uploads and paginated metadata to the shared registry/quarantine
+bounded file uploads, paginated metadata and inspectable fingerprint receipts to the shared registry/quarantine
 services with fresh human authority and explicit evidence scopes. It is disabled
 unless an operator configures a private spool and database grants. Stored files
 remain quarantined; no scanner, extraction, posting or filing is enabled by upload.

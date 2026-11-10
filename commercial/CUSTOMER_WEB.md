@@ -209,3 +209,27 @@ quotas and a qualified scanner/processing path remain prerequisites for real use
 
 Technical sources checked 9 November 2026: [Starlette streaming requests](https://www.starlette.dev/requests/)
 and [Python temporary-file cleanup](https://docs.python.org/3.12/library/tempfile.html).
+
+### Inspecting an evidence receipt
+
+With evidence intake enabled, `GET /v1/workspaces/{tenant}/organisations/{organisation}/evidence/{evidence}`
+returns one metadata receipt: `id`, `organisation_id`, declared `media_type`,
+`byte_size`, lowercase hex `content_sha256`, `registered_at` and optional `stored_at`.
+It requires current records/evidence read scopes and persisted membership, including
+viewer access. Parent organisation and evidence must belong to the same tenant.
+It rejects query parameters and Idempotency-Key; HEAD has no response body. No new
+grants or migration are needed. The list endpoint remains unchanged.
+
+The customer evidence list has an expandable receipt panel. Each opening reads
+fresh metadata; closing removes the displayed fields. Loading, retry, sign-in and
+access-denied states are handled without browser storage. SHA-256 is computed by
+the existing intake service from original bytes, not supplied by the browser. It
+identifies the registered content; it is not validation, a scan verdict or proof
+of accounting/filing completion. A null storage time means registration exists but
+upload storage is incomplete. Exact-file/type retry completes the existing receipt.
+
+The endpoint serves no original bytes, filename, uploader identity, object locator,
+extracted figure or processing instruction. The hash is private workspace metadata,
+not a public lookup capability. Existing no-store/CSP/referrer controls apply.
+Authority is resolved again before reading metadata; as elsewhere, a revocation
+cannot retract an already admitted transaction. No scanning or processing is started.

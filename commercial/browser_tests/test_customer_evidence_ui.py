@@ -112,3 +112,55 @@ class CustomerEvidenceBrowserTests(CustomerEvidenceFixture):
         expect(page.locator('#evidence-list li')).to_have_count(1)
         self.assertEqual(self.rows('evidence_quarantine'),1)
         self.assertEqual(errors,[])
+
+    def test_chromium_receipt_fingerprint_retry_viewer_and_mobile(self):
+        from hashlib import sha256
+        from playwright.sync_api import expect
+        import httpx
+        evidence = self.upload().json()['data']['id']
+        self.owner.execute("UPDATE omnixat.memberships SET role='viewer' WHERE user_id=%s",(self.user,))
+        page,errors = self.browser(token=self.token(scope=SCOPES))
+        page.goto(self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}')
+        button = page.get_by_role('button',name='View receipt',exact=True)
+        expect(button).to_be_visible()
+        panel = page.get_by_role('region',name='Evidence receipt '+evidence,exact=True)
+        original = self.client.request
+        def unavailable(method,url,**kwargs):
+            if str(url).endswith('/evidence/'+evidence):
+                return httpx.Response(503,json={'error':{'code':'service_unavailable'}})
+            return original(method,url,**kwargs)
+        with patch.object(self.client,'request',side_effect=unavailable):
+            button.click()
+            expect(panel.get_by_role('alert')).to_contain_text('Close and reopen')
+        page.get_by_role('button',name='Close receipt',exact=True).click()
+        button.click()
+        expect(panel).to_contain_text(sha256(self.original).hexdigest())
+        expect(panel).to_contain_text('SHA-256 of original bytes')
+        expect(panel).to_contain_text('does not establish a valid file')
+        expect(page.locator('#evidence-form')).to_be_hidden()
+        expect(page.get_by_role('button',name='Hide receipt',exact=True)).to_have_attribute('aria-expanded','true')
+        page.set_viewport_size({'width':390,'height':844})
+        self.assertFalse(page.evaluate('document.documentElement.scrollWidth > window.innerWidth'))
+        artifacts = os.environ.get('OMNIXAT_BROWSER_ARTIFACTS')
+        if artifacts:
+            Path(artifacts).mkdir(parents=True,exist_ok=True)
+            page.screenshot(path=str(Path(artifacts)/'customer-receipt-mobile.png'),full_page=True)
+        page.get_by_role('button',name='Hide receipt',exact=True).click()
+        expect(panel).to_be_hidden()
+        self.assertEqual(panel.text_content(),'')
+        self.assertEqual(page.evaluate('Object.keys(localStorage).length + Object.keys(sessionStorage).length'),0)
+        self.assertEqual(errors,[])
+
+    def test_chromium_receipt_expiry_requires_sign_in_and_hides_metadata(self):
+        from playwright.sync_api import expect
+        self.upload()
+        page,errors = self.browser(token=self.token(scope=SCOPES))
+        page.goto(self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}')
+        expect(page.get_by_role('button',name='View receipt',exact=True)).to_be_visible()
+        self.gateway_token = self.token(scope=SCOPES,iat=self.iat-60,exp=self.iat-1)
+        page.get_by_role('button',name='View receipt',exact=True).click()
+        expect(page.locator('#error-message')).to_contain_text('Your session has ended.')
+        expect(page.locator('#reauth')).to_be_visible()
+        expect(page.locator('#content')).to_be_hidden()
+        self.assertEqual(page.locator('.evidence-receipt').text_content(),'')
+        self.assertEqual(errors,[])

@@ -1012,3 +1012,22 @@ and limits. Worktree: `/srv/playground_dev/OmniXat-recovery-20261109`, with a pr
 pre-fast-forward stash. No active implementation remains. Resume with CI, maintained
 login/session qualification and authorised scanning/draft review; no live operation
 or statutory approval is enabled.
+
+## Latest customer evidence receipt checkpoint (10 November 2026)
+
+Customer evidence rows now expose a read-only receipt with the original SHA-256,
+declared format, size and registration/storage timestamps. Fresh membership/read
+scopes and tenant/organisation/evidence binding protect the opt-in GET/HEAD route;
+no original bytes, actor identity or processing capability is exposed. The browser
+fetches on expansion and clears on close, with retry/sign-in states and mobile
+wrapping. See CUSTOMER_WEB.md and the latest status for configuration and limits.
+
+**48 core + 21 identity + 389 integration = 458 service tests pass** locally on
+PostgreSQL 16.15 with UTF8/SCRAM. All nine real customer browser cases were attempted
+but blocked before page load by host Unix-socket policy; the unchanged prototype
+remains 19/20 locally. No test skipped. Existing CI will exercise both new browser
+cases and save a receipt mobile screenshot. Inspect that run and screenshot after
+publication before claiming browser/container success. Recovered base `796de6c`
+had a successful verify check. No active writer remains after publication.
+Next: receipt CI, then maintained login/session and authorised scanning/draft review;
+retain quarantine, human approval and the remaining production qualification gates.

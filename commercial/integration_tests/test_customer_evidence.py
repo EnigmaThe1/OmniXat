@@ -271,3 +271,75 @@ class CustomerEvidenceTests(CustomerEvidenceFixture):
                 self.assertEqual(self.rows('evidence_registrations'),1)
                 self.assertEqual(self.rows('evidence_quarantine'),1)
                 self.owner.execute('DELETE FROM omnixat.evidence_quarantine WHERE tenant_id=%s',(self.a,))
+
+    def test_receipt_exposes_exact_original_fingerprint_without_payload_or_actor(self):
+        created = self.upload().json()['data']
+        response = self.client.get(self.url+'/'+created['id'],headers=self.headers())
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['data'], created | {'organisation_id':str(self.org),
+                                           'content_sha256':sha256(self.original).hexdigest()})
+        self.assertEqual(set(response.headers['cache-control'].split(', ')),{'no-store'})
+        self.assertEqual(response.headers['referrer-policy'],'no-referrer')
+        self.assertNotIn(self.original.decode(),response.text)
+        self.assertNotIn(str(self.user),response.text)
+        self.assertEqual(self.client.head(self.url+'/'+created['id'],headers=self.headers()).content,b'')
+        self.assertEqual(self.rows('evidence_quarantine'),1)
+        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+            self.runtime.execute('SELECT original_bytes FROM omnixat.evidence_quarantine')
+
+    def test_receipt_is_bound_to_tenant_organisation_and_current_membership(self):
+        evidence = self.upload().json()['data']['id']
+        url = self.url+'/'+evidence
+        other = self.client.post(self.base+'/organisations',headers=self.headers(),
+                                 json={'display_name':'Other fictional organisation'}).json()['data']['id']
+        self.owner.execute("INSERT INTO omnixat.memberships VALUES (%s,%s,'viewer',NULL)",(self.b,self.user))
+        for wrong in (url.replace(self.a,self.b),url.replace(str(self.org),other),self.url+'/'+str(uuid4())):
+            self.assertEqual(self.client.get(wrong,headers=self.headers()).status_code,404)
+        self.owner.execute("UPDATE omnixat.memberships SET role='viewer' WHERE tenant_id=%s AND user_id=%s",(self.a,self.user))
+        self.assertEqual(self.client.get(url,headers=self.headers()).status_code,200)
+        self.owner.execute('UPDATE omnixat.memberships SET revoked_at=now() WHERE tenant_id=%s AND user_id=%s',(self.a,self.user))
+        denied = self.client.get(url,headers=self.headers(role='owner'))
+        self.assertEqual(denied.status_code,403)
+        self.assertNotIn(sha256(self.original).hexdigest(),denied.text)
+
+    def test_receipt_rechecks_authority_between_parent_check_and_metadata_read(self):
+        evidence = self.upload().json()['data']['id']
+        original = customer_evidence.CustomerEvidence.authorize
+        def revoke(*args,**kwargs):
+            result = original(*args,**kwargs)
+            self.owner.execute('UPDATE omnixat.memberships SET revoked_at=now() WHERE user_id=%s',(self.user,))
+            return result
+        with patch.object(customer_evidence.CustomerEvidence,'authorize',revoke):
+            response = self.client.get(self.url+'/'+evidence,headers=self.headers())
+        self.assertEqual(response.status_code,403)
+        self.assertNotIn(sha256(self.original).hexdigest(),response.text)
+
+    def test_receipt_incomplete_registration_and_retry_keep_same_fingerprint(self):
+        with patch.object(customer_evidence,'store_quarantined_evidence',side_effect=OSError('private')):
+            self.assertEqual(self.upload().status_code,503)
+        item = self.client.get(self.url,headers=self.headers()).json()['data']['items'][0]
+        url = self.url+'/'+item['id']
+        before = self.client.get(url,headers=self.headers()).json()['data']
+        self.assertIsNone(before['stored_at'])
+        self.assertEqual(before['content_sha256'],sha256(self.original).hexdigest())
+        self.assertEqual(self.upload().status_code,201)
+        after = self.client.get(url,headers=self.headers()).json()['data']
+        self.assertIsNotNone(after['stored_at'])
+        self.assertEqual(after | {'stored_at':None},before)
+
+    def test_receipt_authentication_scope_request_validation_and_opt_in(self):
+        evidence = self.upload().json()['data']['id']
+        url = self.url+'/'+evidence
+        self.assertEqual(self.client.get(url).status_code,401)
+        self.assertEqual(self.client.get(url,headers=self.headers(scope='records:read')).status_code,403)
+        self.assertEqual(self.client.get(url,headers=self.headers(scope='evidence:read')).status_code,403)
+        self.assertEqual(self.client.get(url,headers=self.headers(iat=self.iat-60,exp=self.iat-1)).status_code,401)
+        self.assertEqual(self.client.get(self.url+'/invalid',headers=self.headers()).status_code,400)
+        for query in ('?limit=1','?after='+str(uuid4()),'?download=true'):
+            self.assertEqual(self.client.get(url+query,headers=self.headers()).status_code,400)
+        self.assertEqual(self.client.get(url,headers=self.headers() | {'Idempotency-Key':'unsupported'}).status_code,400)
+        self.assertEqual(self.client.post(url,headers=self.headers(),content=b'fictional').status_code,405)
+        disabled = create_app(verifier=self.verifier,connection_factory=self.records_factory,
+            directory_connection_factory=self.directory_factory,public_origin=self.origin)
+        with TestClient(disabled,base_url=self.origin) as client:
+            self.assertEqual(client.get(url,headers=self.headers()).status_code,404)

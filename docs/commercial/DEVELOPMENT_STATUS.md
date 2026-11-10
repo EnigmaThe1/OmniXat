@@ -2932,3 +2932,69 @@ No deployment, billing activation, posting or statutory action occurred.
 Next: inspect this follow-up's CI including all seven customer Chromium cases and
 the unchanged 20-test prototype, then qualify maintained sign-in/session and the
 scanner/draft-review journey. No active implementation remains in this follow-up.
+
+## Customer evidence receipts — implemented; CI pending (10 November 2026)
+
+Recovered clean remote `796de6c`; connected GitHub verify check passed. No open PR
+uses this development branch, no other checkout or active implementation process
+was found, and checkpoint reports zero divergence. Scope: tenant/organisation-bound
+read-only evidence receipt endpoint and accessible customer receipt details showing
+server-computed SHA-256, declared format, size and registration/storage timestamps.
+Preserve quarantine and all current identity/scope/revocation boundaries. Add real
+PostgreSQL/HTTP and Chromium regressions. No originals, scanning, extraction, billing,
+provider activation, deployment or statutory action. Existing review/scanner services
+remain independent; this increment makes upload provenance inspectable by customers.
+
+Implemented opt-in GET/HEAD receipt metadata through the existing customer evidence
+controller and runtime grants. Rechecks current membership and read scopes before
+reading, constrains tenant/organisation/evidence together, and keeps originals
+unreadable to the runtime login. Responses contain only receipt ID, organisation,
+declared format, byte count, server-computed SHA-256 and registration/storage times.
+No migration, new grant or processing trigger. List payloads remain unchanged.
+
+Customer rows now expand a fresh receipt on demand, with loading/error/retry,
+accessible region/expanded-state controls, mobile wrapping and explicit incomplete
+upload status. Closing clears displayed metadata; expiry/access denial hides the
+workspace and offers existing sign-in recovery. Nothing enters browser storage.
+The receipt explains that a fingerprint is not a scan, extracted amount, accounting
+entry or approval. CUSTOMER_WEB.md documents the endpoint and exact boundaries.
+
+Verification on 10 November 2026 (Python 3.12, existing pinned dependencies):
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **48 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  explicit disposable test admin DSN: **389 passed in 36.776s** on PostgreSQL
+  **16.15**, UTF8, SCRAM-required TCP authentication; **458 service tests total**.
+  Five new cases cover exact fingerprint/metadata allowlist, no payload/actor
+  disclosure, HEAD, tenant/parent/viewer/revocation, second authority check, partial
+  registration recovery, scopes/expiry, request validation and disabled routes.
+  The initial local cluster used SQL_ASCII and returned text as bytes; it was
+  replaced by a separate UTF8 cluster before the complete passing run. A new
+  cache-header assertion was corrected to account for both existing boundaries'
+  no-store headers. No production guard or dependency version was changed.
+- `cd commercial && PYTHONPATH=.:integration_tests OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest discover -s browser_tests -v`:
+  **9 errors before page load**, host `socket() failed: Operation not permitted`.
+  Two new retained real-browser cases cover viewer fingerprint details, 503 retry,
+  closing/clearing, mobile overflow/storage and expired-token sign-in protection.
+  Playwright's browser download also failed as a truncated archive. CI must verify
+  actual browser operation; no local browser success or screenshot review claimed.
+- Unchanged `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest discover -s tests -v`:
+  **19 passed, 1 failed**, browser approval case returns 503 with Chromium unavailable.
+  No skip, assertion or timeout change.
+- `node --check commercial/web/app.js`, Python compilation and `git diff --check`:
+  passed. Docker build is left to the existing CI; Docker is unavailable locally.
+- Connected GitHub inspection confirmed recovered `796de6c` had a successful verify
+  check (run 42718577174), closing its previously pending recovery-hardening CI.
+
+Limits: receipt metadata describes registration/storage, not scanner/extraction or
+ledger progress. Hashes are private workspace metadata. Provider login/session,
+scanner authorisation, quotas, retention/restore and remaining customer/owner
+journeys still require qualification. No original download, real evidence, secret,
+billing activation, deployment or statutory action was introduced.
+
+Next resumable step: inspect the published receipt CI including all nine customer
+Chromium cases, retained prototype browser and container build; fix any actual
+failures and inspect the receipt mobile screenshot. Then qualify maintained
+login/session and connect authorised scanner/draft review to the customer journey.
+No active implementation remains after publication.
