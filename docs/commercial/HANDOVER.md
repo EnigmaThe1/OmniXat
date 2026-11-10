@@ -1288,3 +1288,16 @@ await CI. Synthetic test signatures are not production malware protection. Read
 commercial/SCANNING.md before resuming; inspect CI, fix actual failures and verify
 container build. Next: durable authorised customer scan requests and qualified
 extraction/draft review. No deployment, billing, contract, private data or filing.
+
+### Scanner/status CI follow-up
+
+2ba2ce0 run 42797784802 passed 56 core, 21 identity, 399 PostgreSQL tests, all
+provider/gateway cases, all three real ClamAV cases and the retained prototype.
+Observed official package: clamav-daemon 1.5.4+dfsg-0ubuntu0.24.04.1. The daemon
+fixture uses only its private synthetic NDB rule, not the installed official DB.
+One customer Chromium case errored after successfully hiding expired-session
+content: its role locator excluded the now-hidden status region before checking
+empty text. The locator now includes hidden regions so the security assertion
+still requires empty DOM content. No production code, auth rule or timeout is
+changed; no test skipped. Container build did not run after this error. Inspect
+follow-up full CI and build before claiming completion.
