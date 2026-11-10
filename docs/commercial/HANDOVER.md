@@ -1558,3 +1558,31 @@ and focused answer/draft workflows through shared services, with current authori
 and source gates. Historic extraction browsing and production scanner/security/
 restore qualification remain open. No active writer after publication; fetch/check
 remote before resuming. No deployment, billing, contract, private data or filing.
+
+### Verified CSV candidate inspection — 10 November 2026
+
+Code c99ad6fba753d6efc8f84b2bfa22845f3a341331 passed full commercial workflow
+42872966976: **567 tests**, no failures/errors/skips, and customer container build.
+Exact suites: 66 core (0.116s), 21 identity (0.358s), 424 PostgreSQL (77.904s),
+five native Keycloak (33.113s), two provider Chromium (31.025s), five gateway
+Chromium (80.103s), three real ClamAV (1.872s), 21 customer Chromium (27.901s),
+and all 20 retained prototype cases including browser approval (3.626s). This
+supersedes the pending note above. The new browser cases verify exact amounts,
+source/job coordinates, questions, blocked-source refresh clearing, mobile layout
+and empty candidate DOM after session expiry. No assertion/timeout/test was removed
+or relaxed to obtain this result.
+
+Candidate inspection is now a read-only customer journey, using the existing
+deterministic extractor and shared review validation. New CSV tests use fictional
+verdicts and the gateway stand-in; separate real daemon and provider/gateway suites
+also pass. This does not qualify production malware coverage, OCR/model extraction,
+interactive draft approval or automated accounting. No original-read or write grant
+is exposed by the new reader. No API scopes are stripped into approval authority.
+
+Next: explicit qualified extraction and focused answer/draft workflows through
+shared services, with fresh authority and current source eligibility. See
+commercial/CSV_REVIEW.md for configuration, grants and limits. Production scanner,
+security/restore and historic extraction browsing remain open. This final follow-up
+changes documentation only; runtime matches the passing revision. No active writer
+after publication. Fetch/check remote before resuming. No deployment, billing
+activation, paid contract, private record publication or statutory action.
