@@ -3317,3 +3317,12 @@ case. Landing status/heading checks fail promptly on transport errors. No HTTPS,
 issuer, nonce, email, header or database authority validation was relaxed. Also
 corrected the operator template refresh from five minutes to one minute, below
 the fixture provider's three-minute access-token life. Follow-up CI is required.
+
+50fec20 run 42781089316 passed the real gateway login, attributed record creation,
+actual refreshed-token replacement and local sign-out journey. The other test
+stopped at a negative-fixture assertion: malformed state is rejected with 500 by
+the maintained gateway before its CSRF branch. Use an actual gateway-generated
+state, remove the issued CSRF cookie, then require exactly 403 and no session.
+This exercises the intended missing-cookie rejection without accepting 500.
+All prior services/provider/prototype cases passed again; full follow-up CI remains
+required. Checked the pinned gateway's OAuthCallback implementation for this path.

@@ -92,8 +92,13 @@ class CustomerGatewayBrowserTests(CustomerWebFixture):
             for headers in [{},{'X-Forwarded-Access-Token':self.token(),'X-Forwarded-User':'owner'},
                             {'Authorization':'Bearer '+self.token()}]:
                 self.assertEqual(client.get('/v1/workspaces',headers=headers).status_code,401)
-            callback = client.get('/oauth2/callback?state=untrusted&code=untrusted')
-            self.assertIn(callback.status_code,(400,403))
+            started = client.get('/oauth2/start?rd=/app')
+            self.assertEqual(started.status_code,302)
+            self.assertTrue(started.headers['location'].startswith(self.provider.issuer+'/'))
+            state = parse_qs(urlsplit(started.headers['location']).query)['state'][0]
+            client.cookies.clear()
+            callback = client.get('/oauth2/callback',params={'state':state,'code':'fictional-never-issued'})
+            self.assertEqual(callback.status_code,403)
             self.assertFalse(any(name.startswith('__Host-omnixat-customer') for name in client.cookies))
         page = self.page(); self.login(page)
         # Gateway must overwrite the caller's claimed access token.
