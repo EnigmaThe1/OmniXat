@@ -4022,3 +4022,35 @@ a different viewer, verifies rejection and zero requests, then returns to the
 original actor for exact retry. No permission or scope is granted by displaying the
 pending form. Initial run 42902141169 is still in progress; final follow-up CI is
 required. JavaScript syntax and diff checks passed.
+
+## Verified durable CSV request checkpoint — 10 November 2026
+
+Final code d5f2d76bdc0ac7711d2d765b2ae9c9b9a00f02cc passed full workflow
+https://github.com/EnigmaThe1/OmniXat/actions/runs/42902722730 (job 130133734325).
+The initial implementation run 42902141169 also passed. Reviewed final logs:
+600 tests passed, no failures/errors/skips: core 70 (0.109s), identity 21 (0.339s),
+PostgreSQL 444 (87.488s), native Keycloak 5 (35.684s), provider Chromium 2
+(31.952s), gateway Chromium 5 (81.993s), actual ClamAV 5 (5.125s), customer
+Chromium 28 (39.891s), retained prototype including browser approval 20 (3.630s).
+Customer container build passed. All three new browser cases and the new actual
+ClamAV/request API/requested CLI/Chromium inspection case passed. Expanded expiry
+coverage proves a pending form remains locked during viewer sign-in, rejects the
+wrong actor without a request, then succeeds under the original actor. It grants
+no new viewer permission. The gateway in the new journey is a stand-in; independent
+real provider/gateway suites passed separately. Synthetic signatures do not qualify
+production malware coverage. Final targeted local eight-case rerun passed (2.024s)
+after the table-constraint/direct-SQL checks. Compilation/syntax/diff checks passed.
+No test, assertion or timeout was removed, skipped or relaxed.
+
+Requests and source plans are durable; pending browser retry state and displayed
+receipts are tab-only. Closing/reloading requires operator reconciliation before
+replacing an uncertain job. Retry does not renew recorded authority. No background
+processor, request listing/history/status or cancellation/re-authorisation UI,
+batch editor, ledger posting or statutory approval was added. Next bounded task:
+customer request inspection and cancellation, then bounded dispatch and draft
+review/corrections through shared services. Production scanner/security/restore,
+OCR/model and human final-package approval gates remain open. This final checkpoint
+changes documentation only; runtime matches the passing revision. No active writer
+remains after publication. Fetch/check current remote, dirty state and divergence
+before resuming. No deployment, billing activation, paid contract, private-record
+publication or statutory submission occurred.
