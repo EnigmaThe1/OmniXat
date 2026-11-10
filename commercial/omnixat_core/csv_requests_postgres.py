@@ -21,6 +21,12 @@ def cell_documents(selections):
     return [{'field_name':v.field_name,'row':v.row,'column':v.column} for v in selections]
 
 
+def _require_request_role(cursor):
+    cursor.execute("SELECT has_schema_privilege('omnixat','USAGE,CREATE') OR has_schema_privilege('omnixat_extraction','USAGE,CREATE') OR has_schema_privilege('omnixat_csv_request_status','USAGE,CREATE') OR has_schema_privilege('omnixat_csv_requests','CREATE') OR has_function_privilege('omnixat_csv_requests.worker_request(uuid,uuid,uuid,jsonb)','EXECUTE') OR has_function_privilege('omnixat_csv_requests.store_requested_result(uuid,uuid,uuid,jsonb,text,bytea,jsonb)','EXECUTE') AS overprivileged")
+    if cursor.fetchone()['overprivileged']:
+        raise PermissionError('Request-only capability required')
+
+
 def request_csv(connection,verifier,token,tenant,organisation,evidence,document,*,expected_actor):
     identity=verifier.verify(token)
     if not {'records:read','records:write','evidence:read','evidence:extract'} <= identity.scopes:
@@ -33,9 +39,7 @@ def request_csv(connection,verifier,token,tenant,organisation,evidence,document,
     try:
         with _tenant_transaction(connection,UUID(tenant),write=True,tables_required=_TABLES_REQUIRED):
             with connection.cursor(row_factory=dict_row) as cursor:
-                cursor.execute("SELECT has_schema_privilege('omnixat','USAGE,CREATE') OR has_schema_privilege('omnixat_extraction','USAGE,CREATE') OR has_schema_privilege('omnixat_csv_requests','CREATE') OR has_function_privilege('omnixat_csv_requests.worker_request(uuid,uuid,uuid,jsonb)','EXECUTE') OR has_function_privilege('omnixat_csv_requests.store_requested_result(uuid,uuid,uuid,jsonb,text,bytea,jsonb)','EXECUTE') AS overprivileged")
-                if cursor.fetchone()['overprivileged']:
-                    raise PermissionError('Request-only capability required')
+                _require_request_role(cursor)
                 cursor.execute('SELECT * FROM omnixat_csv_requests.request_csv(%s,%s,%s,%s,%s,%s,%s,%s)',
                     (identity.issuer,identity.subject,identity.issued_at,UUID(organisation),UUID(evidence),UUID(job),
                      UUID(str(expected_actor)),Jsonb(cell_documents(selections))))
@@ -54,6 +58,7 @@ def _require_requested_worker(cursor):
     _require_extraction_role(cursor)
     cursor.execute("""SELECT has_function_privilege('omnixat_csv_requests.request_csv(text,text,bigint,uuid,uuid,uuid,uuid,jsonb)','EXECUTE')
         OR has_function_privilege('omnixat_extraction.store_csv_result(uuid,uuid,uuid,text,bytea,jsonb)','EXECUTE')
+        OR has_function_privilege('omnixat_csv_requests.cancel_csv(text,text,bigint,uuid,uuid,uuid,uuid)','EXECUTE')
         OR has_schema_privilege('omnixat_csv_requests','CREATE') AS mixed""")
     if cursor.fetchone()['mixed']:
         raise PermissionError('Separate requested-worker grants required')
@@ -86,3 +91,28 @@ def extract_requested_csv(connection,tenant,organisation,evidence,job,selections
             if row['outcome']=='conflict': raise CSVExtractionConflict('Request result conflicts')
             if row['outcome']!='stored': raise RuntimeError('Request receipt unavailable')
     return CSVExtractionReceipt(UUID(job),UUID(evidence),row['stored_at'])
+
+
+class CancellationUnavailable(Exception):
+    """A recorded result cannot be undone by cancelling its request."""
+
+
+def cancel_csv(connection,verifier,token,tenant,organisation,evidence,job,*,expected_actor):
+    identity=verifier.verify(token)
+    if not {'records:read','records:write','evidence:read','evidence:extract'} <= identity.scopes:
+        raise PermissionError('Extraction cancellation scopes required')
+    if expected_actor is None: raise ValueError('Initiating actor required')
+    tenant,organisation,evidence,job,actor=(UUID(str(x)) for x in (tenant,organisation,evidence,job,expected_actor))
+    try:
+        with _tenant_transaction(connection,tenant,write=True,tables_required=_TABLES_REQUIRED):
+            with connection.cursor(row_factory=dict_row) as cursor:
+                _require_request_role(cursor)
+                cursor.execute('SELECT * FROM omnixat_csv_requests.cancel_csv(%s,%s,%s,%s,%s,%s,%s)',
+                    (identity.issuer,identity.subject,identity.issued_at,organisation,evidence,job,actor))
+                row=cursor.fetchone()
+                if row is None: raise KeyError('Request unavailable')
+                if row['outcome']=='result_recorded': raise CancellationUnavailable('A result is already recorded')
+                if row['outcome']!='cancelled': raise RuntimeError('Cancellation receipt unavailable')
+    except errors.InsufficientPrivilege: raise PermissionError('Cancellation denied') from None
+    except errors.NoDataFound: raise RequestActorChanged('Initiating actor changed') from None
+    return {'job_id':str(row['job_id']),'cancelled_at':row['cancelled_at'].isoformat()}

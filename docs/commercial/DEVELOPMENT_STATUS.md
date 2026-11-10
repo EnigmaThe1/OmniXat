@@ -4054,3 +4054,52 @@ changes documentation only; runtime matches the passing revision. No active writ
 remains after publication. Fetch/check current remote, dirty state and divergence
 before resuming. No deployment, billing activation, paid contract, private-record
 publication or statutory submission occurred.
+
+## CSV request inspection and cancellation — in progress (10 November 2026)
+
+Recovered clean remote f724962; CI 42904246041 passed. One writer, no commercial-head
+PR or unfinished checkout work. Add separate read-only bounded request inspection,
+customer cancellation with current human authority/actor continuity and retained
+attribution. Serialize cancellation with requested-worker result storage, preserving
+completed results and immutable plans. Wire website reload/retry recovery and add
+PostgreSQL/API, concurrency and Chromium tests. No re-authorisation, daemon, ledger
+posting, filing approval or production qualification is included.
+
+## CSV request inspection/cancellation implementation — 10 November 2026
+
+Migration 0071 adds retained cancellation attribution and a separate execute-only
+historical reader. Scoped human members can inspect the latest 20 requests and
+exact job IDs; current editor/owner authority plus scopes/initiating actor is needed
+to cancel. Immutable plan/first request/first cancellation attribution is preserved.
+Normal request retries cannot restart cancellation. Requested-worker admission
+excludes cancelled plans, and result storage shares a request-row lock with cancel.
+A cancellation that wins stops requested persistence; a stored result that wins
+causes cancellation to return 409 without changing it. No parsing interruption or
+control of the separate ordinary operator path is claimed.
+
+The opt-in website inspects receipts after reload, displays selected coordinates,
+actor/time/policy and historical state, and offers cancellation plus same-job/actor
+retry for uncertain responses. Pending retry survives same-tab sign-in checks and
+remains restricted after account changes. Denied sessions clear request-panel DOM.
+No original bytes or financial candidate values are exposed by the new reader.
+See commercial/CSV_REQUEST_LIFECYCLE.md for separate grants/config and exact limits.
+
+Local checks: PYTHONPATH=commercial python -m unittest discover -s commercial/tests
+-q: 70 passed (0.073s); identity_tests: 21 passed (0.256s). Disposable PostgreSQL
+16.2, PYTHONPATH=commercial:commercial/integration_tests python -m unittest discover
+-s commercial/integration_tests -q: all 451 then-present cases passed (62.091s).
+Final eight-case lifecycle suite additionally verifies actual concurrent cancellation/
+storage in both lock orders. The existing non-BYPASSRLS migration-owner case now
+covers inspection/cancel/worker denial as well as successful dispatch. Compilation,
+JavaScript syntax and diff checks passed. Local Chromium is absent; three new browser
+cases and retained full provider/scanner/browser/container/prototype checks await CI.
+No test removed/skipped. Previous head run 42904246041 passed.
+
+Limits/next: latest-20 UI is bounded (older exact-job API works); older-page browser
+navigation, re-authorisation, bounded/background dispatch, quotas, answer corrections
+and human draft approval remain unfinished. Cancellation preserves results already
+recorded and does not delete private originals. Next: explicit re-authorisation with
+retained history, then bounded dispatch and draft review. Production scanner/security/
+restore/OCR/model and human statutory approval gates remain open. No active writer
+after publication; fetch/check remote and dirty/divergence first. No deployment,
+billing activation, contract, private-record publication or statutory action.

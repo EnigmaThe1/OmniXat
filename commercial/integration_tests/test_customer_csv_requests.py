@@ -167,7 +167,7 @@ class CustomerCSVRequestTests(CustomerCSVRequestFixture):
         self.admin.execute(sql.SQL('CREATE DATABASE {} OWNER {}').format(sql.Identifier(database),sql.Identifier(name)))
         self.addCleanup(self.admin.execute,sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(database)))
         with psycopg.connect(make_conninfo(self.admin_dsn,dbname=database,user=name,password=password),autocommit=True) as owner:
-            for prefix in ['0001','0002','0013','0014','0015','0016','0017','0018','0019','0020','0021','0070']:
+            for prefix in ['0001','0002','0013','0014','0015','0016','0017','0018','0019','0020','0021','0070','0071']:
                 owner.execute(next(MIGRATIONS.glob(prefix+'*.sql')).read_text())
             for role in [self.csv_request_role,self.requested_worker_role]:
                 owner.execute(sql.SQL('GRANT USAGE ON SCHEMA omnixat_csv_requests TO {}').format(sql.Identifier(role)))
@@ -175,6 +175,9 @@ class CustomerCSVRequestTests(CustomerCSVRequestFixture):
             owner.execute(sql.SQL('GRANT USAGE ON SCHEMA omnixat_extraction TO {}').format(sql.Identifier(self.requested_worker_role)))
             for function in WORKER_FUNCTIONS+['omnixat_extraction.read_eligible_original(uuid,uuid)']:
                 owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION '+function+' TO {}').format(sql.Identifier(self.requested_worker_role)))
+            owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_csv_requests.cancel_csv(text,text,bigint,uuid,uuid,uuid,uuid) TO {}').format(sql.Identifier(self.csv_request_role)))
+            owner.execute(sql.SQL('GRANT USAGE ON SCHEMA omnixat_csv_request_status TO {}').format(sql.Identifier(self.review_role)))
+            owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_csv_request_status.read_requests(text,text,bigint,uuid,uuid,uuid) TO {}').format(sql.Identifier(self.review_role)))
         with psycopg.connect(make_conninfo(self.admin_dsn,dbname=database),autocommit=True) as admin:
             admin.execute("INSERT INTO omnixat.tenants VALUES (%s,'Fictional request tenant')",(self.a,))
             admin.execute("INSERT INTO omnixat.organisations(tenant_id,id,display_name,created_by) VALUES (%s,%s,'Fictional organisation','fixture')",(self.a,self.org))
@@ -189,6 +192,19 @@ class CustomerCSVRequestTests(CustomerCSVRequestFixture):
             self.assertEqual(receipt['job_id'],str(self.job))
         with psycopg.connect(make_conninfo(self.requested_worker_dsn,dbname=database),autocommit=True) as connection:
             self.assertEqual(str(self.dispatch(connection).job_id),str(self.job))
+        from omnixat_core.csv_requests_postgres import cancel_csv, extract_requested_csv
+        from omnixat_core.csv_request_status import read_requests
+        from omnixat_core.csv_extraction_plan import validate_extraction_plan
+        from omnixat_core.evidence_extraction_postgres import EvidenceNotEligible
+        newer=uuid4(); plan=self.plan()|{'job':str(newer)}
+        with psycopg.connect(make_conninfo(self.csv_request_dsn,dbname=database),autocommit=True) as connection:
+            request_csv(connection,self.verifier,self.token(scope=REQUEST_SCOPES),self.a,self.org,self.evidence,self.document|{'job_id':str(newer)},expected_actor=self.user)
+            cancel_csv(connection,self.verifier,self.token(scope=REQUEST_SCOPES),self.a,self.org,self.evidence,newer,expected_actor=self.user)
+        with psycopg.connect(make_conninfo(self.review_dsn,dbname=database),autocommit=True) as connection:
+            items=read_requests(connection,self.verifier,self.token(scope=REQUEST_SCOPES),self.a,self.org,self.evidence)['items']
+            self.assertEqual(items[0]['state'],'cancelled'); self.assertEqual(items[0]['cancelled_by'],str(self.user))
+        with psycopg.connect(make_conninfo(self.requested_worker_dsn,dbname=database),autocommit=True) as connection,self.assertRaises(EvidenceNotEligible):
+            extract_requested_csv(connection,*validate_extraction_plan(plan))
         with psycopg.connect(make_conninfo(self.admin_dsn,dbname=database),autocommit=True) as admin:
             self.assertEqual(admin.execute('SELECT count(*) FROM omnixat.csv_extraction_results').fetchone()[0],1)
 

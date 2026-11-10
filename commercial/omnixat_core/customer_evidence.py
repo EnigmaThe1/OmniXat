@@ -53,7 +53,7 @@ def evidence_actor(connection, verifier, token, tenant, *, write=False, expected
 
 
 class CustomerEvidence:
-    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None):
+    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None, csv_request_status_connections=None):
         self.verifier, self.connections = verifier, connection_factory
         if status_connections is not None and not callable(status_connections):
             raise ValueError('Server-owned status connection factory required')
@@ -70,6 +70,9 @@ class CustomerEvidence:
         if csv_request_connections is not None and not callable(csv_request_connections):
             raise ValueError('Server-owned CSV request connection factory required')
         self.csv_request_connections = csv_request_connections
+        if csv_request_status_connections is not None and not callable(csv_request_status_connections):
+            raise ValueError('Server-owned request-status connection factory required')
+        self.csv_request_status_connections = csv_request_status_connections
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
@@ -131,6 +134,23 @@ class CustomerEvidence:
         from .customer_csv_review import read_latest_csv
         with self.review_connections() as connection:
             return read_latest_csv(connection,self.verifier,token,tenant,organisation,evidence)
+
+    def csv_requests(self,token,tenant,organisation,evidence,job=None):
+        self.authorize(token,tenant,organisation)
+        from .csv_request_status import read_requests
+        with self.csv_request_status_connections() as connection:
+            return read_requests(connection,self.verifier,token,tenant,organisation,evidence,job)
+
+    def cancel_csv_request(self,token,tenant,organisation,evidence,job,expected):
+        self.authorize(token,tenant,organisation,expected_actor=expected)
+        from .csv_requests_postgres import cancel_csv, RequestActorChanged, CancellationUnavailable
+        try:
+            with self.csv_request_connections() as connection:
+                return cancel_csv(connection,self.verifier,token,tenant,organisation,evidence,job,expected_actor=expected)
+        except RequestActorChanged:
+            raise ApiError(409,'session_changed') from None
+        except CancellationUnavailable:
+            raise ApiError(409,'extraction_cancellation_unavailable') from None
 
     def csv_request(self,token,tenant,organisation,evidence,document,expected):
         self.authorize(token,tenant,organisation,expected_actor=expected)
@@ -203,6 +223,7 @@ class CustomerEvidence:
                 tenant = str(UUID(request.path_params['tenant']))
                 organisation = str(UUID(request.path_params['object_id']))
                 evidence = str(UUID(request.path_params['evidence_id'])) if 'evidence_id' in request.path_params else None
+                job = str(UUID(request.path_params['job_id'])) if 'job_id' in request.path_params else None
             except ValueError:
                 raise ApiError(400, 'invalid_identifier') from None
             initiating_actor = expected_actor(request, writing=request.method == 'POST')
@@ -221,7 +242,10 @@ class CustomerEvidence:
                     if request.query_params:
                         raise ApiError(400, 'unsupported_parameter')
                     operation = self.csv_review if request.url.path.endswith('/csv-review') else self.scan_status if request.url.path.endswith('/scan-status') else self.receipt
-                    result = await run_in_threadpool(operation, token, tenant, organisation, evidence)
+                    if '/csv-requests' in request.url.path:
+                        result=await run_in_threadpool(self.csv_requests,token,tenant,organisation,evidence,job)
+                    else:
+                        result = await run_in_threadpool(operation, token, tenant, organisation, evidence)
                     return JSONResponse({'data':result,'request_id':request.scope['request_id']})
                 pairs = list(request.query_params.multi_items())
                 if any(k not in ('after','limit') for k,v in pairs) or len(dict(pairs))!=len(pairs):
@@ -283,7 +307,11 @@ class CustomerEvidence:
                     raise ApiError(408,'request_timeout') from None
                 if content!=b'{}':
                     raise ApiError(400,'invalid_request')
-                result=await run_in_threadpool(self.request_scan,token,tenant,organisation,evidence,initiating_actor,request.url.path.endswith('/scan-cancellations'),reauthorise_at)
+                if '/csv-requests/' in request.url.path:
+                    if initiating_actor is None: raise ApiError(400,'invalid_expected_actor')
+                    result=await run_in_threadpool(self.cancel_csv_request,token,tenant,organisation,evidence,job,initiating_actor)
+                else:
+                    result=await run_in_threadpool(self.request_scan,token,tenant,organisation,evidence,initiating_actor,request.url.path.endswith('/scan-cancellations'),reauthorise_at)
                 return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=202)
             media_types = request.headers.getlist('content-type')
             encodings = request.headers.getlist('content-encoding')
@@ -366,4 +394,8 @@ class CustomerEvidence:
         if self.csv_request_connections is not None:
             routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests',
                                 self.endpoint,methods=['POST']))
+            routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests/{job_id}/cancellations',self.endpoint,methods=['POST']))
+        if self.csv_request_status_connections is not None:
+            routes.extend([Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests',self.endpoint,methods=['GET']),
+                Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests/{job_id}',self.endpoint,methods=['GET'])])
         return routes

@@ -103,3 +103,11 @@ https://www.postgresql.org/docs/16/sql-createfunction.html. New functions use fi
 search_path, row_security and revoked PUBLIC execute; tests exercise a non-BYPASSRLS
 function owner across request/admission/store/eligibility functions. No dependency,
 legal rule or financial amount was introduced.
+
+## Request inspection and cancellation
+
+[Request lifecycle](CSV_REQUEST_LIFECYCLE.md) now adds a separate read-only receipt
+capability, latest-20 website inspection and explicit cancellation. Earlier absence
+statements describe the initial request slice. Plans/attribution remain retained;
+normal retries cannot restart cancelled work. Older-page UI, re-authorisation and
+background dispatch remain unfinished.

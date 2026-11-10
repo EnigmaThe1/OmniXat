@@ -137,7 +137,7 @@ class Boundary:
             await self.app(scope, receive, safe_send)
 
 
-def create_app(*, verifier, connection_factory, allowed_hosts, directory_connection_factory=None, evidence_quarantine_dir=None, scan_status_connection_factory=None, scan_request_connection_factory=None, csv_review_connection_factory=None, csv_answer_connection_factory=None, csv_request_connection_factory=None):
+def create_app(*, verifier, connection_factory, allowed_hosts, directory_connection_factory=None, evidence_quarantine_dir=None, scan_status_connection_factory=None, scan_request_connection_factory=None, csv_review_connection_factory=None, csv_answer_connection_factory=None, csv_request_connection_factory=None, csv_request_status_connection_factory=None):
     """Return ASGI app only. Factory must bound acquisition and lease exclusively."""
     if (not isinstance(allowed_hosts, (list, tuple)) or not allowed_hosts
             or any(not isinstance(h, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]{0,252}', h)
@@ -166,6 +166,7 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
                             and scan_status_connection_factory is not None)
                         context['csv_review_access'] = (context['evidence_access'] and csv_review_connection_factory is not None
                             and records._actor.actor_kind == 'human')
+                        context['csv_request_status_access'] = (context['csv_review_access'] and csv_request_status_connection_factory is not None)
                         context['can_request_csv'] = (context['csv_review_access'] and csv_request_connection_factory is not None
                             and context['can_write'] and 'evidence:extract' in scopes)
                         context['can_answer_csv'] = (context['csv_review_access'] and csv_answer_connection_factory is not None
@@ -305,6 +306,7 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
                                        request_connections=scan_request_connection_factory,
                                        review_connections=csv_review_connection_factory,
                                        answer_connections=csv_answer_connection_factory,
-                                       csv_request_connections=csv_request_connection_factory).routes())
+                                       csv_request_connections=csv_request_connection_factory,
+                                       csv_request_status_connections=csv_request_status_connection_factory).routes())
     app = Starlette(debug=False,routes=routes,exception_handlers={HTTPException:http_error})
     return Boundary(app, allowed_hosts)

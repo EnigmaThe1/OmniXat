@@ -1781,3 +1781,31 @@ changes documentation only; runtime matches the passing revision. No active writ
 remains after publication. Fetch/check current remote, dirty state and divergence
 before resuming. No deployment, billing activation, paid contract, private-record
 publication or statutory submission occurred.
+
+## CSV request inspection and cancellation checkpoint — 10 November 2026
+
+Added migration 0071, separate read-only historical receipt capability, bounded
+latest-20/exact-job API and customer inspection/cancellation UI. Current human
+membership/cutoff/scopes and initiating actor are independently checked. Cancellation
+retains the immutable plan and first actor/time; ordinary request retries cannot
+renew it. Cancel and requested-worker result storage hold the same row lock through
+commit. Cancellation winning blocks storage; storage winning makes cancellation
+return 409 without undoing the result. Parsing and the ordinary operator extraction
+path are not interrupted. See commercial/CSV_REQUEST_LIFECYCLE.md for grants/config.
+
+Local validation: 70 core (0.073s), 21 identity (0.256s), all 451 then-present
+PostgreSQL integration cases (62.091s) passed. Final eight lifecycle cases additionally
+exercise both concurrent lock orders. Expanded non-BYPASSRLS owner coverage verifies
+read/cancel/admission/storage chain. Compilation, JavaScript syntax and diff checks
+passed. Chromium is absent locally; three new browser cases (reload/history/cancel,
+lost receipt/account continuity, expiry/viewer recovery) and all retained full CI
+await publication. No tests removed or skipped. Prior head CI 42904246041 passed.
+
+Next: explicit re-authorisation with retained history, then bounded dispatch and
+draft review/corrections. Older-page UI, quotas, daemon and production qualification
+remain unfinished; reader exposes metadata/coordinates, never originals or monetary
+candidate values. Pending cancellation retry state is tab-only; persisted receipts
+are inspectable after reload. Production scanner/security/restore/OCR/model and human
+final-package approval remain open. No active writer after publication; fetch/check
+current remote/diff before resuming. No deployment, billing activation, contract,
+private records or statutory action.

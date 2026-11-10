@@ -148,3 +148,8 @@ post entries or approve drafts/filings.
 form and scoped immutable request API to explicitly invoked requested-worker
 processing. The worker rechecks recorded authority/source at admission and storage;
 no automatic processing, ledger posting or approval is enabled.
+
+[CSV request inspection and cancellation](CSV_REQUEST_LIFECYCLE.md) retain plans and
+attribution while allowing scoped customers to inspect history after reload and stop
+requested-worker storage. Cancellation is serialized with result storage; recorded
+results cannot be undone by this action. No background processor or approval is added.
