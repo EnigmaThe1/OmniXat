@@ -64,3 +64,12 @@ Sources checked **10 November 2026**:
   for raw cookie key files, CA files, access-token forwarding, secure cookies and refresh.
 - [Gateway sign-out boundary](https://oauth2-proxy.github.io/oauth2-proxy/features/endpoints/).
 - [Chromium's test resolver mapping](https://chromium.googlesource.com/chromium/src/+/673937e2bad1a043d6c00d8a9c4d434507a23179/chrome/test/supervised_user/embedded_test_server_setup_mixin.h).
+
+- [Go certificate roots](https://pkg.go.dev/crypto/x509#SystemCertPool) for the
+  explicit fixture SSL_CERT_FILE trust installation.
+- [Pinned gateway callback source](https://github.com/oauth2-proxy/oauth2-proxy/blob/v7.15.6/oauthproxy.go)
+  for state decoding before missing-CSRF-cookie rejection.
+
+Verified 10 November 2026: [run 42781825221](https://github.com/EnigmaThe1/OmniXat/actions/runs/42781825221)
+passed both gateway cases and the complete 503-test pipeline plus container build.
+This is bounded compatibility evidence, subject to the open gates above.

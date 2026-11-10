@@ -1186,3 +1186,25 @@ state, remove the issued CSRF cookie, then require exactly 403 and no session.
 This exercises the intended missing-cookie rejection without accepting 500.
 All prior services/provider/prototype cases passed again; full follow-up CI remains
 required. Checked the pinned gateway's OAuthCallback implementation for this path.
+
+## Verified actual gateway handover — 10 November 2026
+
+`84f6142e7bd5608a8393469c53aa0358724f4b50` passed
+[run 42781825221](https://github.com/EnigmaThe1/OmniXat/actions/runs/42781825221):
+**503 tests** (48 core, 21 identity, 392 PostgreSQL, five native provider, two
+provider Chromium, two actual gateway Chromium, 13 customer Chromium, all 20
+retained prototype tests), plus the customer container build. This closes the
+pending gateway CI above. See commercial/GATEWAY_BROWSER_QUALIFICATION.md for
+setup, sources and limits. Both gateway/provider and gateway/app connections use
+verified loopback TLS; no production HTTPS or identity checks were relaxed.
+The customer config refresh default is one minute, below the disposable provider's
+three-minute token life. Operator session timing still requires qualification.
+
+Next: qualify actual new-tab recovery/pending-file saves and account switching,
+then authorised scanner/draft review through the customer website. Other existing
+browser tests still use a gateway stand-in; provider logout, server-side cookie
+revocation, concurrent refresh, MFA/recovery and production security/restore remain
+open. Local socket restrictions persist, but full CI passed the real browser cases.
+The final follow-up records evidence and documentation only. Fetch and inspect the
+current remote/checkpoint before resuming; no active writer/task remains after
+publication. No deployment, paid activation, contracts or statutory action.

@@ -3326,3 +3326,33 @@ state, remove the issued CSRF cookie, then require exactly 403 and no session.
 This exercises the intended missing-cookie rejection without accepting 500.
 All prior services/provider/prototype cases passed again; full follow-up CI remains
 required. Checked the pinned gateway's OAuthCallback implementation for this path.
+
+### Actual gateway verified checkpoint — 10 November 2026
+
+`84f6142e7bd5608a8393469c53aa0358724f4b50` passed
+[GitHub Actions run 42781825221](https://github.com/EnigmaThe1/OmniXat/actions/runs/42781825221).
+Logs report **503 tests passed**: 48 core (0.090s), 21 identity (0.475s), 392
+PostgreSQL integration (73.381s), five native Keycloak (30.743s), two provider
+Chromium (29.789s), two actual gateway Chromium (38.882s), 13 customer Chromium
+(15.379s) and all 20 unchanged prototype tests including browser approval (3.698s).
+The customer container build passed. Python compilation, installer shell syntax,
+workflow YAML and diff checks passed locally; local socket binding remains host
+blocked. CI supplies the actual network/browser evidence. No tests were removed,
+skipped or given longer timeouts to obtain the passing result.
+
+The gateway now has demonstrated form/PKCE sign-in, secure host cookie issuance,
+attributed record writes, actual refreshed access-token forwarding and local
+cookie sign-out through the real TLS app/provider and PostgreSQL. It rejects
+unauthenticated spoofing and a genuine-state callback without its CSRF cookie;
+authenticated spoofed token headers cannot replace identity, and persisted viewer
+and revoked memberships still deny access. The template refresh interval is now
+one minute rather than five, below the qualified three-minute access-token life.
+
+This supersedes the pending-CI notes above. The documentation follow-up changes
+no runtime/test/workflow files. Next resumable increment: qualify new-tab pending
+save/upload recovery and account switching through this actual gateway/provider
+rather than the existing stand-in, then continue authorised scanner/draft-review
+customer journeys. Provider-wide logout, stolen-cookie/server-side revocation,
+concurrent refresh, MFA/recovery, key rotation and production restore/security
+qualification remain open. No production readiness, payment, contract, deployment
+or statutory transport claim. No active implementation remains after publication.
