@@ -1375,3 +1375,31 @@ timed out looking for the button. Added an explicit visible-button barrier befor
 revoking authority so the case tests denial from a previously authorised screen.
 No production code, timeout, permission or security assertion changed. Container
 build was skipped after that browser error. Full follow-up CI is still required.
+
+### Verified durable request checkpoint — 10 November 2026
+
+Code ca0ca5e270636c976ee0c8b1fce39b297d034160 passed the full commercial workflow
+run 42805866972, job 129794700680: **537 tests**, zero failures/errors/skips and
+customer container build. Exact suites: 56 core (0.310s), 21 identity (0.317s),
+408 PostgreSQL (66.135s), five native Keycloak (28.873s), two provider Chromium
+(24.811s), five gateway Chromium (65.063s), three real ClamAV worker/status
+qualification (1.460s), 17 customer Chromium (17.530s), and all 20 retained
+prototype tests including browser approval (3.233s). This supersedes pending/failure
+notes above. Both new request UI cases pass: persisted status across reload and
+fresh rejection after revocation from a previously authorised screen. The actual
+daemon test processes an API-created request through explicit --requested worker
+admission, stores its verdict and displays the result in Chromium. Browser request
+tests use the existing server-side gateway stand-in; independent real provider and
+gateway suites also pass. The final synchronization fix changes no runtime rule.
+
+Observed daemon package remains 1.5.4+dfsg-0ubuntu0.24.04.1; qualification uses only
+private synthetic signatures and fictional records, not production malware coverage.
+No automatic processor, same-policy request cancellation/re-authorisation or
+continuous in-flight cancellation is implemented. Next: complete that customer
+request lifecycle and bounded dispatch/retry, then qualified extraction/human draft
+review through shared services. Read commercial/SCANNING.md for exact grants,
+configuration and limits. Production scanner/security/restore qualification remains
+open. This final follow-up changes documentation only; runtime matches the passing
+CI revision. No active writer remains after publication. Fetch and inspect current
+remote/checks before resuming. No deployment, billing activation, contract, private
+record publication or statutory submission occurred.
