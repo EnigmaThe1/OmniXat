@@ -28,6 +28,7 @@ class CustomerScanRequestBrowserTests(CustomerScanRequestFixture):
         expect(page.get_by_role('button',name='Request scan',exact=True)).to_have_count(0)
         self.owner.execute("UPDATE omnixat.memberships SET role='editor' WHERE user_id=%s",(self.user,))
         page.reload(); page.get_by_role('button',name='Check scan status',exact=True).click()
+        expect(page.get_by_role('button',name='Request scan',exact=True)).to_be_visible()
         self.owner.execute('UPDATE omnixat.memberships SET revoked_at=now() WHERE user_id=%s',(self.user,))
         page.get_by_role('button',name='Request scan',exact=True).click()
         expect(page.locator('#content')).to_be_hidden()

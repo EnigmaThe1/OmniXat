@@ -1364,3 +1364,14 @@ and bounded dispatch/retry remain the next resumable step, then qualified extrac
 and human draft review. Scanner qualification uses synthetic rules; production
 malware coverage/configuration/security/restore remain open. Nothing deployed,
 billed, contracted, privately disclosed or submitted to an authority.
+
+### Request-browser CI follow-up
+
+b200b24 run 42804900353 passed core/identity/all 408 PostgreSQL tests, actual
+provider/gateway and ClamAV suites, 16 of 17 customer browser cases and all 20
+retained prototype cases. One new browser case revoked the member immediately
+after starting asynchronous status lookup, before Request scan rendered; it then
+timed out looking for the button. Added an explicit visible-button barrier before
+revoking authority so the case tests denial from a previously authorised screen.
+No production code, timeout, permission or security assertion changed. Container
+build was skipped after that browser error. Full follow-up CI is still required.
