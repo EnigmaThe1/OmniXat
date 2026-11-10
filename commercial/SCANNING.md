@@ -178,3 +178,21 @@ PostgreSQL capability/RLS semantics checked **10 November 2026** against the
 and [SECURITY DEFINER guidance](https://www.postgresql.org/docs/current/sql-createfunction.html).
 New functions fix search_path, enable row_security and revoke PUBLIC execute.
 Tests include a non-BYPASSRLS migration owner with forced RLS.
+
+## Explicit bounded requested batch
+
+Run `python -m omnixat_core.scan_worker --tenant TENANT_UUID --organisation
+ORGANISATION_UUID --batch-file /private/operator-manifest.json` from commercial.
+The manifest is a private service-owned JSON array of one to five distinct canonical
+evidence UUID strings; never publish a real manifest or accept it as an HTTP body.
+All IDs are validated before any item starts. Tenant/organisation apply to every
+item. Batch mode always requires current-policy customer requests and freshly
+checks requester authority for each item, even without --requested. Scanner config,
+credentials, policy checks, claims and verdict persistence use the existing services.
+
+The command emits one JSON receipt per completed item and stops at the first
+failure with a nonzero exit. Earlier receipts remain committed; the unprocessed
+suffix is not a successful batch. Operator retry of the same manifest reuses the
+existing durable verdicts. This is a five-item work cap, not a strict overall wall
+clock SLA: existing per-scan and database timeouts still apply. No background
+service, queue enumeration, automatic retry, cancellation or ledger effect starts.

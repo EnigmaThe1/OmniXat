@@ -1422,3 +1422,27 @@ qualification. Ancestor directories and concurrent writes to the same inode must
 still be operator-controlled. Next: request cancellation/re-authorisation and
 bounded dispatch, then qualified extraction/human review. No active writer remains
 after publication. No deployment, payment, contract, private records or filing.
+
+## Bounded requested-scan dispatch checkpoint — 10 November 2026
+
+Added explicit --batch-file worker mode: private operator manifest, one to five
+distinct canonical evidence UUIDs, fixed tenant/organisation, full ID validation
+before work and mandatory fresh current-request admission for every item. It
+emits each committed receipt, stops on the first failure, and retries reuse durable
+verdicts from the completed prefix. No background service or automatic retry starts.
+Cancellation/re-authorisation, queue enumeration, extraction and ledger remain open.
+
+Local validation: 66 core tests (0.059s), 21 identity (0.294s), and all 411 PostgreSQL
+integration tests (48.470s) passed on disposable PostgreSQL 16.2. Three new core
+cases cover strict manifests; three new PostgreSQL cases cover partial failure/
+retry, revocation between items and validation/admission before scanning. Compilation
+and diff checks passed. Existing real-daemon qualification now exercises the batch
+CLI with a private single-item manifest; full browser/daemon/container CI for this
+revision remains pending. No test was skipped or removed. The preceding 9e5107c
+run 42831147525 passed all 544 tests and container build, closing its pending note.
+
+See commercial/SCANNING.md for invocation and limits. The five-item cap is not an
+overall wall-clock SLA; per-service timeouts apply. Production scanner qualification
+still uses synthetic rules only. Next: customer cancellation/re-authorisation, then
+qualified extraction and human draft review. No active writer remains after
+publication; no deployment, payment, contract, private records or statutory action.

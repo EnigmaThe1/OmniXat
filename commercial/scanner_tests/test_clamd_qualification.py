@@ -33,9 +33,11 @@ class ClamdQualificationTests(CustomerScanRequestFixture):
         dsn.write_text(self.scanner_dsn); settings.chmod(0o600); dsn.chmod(0o600)
         self.policy(self.daemon.policy_version)
         self.assertEqual(self.request().status_code,202)
+        manifest=Path(self.spool.name)/'batch.json'
+        manifest.write_text(json.dumps([self.evidence])); manifest.chmod(0o600)
         output=StringIO()
         with patch.dict(os.environ,{'OMNIXAT_SCANNER_CONFIG_FILE':str(settings),'OMNIXAT_SCANNER_DSN_FILE':str(dsn)}),redirect_stdout(output):
-            self.assertEqual(main(['--tenant',self.a,'--organisation',str(self.org),'--evidence',self.evidence,'--requested']),0)
+            self.assertEqual(main(['--tenant',self.a,'--organisation',str(self.org),'--batch-file',str(manifest)]),0)
         receipt=json.loads(output.getvalue()); self.assertEqual(receipt['verdict'],'clean')
         self.policy(self.daemon.policy_version)
         self.assertEqual(self.status().json()['data']['status'],'scanned')
