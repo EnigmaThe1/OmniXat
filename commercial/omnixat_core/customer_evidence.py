@@ -52,7 +52,7 @@ def evidence_actor(connection, verifier, token, tenant, *, write=False, expected
 
 
 class CustomerEvidence:
-    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None):
+    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None):
         self.verifier, self.connections = verifier, connection_factory
         if status_connections is not None and not callable(status_connections):
             raise ValueError('Server-owned status connection factory required')
@@ -60,6 +60,9 @@ class CustomerEvidence:
         if request_connections is not None and not callable(request_connections):
             raise ValueError('Server-owned request connection factory required')
         self.request_connections = request_connections
+        if review_connections is not None and not callable(review_connections):
+            raise ValueError('Server-owned review connection factory required')
+        self.review_connections = review_connections
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
@@ -115,6 +118,12 @@ class CustomerEvidence:
         from .evidence_status_postgres import read_scan_status
         with self.status_connections() as connection:
             return read_scan_status(connection,self.verifier,token,tenant,organisation,evidence)
+
+    def csv_review(self,token,tenant,organisation,evidence):
+        self.authorize(token,tenant,organisation)
+        from .customer_csv_review import read_latest_csv
+        with self.review_connections() as connection:
+            return read_latest_csv(connection,self.verifier,token,tenant,organisation,evidence)
 
     def request_scan(self, token, tenant, organisation, evidence, expected, cancel=False, reauthorise_at=None):
         self.authorize(token,tenant,organisation,expected_actor=expected)
@@ -176,7 +185,7 @@ class CustomerEvidence:
                 if evidence is not None:
                     if request.query_params:
                         raise ApiError(400, 'unsupported_parameter')
-                    operation = self.scan_status if request.url.path.endswith('/scan-status') else self.receipt
+                    operation = self.csv_review if request.url.path.endswith('/csv-review') else self.scan_status if request.url.path.endswith('/scan-status') else self.receipt
                     result = await run_in_threadpool(operation, token, tenant, organisation, evidence)
                     return JSONResponse({'data':result,'request_id':request.scope['request_id']})
                 pairs = list(request.query_params.multi_items())
@@ -288,4 +297,7 @@ class CustomerEvidence:
                                 self.endpoint,methods=['POST']))
             routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/scan-reauthorisations',
                                 self.endpoint,methods=['POST']))
+        if self.review_connections is not None:
+            routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-review',
+                                self.endpoint,methods=['GET']))
         return routes

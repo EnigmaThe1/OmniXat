@@ -129,3 +129,8 @@ remain quarantined; no scanner, extraction, posting or filing is enabled by uplo
 [Trusted scanning and durable requests](SCANNING.md) connect an explicit private-socket
 ClamAV worker, separate customer status/request capabilities and Request scan UI.
 They do not automatically process uploads or qualify production malware coverage.
+
+[Customer CSV candidate inspection](CSV_REVIEW.md) displays existing eligible
+extractions, source coordinates, exact decimals and unanswered questions through a
+separate read-only service/API/UI capability. Answer writes and draft approval are
+not part of this inspection slice.

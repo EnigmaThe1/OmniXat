@@ -178,6 +178,15 @@ function renderEvidence() {
     button.setAttribute('aria-controls', receipt.id);
     button.addEventListener('click', () => viewReceipt(item, button, receipt));
     row.append(button, receipt);
+    if (state.context.csv_review_access && item.media_type === 'text/csv') {
+      const reviewButton = element('button', 'Inspect CSV candidates', 'button secondary'); reviewButton.type = 'button';
+      const reviewPanel = element('div', undefined, 'evidence-receipt'); reviewPanel.hidden = true;
+      reviewPanel.id = `csv-review-${item.id}`; reviewPanel.setAttribute('role', 'region');
+      reviewPanel.setAttribute('aria-label', `CSV candidates ${item.id}`);
+      reviewButton.setAttribute('aria-controls', reviewPanel.id); reviewButton.setAttribute('aria-expanded', 'false');
+      reviewButton.addEventListener('click', () => viewCSVCandidates(item, reviewButton, reviewPanel));
+      row.append(reviewButton, reviewPanel);
+    }
     if (state.context.scan_status_access) {
       const scanButton = element('button', 'Check scan status', 'button secondary');
       scanButton.type = 'button';
@@ -192,6 +201,37 @@ function renderEvidence() {
   }
   $('evidence-count').textContent = `${state.evidence.length} loaded`;
   show('empty-evidence', state.evidence.length === 0); show('more-evidence', Boolean(state.evidenceCursor));
+}
+async function viewCSVCandidates(item, button, panel) {
+  const epoch = state.epoch;
+  panel.hidden = false; panel.replaceChildren(element('p', 'Loading CSV candidates…'));
+  panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
+  try {
+    const result = await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/csv-review`);
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    const details = [element('strong', 'Latest eligible CSV extraction'),
+      element('p', `Extraction ${result.job_id} · ${result.extractor_version} · stored ${dateText(result.stored_at)}`),
+      element('p', `Policy: ${result.policy_version} · SHA-256: ${result.content_sha256}`),
+      element('p', 'Candidates require review. These values do not post entries or approve a filing.')];
+    const values = element('ul');
+    for (const value of result.amounts) {
+      values.append(element('li', `${value.field_name} · row ${value.row}, column ${value.column}: ${value.amount ?? value.status}`));
+    }
+    details.push(values);
+    for (const answer of result.answers) {
+      details.push(element('p', `Recorded answer for ${answer.field_name} · row ${answer.row}, column ${answer.column}: ${answer.amount ?? 'unavailable'} · ${answer.answered_by} · ${dateText(answer.answered_at)}`));
+    }
+    for (const question of result.questions) {
+      details.push(element('p', `${question.field_name} · row ${question.row}, column ${question.column}: ${question.question}`));
+    }
+    if (!result.questions.length) details.push(element('p', 'No unanswered cell questions.'));
+    panel.replaceChildren(...details); button.textContent = 'Refresh CSV candidates';
+  } catch (error) {
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    panel.replaceChildren(element('p', error.status === 404 ? 'No eligible CSV extraction is available. Refresh after a trusted extraction completes.' : errorMessage(error)));
+    button.textContent = 'Retry CSV candidates';
+    if (error.status === 401 || error.status === 403) { panel.replaceChildren(); fail(error); }
+  } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; }
 }
 async function viewScanStatus(item, button, panel) {
   const epoch = state.epoch;

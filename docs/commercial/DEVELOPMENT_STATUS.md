@@ -3748,3 +3748,41 @@ evidence gate and validated shared services. This final follow-up changes only
 documentation; runtime matches the passing revision. No active writer after
 publication. Fetch/check current branch and checks before resuming. No deployment,
 billing activation, paid contract, private record publication or statutory action.
+
+## Customer CSV candidate inspection — in progress (10 November 2026)
+
+Recovered clean 61e63db; latest CI 42863411656 passed, no active writer or commercial
+PR. Connect existing eligible CSV review results/decoders to an opt-in read-only
+customer API/UI with separate execute-only DSN and fresh identity/member checks.
+Show latest eligible extraction, provenance, exact candidates/answers and focused
+questions; no originals, extraction trigger, answer writes, approval or posting.
+
+## Customer CSV candidate inspection checkpoint — 10 November 2026
+
+Implemented migration 0068 and separate execute-only customer CSV reader, opt-in
+DSN/app factory, read-only scoped GET and responsive Inspect CSV candidates panel.
+Latest eligible csv-amount-v1 result shows job/evidence, policy/extractor versions,
+SHA-256, stored time, exact decimal strings, row/column references, recorded answer
+attribution and only unanswered questions. Uses existing eligibility/review SQL and
+shared amount/answer decoders; no original or extraction/write/approval capability
+on the new reader. Human persisted membership/cutoff is independently rechecked
+inside SQL; API scopes are retained, not stripped into an interactive principal.
+
+Local validation: 66 core tests (0.067s), 21 identity (0.326s), all 424 PostgreSQL
+integration tests (53.439s) passed on disposable PostgreSQL 16.2. Six new cases
+cover real deterministic extraction-to-inspection, provenance/questions/answers,
+policy/block/claim gating, authority/tenant/parent isolation, dedicated grants,
+malformed-latest fail-closed handling and non-BYPASSRLS function-owner chain.
+Compilation, JavaScript syntax and diff checks passed. Chromium executable absent
+locally; two new browser cases (stale/blocked refresh, mobile and expiry clearing)
+and retained full CI await publication. No test removed or skipped. Current remote
+61e63db run 42863411656 passed before this increment.
+
+Read commercial/CSV_REVIEW.md for opt-in setup, grants/API and qualification limits.
+This slice inspects existing candidates only; it does not trigger extraction, save
+answers, approve drafts or post entries. Fixture verdicts are fictional; independent
+real daemon/provider suites remain retained. Next: explicit qualified extraction
+and focused answer/draft workflows through shared services, with current authority
+and source gates. Historic extraction browsing and production scanner/security/
+restore qualification remain open. No active writer after publication; fetch/check
+remote before resuming. No deployment, billing, contract, private data or filing.

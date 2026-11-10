@@ -305,3 +305,9 @@ This is not provider-wide logout, MFA or server-side session revocation.
 metadata to the evidence list. The status reader uses separate execute-only grants
 and OMNIXAT_SCAN_STATUS_DSN_FILE; the web process receives no scanner credentials
 or original-byte read capability. This does not automatically queue or scan uploads.
+
+## Opt-in CSV candidate inspection
+
+The [CSV review guide](CSV_REVIEW.md) configures a separate read-only capability
+for latest eligible source-backed decimal candidates, prior answers and focused
+questions. Inspection does not approve or post a draft or trigger extraction.

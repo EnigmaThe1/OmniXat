@@ -42,6 +42,8 @@ def create_configured_app():
     status_dsn = _file(status_dsn_path,secret=True) if status_dsn_path else None
     request_path = os.environ.get('OMNIXAT_SCAN_REQUEST_DSN_FILE')
     request_dsn = _file(request_path,secret=True) if request_path else None
+    review_path = os.environ.get('OMNIXAT_CSV_REVIEW_DSN_FILE')
+    review_dsn = _file(review_path,secret=True) if review_path else None
     admission = BoundedSemaphore(16)
     def factory(dsn):
         @contextmanager
@@ -59,4 +61,5 @@ def create_configured_app():
                       directory_connection_factory=factory(directory_dsn),public_origin=origin,
                       evidence_quarantine_dir=os.environ.get("OMNIXAT_EVIDENCE_SPOOL_DIR"),
                       scan_status_connection_factory=factory(status_dsn) if status_dsn else None,
-                      scan_request_connection_factory=factory(request_dsn) if request_dsn else None)
+                      scan_request_connection_factory=factory(request_dsn) if request_dsn else None,
+                      csv_review_connection_factory=factory(review_dsn) if review_dsn else None)
