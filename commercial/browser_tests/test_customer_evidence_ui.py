@@ -123,7 +123,7 @@ class CustomerEvidenceBrowserTests(CustomerEvidenceFixture):
         page.goto(self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}')
         button = page.get_by_role('button',name='View receipt',exact=True)
         expect(button).to_be_visible()
-        panel = page.get_by_role('region',name='Evidence receipt '+evidence,exact=True)
+        panel = page.get_by_role('region',name='Evidence receipt '+evidence,exact=True,include_hidden=True)
         original = self.client.request
         def unavailable(method,url,**kwargs):
             if str(url).endswith('/evidence/'+evidence):
