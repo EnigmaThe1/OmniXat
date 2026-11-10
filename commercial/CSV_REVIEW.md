@@ -51,3 +51,9 @@ PostgreSQL SECURITY DEFINER/search-path semantics rechecked **10 November 2026**
 https://www.postgresql.org/docs/current/sql-createfunction.html. New capability
 uses fixed search_path, row_security and revoked PUBLIC execute. Tests include a
 non-BYPASSRLS migration owner throughout the review/eligibility function chain.
+
+## Explicit extraction prerequisite
+
+The [trusted CSV worker](CSV_EXTRACTION_WORKER.md) can now populate candidates
+from a private operator-selected plan through the existing scan/extraction gate.
+It exposes no customer HTTP trigger or automatic processing service.

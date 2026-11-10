@@ -1586,3 +1586,32 @@ security/restore and historic extraction browsing remain open. This final follow
 changes documentation only; runtime matches the passing revision. No active writer
 after publication. Fetch/check remote before resuming. No deployment, billing
 activation, paid contract, private record publication or statutory action.
+
+## Explicit CSV extraction worker checkpoint — 10 November 2026
+
+Added csv_extract_worker CLI and strict private-plan validator, reusing the existing
+source-coordinate validator, scan-eligibility gate and durable CSV extraction service.
+Stable canonical tenant/organisation/evidence/job IDs and 1–32 explicit cells are
+validated before database access. Separate private extraction credentials have no
+customer web route. Output contains only a minimal receipt; generic nonzero failure
+leaves uncertain outcomes to exact-plan retry. Conflicting job plans cannot overwrite
+candidates. No original bytes/financial values/credentials in CLI output.
+
+Local validation: 70 core tests (0.100s), 21 identity (0.631s), all 428 PostgreSQL
+integration tests (97.071s) on disposable PostgreSQL 16.2 passed. Four new core cases
+cover plans/schema/coordinate bounds; four new CLI/database cases cover persistence
+and retry, source gates/scopes/claims, conflicting plans and pre-connect validation/
+overprivileged roles. Compilation and diff checks passed. A new scanner qualification
+case exercises real ClamAV, the actual worker CLI and Chromium candidate inspection;
+that and the retained full daemon/browser/container/prototype checks await CI. No
+existing test removed or skipped. Prior c7033f0 run 42874115505 passed.
+
+See commercial/CSV_EXTRACTION_WORKER.md for grants, setup and limits. This is an
+explicit operator-authorised deterministic CSV path, not a public extraction trigger,
+automatic processor, OCR/model adapter, production malware qualification or ledger
+posting. Plans contain source references, never guessed amounts. Next: durable
+customer extraction requests and focused answer/draft workflows through shared
+services, preserving fresh authority and current source eligibility. Production
+scanner/security/restore and statutory approval gates remain open. No active writer
+after publication; fetch/check current remote before resuming. No deployment,
+billing activation, contract, private record publication or statutory submission.
