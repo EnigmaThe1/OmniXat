@@ -3103,3 +3103,75 @@ authorised scanning and customer draft review. No external provider/session or
 whole-platform production qualification is claimed by these stand-in browser tests.
 No deployment, paid activation or statutory action occurred. No unfinished local
 implementation or failed CI remains for this increment.
+
+## Maintained customer identity qualification — implemented; CI pending (10 November 2026)
+
+Recovered clean remote aeff9c2 with zero divergence and successful verify check;
+no active local writer, other checkout or unfinished implementation was found.
+Scope: an opt-in, disposable Keycloak 26.8.2 qualification harness with generated
+fictional credentials and verified loopback TLS. Exercise actual authorization-code
+and S256 PKCE login, RFC 9068 access-token profile, replay/mismatch rejection and
+existing tenant-scoped HTTP/PostgreSQL services. Pin the official release archive
+SHA-256 in CI. Production token checks remain unchanged. No public realm, external
+account, gateway activation, billing, statutory operation or private record.
+Gateway cookies/browser redirects, MFA/recovery and full production identity
+qualification remain subsequent acceptance work; do not claim them from this slice.
+
+Implemented the opt-in qualification package and five real-provider/PostgreSQL/HTTP
+cases. A checksum-pinned official archive installer and Java 21 CI step run a fresh
+Keycloak 26.8.2 process on verified loopback TLS. Private files contain only generated
+fictional credentials, account, certificate and isolated H2 state, and are cleaned up
+with the process. No ambient database/GitHub/proxy credentials are passed to it.
+No production factory, verifier, grant or schema was changed.
+
+Real form login/code exchange uses exact callback/state/response issuer, S256 and
+ID-token nonce verification. The minimal RFC 9068 client explicitly maps subject,
+API audience and client_id; records:read is default and records:write optional.
+The actual provider initially omitted access-token sub and was correctly rejected
+by the unchanged verifier; the explicit subject mapper fixes the provider profile.
+Actual provider ID tokens/wrong audiences are rejected by the API verifier.
+Refreshed tokens retain the profile; rotated refresh/code reuse and wrong PKCE
+are rejected. Password/service-account grants remain disabled. Provider-signed
+read-only tokens, viewer/cutoff/unprovisioned identities and other tenants cannot
+obtain record writes. Authenticated attributed note creation/replay still uses the
+same database services. See KEYCLOAK_CUSTOMER_QUALIFICATION.md for exact limits.
+
+Verification on 10 November 2026 (Python 3.12, Java 21.0.13, PostgreSQL 16.15
+UTF8 with SCRAM-required disposable-cluster TCP authentication):
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **48 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v` with
+  explicit disposable OMNIXAT_TEST_ADMIN_DSN: **392 passed in 50.631s**.
+- `cd commercial && PYTHONPATH=.:integration_tests python3 -m unittest discover -s provider_tests -v`
+  with OMNIXAT_KEYCLOAK_HOME pointing to the checksum-verified official archive:
+  **5 passed in 29.829s** against actual Keycloak 26.8.2; **466 service/provider
+  tests total**. No HTTP provider response or signed token is mocked. Fixture
+  startup/import, per-test identity cleanup and OAuth error-response expectations
+  were corrected before this complete passing run. The missing-PKCE case asserts
+  an exact invalid_request callback and absence of code; disabled grants assert
+  unauthorized_client, rather than assuming all OAuth rejections have HTTP 400.
+- Existing `cd commercial && PYTHONPATH=.:integration_tests OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest discover -s browser_tests -v`:
+  **13 errors before page load**, the known host Unix-socket prohibition.
+- Unchanged `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest discover -s tests -v`:
+  **19 passed, 1 failed** at the retained browser approval case (Chromium unavailable).
+  No browser case/assertion/timeout was changed or skipped. New CI must exercise
+  the full combination; the recovered aeff9c2 verify check had already passed.
+- Shell syntax, Python compilation, workflow YAML parse and `git diff --check`:
+  passed. Local Docker is unavailable; preserve the existing CI container build.
+
+Primary release checksum metadata, pinned Keycloak mapper/config source and runner
+Java inventory were checked on 10 November 2026 and linked in the new guide.
+Production dependencies and legal rules are unchanged. This is actual provider
+protocol/service compatibility, not browser/gateway or whole-platform production
+qualification. The fixture still omits production email/MFA/recovery flows and
+operator key approval/rotation. No real account, deployment, bank/model/scanner,
+payment activation or statutory action occurred.
+
+Next resumable step: inspect this commit's verify check including the new native
+provider step, all 13 customer Chromium cases, retained prototype and container.
+Resolve any CI environment/code failure. Then extend the qualification harness
+with actual OAuth2 Proxy/browser login, cookie renewal/account switch/logout and
+provider key/session revocation; connect that qualified journey to authorised
+scanner and draft review. Do not substitute these HTTP form tests for the actual
+browser/gateway acceptance matrix. No active implementation remains after publication.

@@ -43,6 +43,16 @@ jobs:
           python -m unittest discover -s tests -q
           python -m unittest discover -s identity_tests -q
           python -m unittest discover -s integration_tests -v
+      - name: Real Keycloak customer identity qualification
+        working-directory: commercial
+        env:
+          PYTHONPATH: .:integration_tests
+          OMNIXAT_KEYCLOAK_HOME: ${{ runner.temp }}/omnixat-keycloak-qualification
+        run: |
+          export JAVA_HOME="${JAVA_HOME_21_X64:?Java 21 is required}"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          bash qualification/install_keycloak.sh "$OMNIXAT_KEYCLOAK_HOME"
+          python -m unittest discover -s provider_tests -v
       - name: Customer website in real Chromium
         working-directory: commercial
         env:

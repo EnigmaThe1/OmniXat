@@ -272,3 +272,12 @@ Primary technical references checked 10 November 2026:
 and [browser noopener behaviour](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/noopener).
 No dependency version or legal rule changed. Provider-wide logout is not claimed;
 OAuth2 Proxy's local sign-out alone does not necessarily end the provider session.
+
+## Real maintained-provider compatibility harness
+
+[Keycloak customer qualification](KEYCLOAK_CUSTOMER_QUALIFICATION.md) now provides
+an opt-in real authorization-code/PKCE and refresh-token matrix against disposable
+Keycloak 26.8.2, followed by the same tenant HTTP/PostgreSQL services. It keeps the
+strict production token verifier unchanged. This is separate from the actual-
+Chromium workspace suite's gateway stand-in. Exact OAuth2 Proxy cookie/login/logout,
+MFA/recovery and signing-key rotation remain required production acceptance.

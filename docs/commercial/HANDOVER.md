@@ -1072,3 +1072,26 @@ No active implementation remains. Resume with exact maintained gateway/provider
 login, renewal/revocation/key rotation/logout qualification, then authorised
 scanner and customer draft review; fictional gateway fixtures are not a real
 provider acceptance result. No deployment, payment activation or filing occurred.
+
+## Latest real customer provider checkpoint (10 November 2026)
+
+An opt-in disposable Keycloak 26.8.2 qualification package now exercises actual
+form/code login, S256, strict RFC 9068 token validation and refresh, replay/grant
+rejection, and current tenant HTTP/PostgreSQL authority. The official archive is
+SHA-256 pinned; CI uses Java 21. Private generated account/client/TLS material
+stays in a loopback-only temporary realm and is cleaned up. Production identity
+code/schema/grants are unchanged. See KEYCLOAK_CUSTOMER_QUALIFICATION.md.
+
+The minimal provider profile initially lacked access-token sub; an explicit subject
+mapper fixes that configuration without relaxing the verifier. **48 core + 21
+identity + 392 integration + 5 actual-provider tests = 466 pass** locally on
+PostgreSQL 16.15/Java 21.0.13. All 13 customer browser cases remain locally host-
+blocked; unchanged prototype is 19/20 locally. No browser test skipped/changed.
+Check the published CI for the new provider step plus browser/prototype/container.
+
+This qualifies a narrow real-provider HTTP protocol/service path, not a full
+customer identity installation. Resume with CI, then actual OAuth2 Proxy/browser
+login, cookie renewal/account switch/logout, key/session revocation and production
+MFA/recovery qualification, followed by authorised scanner and draft review. No
+provider service was deployed, no real credentials/records were published and no
+billing or statutory action occurred. No active implementation remains after publication.
