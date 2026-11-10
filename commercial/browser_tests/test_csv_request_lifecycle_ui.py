@@ -7,11 +7,14 @@ from test_customer_csv_requests import REQUEST_SCOPES
 
 class CSVRequestLifecycleBrowserTests(CSVRequestLifecycleFixture):
     def open_requests(self):
+        from playwright.sync_api import expect
         self.ready(); self.request()
         page,errors=self.browser(token=self.token(scope=REQUEST_SCOPES))
         page.goto(self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}')
         page.get_by_role('button',name='Inspect extraction requests',exact=True).click()
         panel=page.get_by_role('region',name='CSV extraction requests '+self.evidence,exact=True,include_hidden=True)
+        # Inspection is asynchronous; establish readiness before tests expire tokens.
+        expect(panel.get_by_role('button',name='Cancel extraction request',exact=True)).to_be_enabled()
         return page,errors,panel
 
     def test_inspect_reload_cancel_and_retained_history_without_restarting(self):

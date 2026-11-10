@@ -30,7 +30,7 @@ def read_requests(connection,verifier,token,tenant,organisation,evidence,job=Non
             *_,selections=validate_extraction_plan({'tenant':str(tenant),'organisation':str(organisation),
                 'evidence':str(evidence),'job':str(row['job_id']),'selections':row['selections']})
         except (ValueError,TypeError): raise KeyError('Request inspection unavailable') from None
-        if row['state'] not in {'awaiting_worker','cancelled','result_recorded'}:
+        if row['state'] not in {'awaiting_worker','cancelled','result_recorded','reauthorised'}:
             raise KeyError('Request inspection unavailable')
         items.append({key:value.isoformat() if hasattr(value,'isoformat') else str(value) if isinstance(value,UUID)
             else value for key,value in row.items()}|{'selections':cell_documents(selections)})

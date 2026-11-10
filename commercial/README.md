@@ -153,3 +153,7 @@ no automatic processing, ledger posting or approval is enabled.
 attribution while allowing scoped customers to inspect history after reload and stop
 requested-worker storage. Cancellation is serialized with result storage; recorded
 results cannot be undone by this action. No background processor or approval is added.
+
+[CSV re-authorisation](CSV_REAUTHORISATION.md) connects Request extraction again to
+a fresh linked plan with current authority/source checks. Old cancellations remain
+retained; exact stale retries cannot restart a later cancelled replacement.

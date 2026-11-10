@@ -1842,3 +1842,32 @@ open. This documentation-only checkpoint leaves runtime identical to the passing
 revision. No active writer remains after publication. Fetch/check current remote,
 dirty state and divergence before resuming. No deployment, billing activation,
 paid contract, private-record publication or statutory submission occurred.
+
+## Explicit CSV re-authorisation checkpoint — 10 November 2026
+
+Recovered d3e1fdc clean but latest CI 42912727812 failed on the cancellation expiry
+case: gateway expiry could precede ready asynchronous request inspection. Its fixture
+now waits for the ready cancel control before changing tokens, retaining all assertions
+and timeouts. Do not rely solely on earlier passing 42911574481; final CI is required.
+
+Added migration 0072 and Request extraction again, creating a fresh linked child
+from an exact inspected cancellation through current authority/source/policy checks.
+Old plans/cancellation/attribution remain retained. Exact child/job/actor retries
+reconcile the first receipt and cannot restart a later child cancellation; another
+attempt conflicts. Reader signature/grants remain, with reauthorised historical
+state. See commercial/CSV_REAUTHORISATION.md for opt-in grants, API and limits.
+No interactive approval authority is constructed from bearer scopes.
+
+Local validation passed: 70 core (0.118s), 21 identity (0.337s), all 458 PostgreSQL
+cases (58.583s), including six new API/concurrency/authority/source cases and extended
+non-BYPASSRLS function-owner chain. Targeted six-case rerun adds disabled/revoked
+checks. Compilation, JavaScript syntax and diff checks passed. Chromium is absent
+locally; three new browser cases and all retained full CI await publication. No test
+removed or skipped. Existing failed rerun remains explicitly unresolved until final CI.
+
+Next: bounded explicit extraction dispatch, then draft review/corrections. Full lineage/
+older-page UI, quotas, daemon, production scanner/security/restore/OCR/model and human
+final-package approval remain open. Tab close/reload loses pending attempt state;
+inspect persisted receipts before replacing it. No active writer after publication;
+fetch/check remote/diff first. No deployment, billing activation, contract, private
+records or statutory action.

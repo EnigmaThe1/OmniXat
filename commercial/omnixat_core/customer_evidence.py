@@ -152,6 +152,20 @@ class CustomerEvidence:
         except CancellationUnavailable:
             raise ApiError(409,'extraction_cancellation_unavailable') from None
 
+    def reauthorise_csv_request(self,token,tenant,organisation,evidence,job,document,expected):
+        self.authorize(token,tenant,organisation,expected_actor=expected)
+        from .csv_requests_postgres import reauthorise_csv, RequestActorChanged, ReauthorisationUnavailable
+        from .evidence_extraction_postgres import CSVExtractionConflict
+        try:
+            with self.csv_request_connections() as connection:
+                return reauthorise_csv(connection,self.verifier,token,tenant,organisation,evidence,job,document,expected_actor=expected)
+        except ValueError:
+            raise ApiError(422,'invalid_reauthorisation') from None
+        except RequestActorChanged:
+            raise ApiError(409,'session_changed') from None
+        except (ReauthorisationUnavailable,CSVExtractionConflict):
+            raise ApiError(409,'extraction_reauthorisation_unavailable') from None
+
     def csv_request(self,token,tenant,organisation,evidence,document,expected):
         self.authorize(token,tenant,organisation,expected_actor=expected)
         from .csv_requests_postgres import request_csv, RequestActorChanged
@@ -264,7 +278,9 @@ class CustomerEvidence:
                 return JSONResponse({'data':result,'request_id':request.scope['request_id']})
             if request.query_params:
                 raise ApiError(400, 'unsupported_parameter')
-            if request.url.path.endswith(('/csv-answers','/csv-requests')):
+            if (request.url.path.endswith(('/csv-answers','/csv-requests'))
+                    or '/csv-requests/' in request.url.path and request.url.path.endswith('/reauthorisations')):
+                renewal=request.url.path.endswith('/reauthorisations')
                 extraction=request.url.path.endswith('/csv-requests')
                 body_limit=8192 if extraction else 2048
                 if initiating_actor is None:
@@ -287,8 +303,11 @@ class CustomerEvidence:
                     raise ApiError(408,'request_timeout') from None
                 except (ValueError,UnicodeDecodeError,RecursionError):
                     raise ApiError(400,'invalid_json') from None
-                result=await run_in_threadpool(self.csv_request if extraction else self.csv_answer,token,tenant,organisation,evidence,document,initiating_actor)
-                return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=202 if extraction else 200)
+                if renewal:
+                    result=await run_in_threadpool(self.reauthorise_csv_request,token,tenant,organisation,evidence,job,document,initiating_actor)
+                else:
+                    result=await run_in_threadpool(self.csv_request if extraction else self.csv_answer,token,tenant,organisation,evidence,document,initiating_actor)
+                return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=202 if extraction or renewal else 200)
             if evidence is not None:
                 # This action has no customer-selectable policy, verdict or payload.
                 # Read at most the fixed empty JSON document, with a bounded wait.
@@ -395,6 +414,7 @@ class CustomerEvidence:
             routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests',
                                 self.endpoint,methods=['POST']))
             routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests/{job_id}/cancellations',self.endpoint,methods=['POST']))
+            routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests/{job_id}/reauthorisations',self.endpoint,methods=['POST']))
         if self.csv_request_status_connections is not None:
             routes.extend([Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests',self.endpoint,methods=['GET']),
                 Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests/{job_id}',self.endpoint,methods=['GET'])])

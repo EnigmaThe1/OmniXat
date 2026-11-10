@@ -4136,3 +4136,55 @@ open. This documentation-only checkpoint leaves runtime identical to the passing
 revision. No active writer remains after publication. Fetch/check current remote,
 dirty state and divergence before resuming. No deployment, billing activation,
 paid contract, private-record publication or statutory submission occurred.
+
+## Explicit CSV re-authorisation and recovery — in progress (10 November 2026)
+
+Recovered clean d3e1fdc, one writer, no commercial-head PR. Latest documentation-head
+CI 42912727812 failed in the expiry Chromium test: it expired the gateway token
+before the asynchronous inspection GET had necessarily rendered a cancel button.
+Code run 42911574481 had passed; treat the latest failure as unresolved until rerun.
+Wait for ready inspection in the fixture, without removing assertions/timeouts.
+Add explicit cancelled-plan re-authorisation creating a fresh linked child request
+with current authority/policy/source gates; retain parent cancellation/history and
+bind exact retries so stale attempts cannot restart a later cancellation. Connect
+the customer UI and test persisted/API/concurrent/browser behavior. No daemon,
+ledger posting, statutory approval or production qualification is included.
+
+## Explicit CSV re-authorisation implementation — 10 November 2026
+
+Migration 0072 creates one fresh child per cancelled request through a composite
+parent link/uniqueness guard. The parent remains cancelled with its original plan,
+actor/time and policy. Fresh human editor/owner authority, cutoff, exact cancellation
+precondition and initiating actor are checked; the existing request service copies
+recorded cells and checks current source/policy. Existing child/actor/job retries
+return the original receipt without renewing authority or restarting a later child
+cancellation. Unrelated existing jobs cannot be adopted. The existing reader keeps
+its signature/grants and adds reauthorised historical state. Separate worker grants
+cannot include this new write capability. No scope stripping into approval.
+
+The website now offers Request extraction again and preserves the proposed child,
+cancellation timestamp and actor across uncertain saves/session recovery. It refreshes
+actual history on receipt reconciliation. Three new Chromium cases cover dispatch/
+candidate inspection, lost receipt plus later-child cancellation, and expiry/viewer
+recovery. The previous cancellation expiry fixture now awaits ready inspection before
+changing its token; assertions and timeouts are unchanged. See commercial/
+CSV_REAUTHORISATION.md for grants/API/config and limitations.
+
+Local checks passed: PYTHONPATH=commercial python -m unittest discover -s commercial/
+tests -q: 70 (0.118s); identity_tests: 21 (0.337s). Disposable PostgreSQL 16.2,
+PYTHONPATH=commercial:commercial/integration_tests python -m unittest discover -s
+commercial/integration_tests -q: all 458 passed (58.583s), including six new
+re-authorisation/API/concurrency cases and expanded non-BYPASSRLS owner chain.
+Targeted six-case rerun adds disabled/revoked checks. Compilation, JavaScript syntax
+and diff checks passed. Local Chromium is absent. Full provider/gateway/scanner/
+Chromium/container/retained prototype checks must verify this revision; no test
+removed/skipped. Latest old-head run 42912727812 failed on the readiness race above,
+so its failure is not treated as a passed checkpoint.
+
+Next: bounded explicit extraction dispatch, then draft review/corrections; older-page
+UI/lineage navigation, quotas and production scanner/security/restore/OCR/model and
+statutory human approval remain unfinished. Pending attempts remain tab-only; inspect
+persisted history after close/reload before replacing work. No daemon starts and no
+ledger/filing effect is added. No active writer after publication; fetch/check remote
+and dirty/divergence before resuming. No deployment, billing activation, contract,
+private records or statutory submission occurred.

@@ -24,7 +24,7 @@ async function request(url, options = {}) {
     let code = 'request_failed';
     try {
       const received = (await response.json()).error?.code;
-      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict', 'extraction_request_conflict', 'extraction_cancellation_unavailable'].includes(received)) code = received;
+      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict', 'extraction_request_conflict', 'extraction_cancellation_unavailable', 'extraction_reauthorisation_unavailable'].includes(received)) code = received;
     } catch (_) { /* Generic error on invalid responses. */ }
     throw new RequestError(response.status, code);
   }
@@ -35,6 +35,7 @@ async function request(url, options = {}) {
 function clearMessage() { show('error', false); show('notice', false); }
 function tell(text) { $('notice').textContent = text; show('notice', true); }
 function errorMessage(error) {
+  if (error.code === 'extraction_reauthorisation_unavailable') return 'This cancellation, source or replacement attempt is unavailable. Refresh requests before starting another attempt.';
   if (error.code === 'extraction_cancellation_unavailable') return 'A result is already recorded for this job. Cancellation cannot undo it. Refresh requests and inspect the candidates.';
   if (error.code === 'extraction_request_conflict') return 'This extraction job belongs to another recorded plan. Inspect the records before starting a new request.';
   if (error.code === 'answer_conflict') return 'An answer is already recorded. Refresh candidates to inspect it; recorded answers cannot be overwritten here.';
@@ -225,7 +226,7 @@ async function viewCSVRequests(item, button, panel) {
   try {
     const result = await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/csv-requests`);
     if (epoch !== state.epoch || !panel.isConnected) return;
-    const labels = {awaiting_worker: 'Awaiting an operator-run worker', cancelled: 'Cancelled — requested result storage is stopped',
+    const labels = {reauthorised: 'Replacement request recorded — original cancellation retained', awaiting_worker: 'Awaiting an operator-run worker', cancelled: 'Cancelled — requested result storage is stopped',
       result_recorded: 'A result is recorded for this job — inspect current candidates'};
     const details = [element('strong', 'Latest 20 extraction requests'),
       element('p', 'These are historical request receipts. Worker authority and source eligibility are rechecked before processing. Cancellation does not interrupt parsing or undo a recorded result.')];
@@ -240,14 +241,19 @@ async function viewCSVRequests(item, button, panel) {
         const cancel = element('button', 'Cancel extraction request', 'button secondary'); cancel.type = 'button';
         cancel.addEventListener('click', () => cancelCSVRequest(item, entry.job_id, button, panel)); article.append(cancel);
       }
+      if (entry.state === 'cancelled' && state.context?.can_request_csv && !state.pending.csvCancellation) {
+        article.append(element('p', 'Requesting again creates a fresh request for the same cells and retains this cancellation. Current authority and source eligibility will be checked.'));
+        const renew = element('button', 'Request extraction again', 'button secondary'); renew.type = 'button';
+        renew.addEventListener('click', () => cancelCSVRequest(item, entry.job_id, button, panel, entry.cancelled_at)); article.append(renew);
+      }
       details.push(article);
     }
     if (!result.items.length) details.push(element('p', 'No extraction requests recorded.'));
     if (result.has_more) details.push(element('p', 'Older requests exist. This view shows the latest 20.'));
     if (state.pending.csvCancellation?.evidence === item.id) {
       const pending = state.pending.csvCancellation;
-      details.push(element('p', `Confirm the pending cancellation for request ${pending.job}.`));
-      const retry = element('button', 'Retry extraction cancellation', 'button secondary'); retry.type = 'button';
+      details.push(element('p', `Confirm the pending ${pending.action === 'reauthorise' ? 're-authorisation' : 'cancellation'} for request ${pending.job}.`));
+      const retry = element('button', pending.action === 'reauthorise' ? 'Retry extraction re-authorisation' : 'Retry extraction cancellation', 'button secondary'); retry.type = 'button';
       retry.addEventListener('click', () => cancelCSVRequest(item, pending.job, button, panel)); details.push(retry);
     }
     panel.replaceChildren(...details); button.textContent = 'Refresh extraction requests';
@@ -257,19 +263,22 @@ async function viewCSVRequests(item, button, panel) {
     if (error.status === 401 || error.status === 403) { panel.replaceChildren(); fail(error); }
   } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; }
 }
-async function cancelCSVRequest(item, job, button, panel) {
+async function cancelCSVRequest(item, job, button, panel, cancellation = null) {
   if (state.saving) return;
   if (Object.keys(state.pending).some(key => key !== 'csvCancellation')) { tell('Confirm the pending save before starting another.'); return; }
   const operation = state.pending.csvCancellation || {evidence: item.id, job, actor: state.context.actor_id,
-    url: `${apiBase()}/organisations/${state.org}/evidence/${item.id}/csv-requests/${job}/cancellations`};
+    action: cancellation ? 'reauthorise' : 'cancel',
+    payload: cancellation ? {job_id: crypto.randomUUID(), cancelled_at: cancellation} : {},
+    url: `${apiBase()}/organisations/${state.org}/evidence/${item.id}/csv-requests/${job}/${cancellation ? 'reauthorisations' : 'cancellations'}`};
   state.pending.csvCancellation = operation; state.saving = true; clearMessage();
   const epoch = state.epoch;
   try {
-    await request(operation.url, {method: 'POST', headers: {'Content-Type': 'application/json',
-      'X-OmniXat-Expected-Actor': operation.actor}, body: '{}'});
+    const receipt = await request(operation.url, {method: 'POST', headers: {'Content-Type': 'application/json',
+      'X-OmniXat-Expected-Actor': operation.actor}, body: JSON.stringify(operation.payload)});
     delete state.pending.csvCancellation;
     if (epoch !== state.epoch || !panel.isConnected) return;
-    await viewCSVRequests(item, button, panel); tell('Extraction request cancelled. Its plan and attribution are retained.');
+    await viewCSVRequests(item, button, panel);
+    tell(operation.action === 'reauthorise' ? `Replacement request ${receipt.job_id} confirmed. Inspect its current status below.` : 'Extraction request cancelled. Its plan and attribution are retained.');
   } catch (error) {
     const rejected = error.code !== 'session_changed' && [400,403,404,409,413,415,422].includes(error.status);
     if (rejected) delete state.pending.csvCancellation;
@@ -277,7 +286,7 @@ async function cancelCSVRequest(item, job, button, panel) {
     if (error.status === 401 || error.status === 403) { panel.replaceChildren(); fail(error); }
     else {
       await viewCSVRequests(item, button, panel);
-      panel.append(element('p', errorMessage(error) + (rejected ? '' : ' Retry the same cancellation to confirm its outcome.')));
+      panel.append(element('p', errorMessage(error) + (rejected ? '' : ' Retry this same request action to confirm its outcome.')));
       if (error.code === 'session_changed') { fail(error); show('reauth', true); }
     }
   } finally { state.saving = false; $('workspace-select').disabled = Boolean(Object.keys(state.pending).length); }

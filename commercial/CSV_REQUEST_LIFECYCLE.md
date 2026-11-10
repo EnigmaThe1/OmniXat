@@ -96,3 +96,10 @@ https://www.postgresql.org/docs/16/explicit-locking.html. Functions retain fixed
 search_path, row_security and revoked PUBLIC execute. Tests include a non-BYPASSRLS
 function owner and actual concurrent cancellation/storage transactions in both orders.
 No legal rule, dependency or financial amount was changed.
+
+## Explicit replacement requests
+
+[CSV re-authorisation](CSV_REAUTHORISATION.md) now creates a fresh linked request
+from an inspected cancellation, retaining old history and binding exact retries.
+Earlier absence statements describe the initial lifecycle slice. It does not
+uncancel the parent, restart a cancelled child on stale retry or start a daemon.
