@@ -20,7 +20,8 @@ class KeycloakBrowserTests(unittest.TestCase):
         self.addCleanup(manager.stop)
         executable = os.environ.get('OMNIXAT_CHROMIUM_PATH')
         browser = manager.chromium.launch(headless=True,
-            args=['--ignore-certificate-errors-spki-list='+self.provider.browser_tls_pin],
+            args=['--ignore-certificate-errors-spki-list='+self.provider.browser_tls_pin,
+                  '--host-resolver-rules=MAP workspace.example.test ~NOTFOUND'],
             **({'executable_path':executable} if executable else {}))
         self.addCleanup(browser.close)
         context = browser.new_context(ignore_https_errors=False)
@@ -43,9 +44,11 @@ class KeycloakBrowserTests(unittest.TestCase):
         expect(page.locator('#username')).to_be_visible()
         page.locator('#username').fill('fictional-editor')
         page.locator('#password').fill(self.provider.password)
-        page.locator('#kc-login').click()
-        page.wait_for_url(CALLBACK+'?**')
-        query = parse_qs(urlsplit(page.url).query)
+        with page.expect_request(lambda request: request.url.startswith(CALLBACK+'?')) as callback:
+            page.locator('#kc-login').click()
+        # Redirect follow-ups are not reliably routed by Playwright. Capture the
+        # actual navigation request; DNS for this fictional host is blocked above.
+        query = parse_qs(urlsplit(callback.value.url).query)
         self.assertEqual(query.get('state'),[state])
         self.assertEqual(query.get('iss'),[self.provider.issuer])
         self.assertNotIn('error',query)
@@ -54,7 +57,7 @@ class KeycloakBrowserTests(unittest.TestCase):
         verified = self.provider.verifier.verify(tokens['access_token'])
         self.assertEqual(verified.subject,self.provider.subject)
         self.assertTrue({'records:read','records:write'} <= verified.scopes)
-        self.assertNotIn(tokens['access_token'],page.content())
+        self.assertNotIn(tokens['access_token'],callback.value.url)
         self.assertEqual(self.provider.exchange(query['code'][0],verifier).status_code,400)
 
     def test_real_browser_wrong_password_does_not_release_authorization_code(self):
@@ -63,6 +66,6 @@ class KeycloakBrowserTests(unittest.TestCase):
         page.locator('#username').fill('fictional-editor')
         page.locator('#password').fill(secrets.token_urlsafe(32))
         page.locator('#kc-login').click()
-        expect(page.locator('#input-error')).to_be_visible()
+        expect(page.get_by_text('Invalid username or password.',exact=True)).to_be_visible()
         self.assertTrue(page.url.startswith(self.provider.issuer+'/'))
         self.assertNotIn('code',parse_qs(urlsplit(page.url).query))

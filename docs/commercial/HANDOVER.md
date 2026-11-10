@@ -1128,3 +1128,8 @@ is claimed. CI runs both new cases alongside all prior tests. Compilation, YAML,
 diff checks and 48 core tests passed locally; actual provider-browser CI is pending.
 Resume from its CI result, then actual gateway cookies/renewal/logout. No deployment,
 private records, billing or filing. No active implementation remains after publication.
+
+Provider-browser follow-up: 1086220 CI passed services/native provider/prototype,
+but new browser cases found callback navigation and error-selector fixture issues.
+Capture the actual callback request with blocked fictional-host DNS and check the
+provider's exact rejection text. Follow-up CI is required; no browser success yet.

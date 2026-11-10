@@ -3248,3 +3248,16 @@ full-suite total is claimed before CI. Historical latest remote verify succeeded
 Next: inspect new provider-browser CI and fix real failures, then implement actual
 OAuth2 Proxy/browser cookie renewal/logout acceptance. The callback interception is
 explicitly a fixture and does not qualify the gateway. No deployment/billing/filing.
+
+### Provider-browser fixture correction
+
+1086220 CI run 42772376140 passed 461 services, five actual-provider tests and all
+20 unchanged prototype tests. Both new browser cases failed: the successful login
+redirect reached a browser error page because the fictional callback is not a
+real host, and the wrong-password page used a different error element ID. The
+negative case's accessibility snapshot showed the actual rejection message.
+The fixture now captures the actual callback navigation request and forces the
+fictional callback hostname unresolvable, preventing external code disclosure
+without requiring a fake successful callback document. It checks the exact rejection
+text instead of the obsolete element ID. State/issuer/code/nonce/token/replay checks
+remain, and no authentication or test timeout is relaxed. Inspect follow-up CI.

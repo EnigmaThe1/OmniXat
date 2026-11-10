@@ -104,8 +104,8 @@ actual provider login page over loopback TLS. The fixture certificate's generate
 SPKI SHA-256 is the only browser certificate exception; ignore_https_errors remains
 false. The existing HTTP client still verifies that certificate normally.
 
-The browser submits a real password form. The fixed fictional callback is intercepted
-to prevent external navigation, then the test driver validates state/response issuer,
+The browser submits a real password form. The fixed fictional callback navigation is captured, and its hostname is forced
+unresolvable by Chromium to prevent external traffic. The test driver validates state/response issuer,
 exchanges the actual code, checks ID-token nonce/signature and verifies the actual
 access token with the unchanged verifier. Tokens are never injected into the page.
 A second case checks that a wrong password shows an error without releasing a code.
