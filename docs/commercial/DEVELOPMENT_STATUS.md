@@ -3884,3 +3884,43 @@ no public trigger, automated OCR/model processing, answer submission, draft appr
 or ledger posting was added. Production scanner/security/restore qualification and
 human final-package approval gates remain open. No deployment, billing activation,
 paid contract, real-record publication or statutory submission occurred.
+
+## Customer CSV clarification answers — in progress (10 November 2026)
+
+Recovered clean remote 4ce7ebd; full CI 42883564462 passed. One writer, no
+commercial-head PR or unfinished local changes. Connect focused CSV answers to the
+customer website through a separate execute-only bearer-aware capability, strict
+exact-decimal/unavailable input and persisted human attribution. Bind submissions
+to the inspected job and initiating actor; recheck membership/source eligibility
+inside SQL. Preserve immutable answer retries/conflicts. Add PostgreSQL/API and
+Chromium journey coverage. No scope stripping into interactive approval, extraction
+trigger, ledger posting or filing approval. Durable extraction requests remain next.
+
+## Customer CSV clarification implementation checkpoint — 10 November 2026
+
+Migration 0069 and a separate answer-only login now wrap the existing validated
+clarification service with fresh persisted human editor/owner authority, token cutoff,
+source eligibility and initiating-actor continuity. Strict bounded POST accepts exact
+decimal strings or explicit unavailable amounts for the inspected job/cell. Existing
+immutable retries/conflicts and original candidates are preserved; no bearer scopes
+are converted into interactive approval authority. Opt-in customer form answers one
+question at a time, retains/fixes uncertain request body/job/actor in tab memory,
+clears candidate DOM on denied sessions and supports same-account retry/recovery.
+Read-only candidate-reader grants are unchanged. See commercial/CSV_ANSWERS.md.
+
+Local checks: PYTHONPATH=commercial python -m unittest discover -s commercial/tests
+-q: 70 passed (0.047s); identity_tests: 21 passed (0.254s). Disposable PostgreSQL
+16.2, PYTHONPATH=commercial:commercial/integration_tests python -m unittest discover
+-s commercial/integration_tests -q: all 436 passed (36.437s), including eight new
+answer/API cases and non-BYPASSRLS function-owner coverage. Compilation, JavaScript
+syntax and diff checks passed. Local Chromium download returned a truncated archive;
+four new browser cases and all retained real-provider/scanner/browser/prototype and
+container checks await CI. No test removed or skipped. Prior head CI 42883564462 passed.
+
+Limits: immutable answers have no correction UI; tab close/reload loses pending
+state (inspect saved answers before starting again). This is not draft approval,
+ledger posting, public extraction dispatch or production OCR/malware qualification.
+Next: durable authorised customer extraction requests, then draft review/corrections
+through shared services. Production scanner/security/restore and statutory approval
+gates remain open. No active writer after publication; fetch/check current remote
+before resuming. No deployment, billing, contract, private records or filing action.

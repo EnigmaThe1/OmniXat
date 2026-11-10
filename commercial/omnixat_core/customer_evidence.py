@@ -5,6 +5,7 @@ from tempfile import TemporaryFile
 from threading import BoundedSemaphore
 from uuid import UUID
 import os
+import json
 import stat
 
 import anyio
@@ -22,7 +23,7 @@ from .evidence_quarantine_postgres import store_quarantined_evidence
 from .identity import AuthenticationError
 from .identity_postgres import resolve_record_principal
 from .postgres import _tenant_transaction
-from .http_api import ApiError, error_response, expected_actor
+from .http_api import ApiError, error_response, expected_actor, _pairs, _reject_constant
 
 
 UPLOAD_TIMEOUT_SECONDS = 15
@@ -52,7 +53,7 @@ def evidence_actor(connection, verifier, token, tenant, *, write=False, expected
 
 
 class CustomerEvidence:
-    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None):
+    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None):
         self.verifier, self.connections = verifier, connection_factory
         if status_connections is not None and not callable(status_connections):
             raise ValueError('Server-owned status connection factory required')
@@ -63,6 +64,9 @@ class CustomerEvidence:
         if review_connections is not None and not callable(review_connections):
             raise ValueError('Server-owned review connection factory required')
         self.review_connections = review_connections
+        if answer_connections is not None and not callable(answer_connections):
+            raise ValueError('Server-owned answer connection factory required')
+        self.answer_connections = answer_connections
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
@@ -124,6 +128,20 @@ class CustomerEvidence:
         from .customer_csv_review import read_latest_csv
         with self.review_connections() as connection:
             return read_latest_csv(connection,self.verifier,token,tenant,organisation,evidence)
+
+    def csv_answer(self,token,tenant,organisation,evidence,document,expected):
+        self.authorize(token,tenant,organisation,expected_actor=expected)
+        from .customer_csv_answers import answer_csv, AnswerActorChanged
+        from .evidence_review_postgres import CSVClarificationConflict
+        try:
+            with self.answer_connections() as connection:
+                return answer_csv(connection,self.verifier,token,tenant,organisation,evidence,document,expected_actor=expected)
+        except ValueError:
+            raise ApiError(422,'invalid_answer') from None
+        except AnswerActorChanged:
+            raise ApiError(409,'session_changed') from None
+        except CSVClarificationConflict:
+            raise ApiError(409,'answer_conflict') from None
 
     def request_scan(self, token, tenant, organisation, evidence, expected, cancel=False, reauthorise_at=None):
         self.authorize(token,tenant,organisation,expected_actor=expected)
@@ -205,6 +223,29 @@ class CustomerEvidence:
                 return JSONResponse({'data':result,'request_id':request.scope['request_id']})
             if request.query_params:
                 raise ApiError(400, 'unsupported_parameter')
+            if request.url.path.endswith('/csv-answers'):
+                if initiating_actor is None:
+                    raise ApiError(400,'invalid_expected_actor')
+                if request.headers.getlist('content-type') != ['application/json'] or request.headers.getlist('content-encoding'):
+                    raise ApiError(415,'unsupported_media_type')
+                lengths=request.headers.getlist('content-length')
+                if lengths and (len(lengths)!=1 or not lengths[0].isascii() or not lengths[0].isdigit()
+                                or len(lengths[0])>10 or int(lengths[0])>2048):
+                    raise ApiError(413,'body_too_large')
+                content=bytearray()
+                try:
+                    with anyio.fail_after(5):
+                        async for chunk in request.stream():
+                            if len(content)+len(chunk)>2048:
+                                raise ApiError(413,'body_too_large')
+                            content.extend(chunk)
+                    document=json.loads(content.decode('utf-8'),object_pairs_hook=_pairs,parse_constant=_reject_constant)
+                except TimeoutError:
+                    raise ApiError(408,'request_timeout') from None
+                except (ValueError,UnicodeDecodeError,RecursionError):
+                    raise ApiError(400,'invalid_json') from None
+                result=await run_in_threadpool(self.csv_answer,token,tenant,organisation,evidence,document,initiating_actor)
+                return JSONResponse({'data':result,'request_id':request.scope['request_id']})
             if evidence is not None:
                 # This action has no customer-selectable policy, verdict or payload.
                 # Read at most the fixed empty JSON document, with a bounded wait.
@@ -300,4 +341,7 @@ class CustomerEvidence:
         if self.review_connections is not None:
             routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-review',
                                 self.endpoint,methods=['GET']))
+        if self.answer_connections is not None:
+            routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-answers',
+                                self.endpoint,methods=['POST']))
         return routes

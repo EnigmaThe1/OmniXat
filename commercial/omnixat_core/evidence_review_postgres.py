@@ -153,6 +153,17 @@ class CSVClarificationReceipt:
     answered_at: datetime
 
 
+def validate_clarification(cell, amount):
+    if (
+        type(cell) is not AmountCell or not isinstance(cell.field_name, str) or not _FIELD.fullmatch(cell.field_name)
+        or type(cell.row) is not int or not 1 <= cell.row <= _MAX_ROWS
+        or type(cell.column) is not int or not 1 <= cell.column <= _MAX_COLUMNS
+    ):
+        raise ValueError("Invalid clarification cell")
+    if amount is not None and (not isinstance(amount, str) or not _DECIMAL.fullmatch(amount)):
+        raise ValueError("Expected an exact decimal string or unavailable amount")
+
+
 def store_csv_clarification(
     connection, actor, tenant_id, organisation_id, evidence_id, job_id, cell: AmountCell, *,
     amount: str | None,
@@ -164,14 +175,7 @@ def store_csv_clarification(
     actor_id = actor.user_id
     if not isinstance(actor_id, str) or not actor_id.strip() or len(actor_id) > 200 or "\0" in actor_id:
         raise ValueError("Invalid answer attribution")
-    if (
-        type(cell) is not AmountCell or not isinstance(cell.field_name, str) or not _FIELD.fullmatch(cell.field_name)
-        or type(cell.row) is not int or not 1 <= cell.row <= _MAX_ROWS
-        or type(cell.column) is not int or not 1 <= cell.column <= _MAX_COLUMNS
-    ):
-        raise ValueError("Invalid clarification cell")
-    if amount is not None and (not isinstance(amount, str) or not _DECIMAL.fullmatch(amount)):
-        raise ValueError("Expected an exact decimal string or unavailable amount")
+    validate_clarification(cell, amount)
 
     organisation, evidence, job = (UUID(str(value)) for value in (organisation_id, evidence_id, job_id))
     tables = (*_TABLES, "csv_extraction_results", "csv_clarification_answers")

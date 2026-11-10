@@ -1647,3 +1647,28 @@ no public trigger, automated OCR/model processing, answer submission, draft appr
 or ledger posting was added. Production scanner/security/restore qualification and
 human final-package approval gates remain open. No deployment, billing activation,
 paid contract, real-record publication or statutory submission occurred.
+
+## Customer CSV clarification checkpoint — 10 November 2026
+
+Added opt-in exact-decimal/unavailable customer answer workflow through migration
+0069 and a separate execute-only bearer-aware capability. Current persisted human
+editor/owner authority, token cutoff, initiating actor and source eligibility are
+rechecked; existing shared clarification validation, immutable retry/conflict and
+attribution apply. Original candidates are retained. No scope stripping into human
+filing approval. See commercial/CSV_ANSWERS.md for grants, route/config and limits.
+
+Local checks passed: 70 core (0.047s), 21 identity (0.254s), all 436 PostgreSQL
+integration cases (36.437s), compilation, JavaScript syntax and diff checks. Eight
+new database/API cases include concurrent retry, strict input/scopes/roles, source
+eligibility, actor continuity, dedicated privileges and non-BYPASSRLS function owner.
+Four new Chromium cases cover exact/unavailable persistence, lost receipt/account
+switch retry, permission loss and session-expiry recovery; these and retained full
+CI await publication because local browser download returned a truncated archive.
+No test removed/skipped. Previous head CI 42883564462 passed.
+
+Pending answer state is tab-only; reload/close loses it, so inspect recorded answers
+before starting another. Answer corrections, durable customer extraction requests,
+draft approval and production scanner/security/restore qualification remain open.
+Next: authorised durable extraction requests and shared dispatch, then draft review.
+No active writer after publication; fetch/check remote and current diff first.
+No deployment, billing activation, contract, private records or statutory action.

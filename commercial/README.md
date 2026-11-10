@@ -138,3 +138,8 @@ not part of this inspection slice.
 The [explicit CSV extraction worker](CSV_EXTRACTION_WORKER.md) validates private
 source-coordinate plans and persists gated candidates for customer inspection,
 with stable-job retries. It starts no automatic extraction or posting workflow.
+
+[Customer CSV clarification](CSV_ANSWERS.md) connects focused exact-decimal or
+unavailable answers to a separate bearer-aware write capability, with immutable
+retries, current source/identity checks and persisted attribution. It does not
+post entries or approve drafts/filings.

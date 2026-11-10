@@ -57,3 +57,10 @@ non-BYPASSRLS migration owner throughout the review/eligibility function chain.
 The [trusted CSV worker](CSV_EXTRACTION_WORKER.md) can now populate candidates
 from a private operator-selected plan through the existing scan/extraction gate.
 It exposes no customer HTTP trigger or automatic processing service.
+
+## Optional customer answers
+
+[Customer clarification answers](CSV_ANSWERS.md) now provide a separate opt-in
+write capability and exact-decimal/unavailable form. The candidate-reader remains
+read-only. Prior statements about answer writes describe that initial inspection
+slice; answer correction, draft approval and extraction triggers remain unfinished.
