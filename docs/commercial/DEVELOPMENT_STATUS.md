@@ -3261,3 +3261,24 @@ fictional callback hostname unresolvable, preventing external code disclosure
 without requiring a fake successful callback document. It checks the exact rejection
 text instead of the obsolete element ID. State/issuer/code/nonce/token/replay checks
 remain, and no authentication or test timeout is relaxed. Inspect follow-up CI.
+
+### Provider-browser verified checkpoint — 10 November 2026
+
+Commit `4ac9eb857a2754af7817d45a3f848ce3b70e0c4e` passed GitHub Actions
+[run 42773047157](https://github.com/EnigmaThe1/OmniXat/actions/runs/42773047157).
+The job logs report **501 tests passed**: 48 core (0.110s), 21 identity (0.208s),
+392 PostgreSQL integration (60.067s), five actual Keycloak HTTP/service (25.260s),
+two actual Keycloak Chromium (22.131s), 13 customer Chromium (11.607s), and all
+20 retained fictional-demo tests including browser approval (3.241s). The customer
+container build also passed. This supersedes the pending-CI notes above. The initial
+browser fixture failures remain recorded for recovery; neither test was removed,
+skipped, weakened or given a longer timeout to obtain this result.
+
+The implemented increment qualifies real provider form login, wrong-password
+rejection, callback state/issuer, S256 code exchange, ID-token nonce/signature,
+strict access-token verification and single-use code handling. It does not qualify
+OAuth2 Proxy cookies, renewal, account switch/logout, MFA/recovery or production
+operation. Next resumable increment: run the maintained gateway against the same
+disposable provider and customer app, then verify actual browser session issuance,
+renewal and logout through shared services. No active writer remains after this
+checkpoint; no deployment, paid activation, private records or statutory action.

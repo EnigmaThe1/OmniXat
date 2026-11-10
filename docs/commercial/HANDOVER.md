@@ -1133,3 +1133,21 @@ Provider-browser follow-up: 1086220 CI passed services/native provider/prototype
 but new browser cases found callback navigation and error-selector fixture issues.
 Capture the actual callback request with blocked fictional-host DNS and check the
 provider's exact rejection text. Follow-up CI is required; no browser success yet.
+
+## Verified provider-browser handover — 10 November 2026
+
+`4ac9eb857a2754af7817d45a3f848ce3b70e0c4e` passed
+[CI run 42773047157](https://github.com/EnigmaThe1/OmniXat/actions/runs/42773047157):
+**501 tests** (48 core, 21 identity, 392 PostgreSQL integration, five actual
+Keycloak HTTP/service, two actual Keycloak Chromium, 13 customer Chromium and all
+20 unchanged prototype tests including browser approval), plus customer container
+build. This closes the pending provider-browser CI above. The callback request is
+captured with fictional-host DNS blocked; callback-page rendering is not required.
+The tests retain real provider network/form/code/token checks and strict validation.
+
+Next: actual OAuth2 Proxy/browser cookie issuance, renewal, account switch/logout
+against this disposable provider and customer app. Existing customer browser tests
+still use a gateway stand-in. MFA/recovery and production qualification remain open.
+This documentation-only follow-up records the tested code revision; it changes no
+runtime files. Fetch and inspect remote/checkpoint before resuming. No active task
+remains after publication; no deployment, billing, contracts or statutory action.

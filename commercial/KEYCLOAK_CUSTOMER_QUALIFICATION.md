@@ -114,6 +114,6 @@ This extends provider-browser compatibility; it does not exercise OAuth2 Proxy o
 claim gateway-cookie issuance, session renewal/logout, MFA/recovery or production
 readiness. CI retains all existing provider/service/customer/prototype checks.
 
-Technical references checked 10 November 2026: Playwright Page wait_for_url
+Technical references checked 10 November 2026: Playwright Page expect_request
 https://playwright.dev/python/docs/api/class-page and Chromium SPKI certificate pin
 https://chromium.googlesource.com/chromium/src/+/3391e936295e694b35688b2152103b8d1432153d/chrome/common/chrome_switches.cc .
