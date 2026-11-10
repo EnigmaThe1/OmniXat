@@ -133,6 +133,8 @@ class KeycloakFixture:
         realm_file.write_text(json.dumps(realm_document(self.subject, self.password, self.client_secret)))
         realm_file.chmod(0o600)
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.browser_tls_pin = base64.b64encode(sha256(key.public_key().public_bytes(
+            serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)).digest()).decode()
         name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'OmniXAT fictional loopback test')])
         now = datetime.now(timezone.utc)
         certificate = (x509.CertificateBuilder().subject_name(name).issuer_name(name)
@@ -239,6 +241,9 @@ class KeycloakFixture:
 
     def login(self, *, scope='openid records:read records:write'):
         code, verifier, nonce = self.authorization(scope=scope)
+        return self.finish_login(code, verifier, nonce)
+
+    def finish_login(self, code, verifier, nonce):
         response = self.exchange(code, verifier)
         if response.status_code != 200:
             raise RuntimeError('Authorization code exchange failed')

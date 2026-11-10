@@ -74,6 +74,7 @@ jobs:
           export PATH="$JAVA_HOME/bin:$PATH"
           bash qualification/install_keycloak.sh "$OMNIXAT_KEYCLOAK_HOME"
           python -m unittest discover -s provider_tests -v
+          python -m unittest discover -s provider_browser_tests -v
       - name: Customer website in real Chromium
         working-directory: commercial
         env:

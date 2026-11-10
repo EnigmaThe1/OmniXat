@@ -95,3 +95,25 @@ Sources checked **10 November 2026**:
 
 No production dependency, legal rule, provider contract, public listener, payment or
 statutory transport was changed by this qualification increment.
+
+## Actual Chromium provider login
+
+`PYTHONPATH=.:integration_tests python3 -m unittest discover -s provider_browser_tests -v`
+with the same Keycloak installation and installed Playwright Chromium exercises the
+actual provider login page over loopback TLS. The fixture certificate's generated
+SPKI SHA-256 is the only browser certificate exception; ignore_https_errors remains
+false. The existing HTTP client still verifies that certificate normally.
+
+The browser submits a real password form. The fixed fictional callback is intercepted
+to prevent external navigation, then the test driver validates state/response issuer,
+exchanges the actual code, checks ID-token nonce/signature and verifies the actual
+access token with the unchanged verifier. Tokens are never injected into the page.
+A second case checks that a wrong password shows an error without releasing a code.
+No screenshots, browser traces, tokens or credentials from these tests are uploaded.
+This extends provider-browser compatibility; it does not exercise OAuth2 Proxy or
+claim gateway-cookie issuance, session renewal/logout, MFA/recovery or production
+readiness. CI retains all existing provider/service/customer/prototype checks.
+
+Technical references checked 10 November 2026: Playwright Page wait_for_url
+https://playwright.dev/python/docs/api/class-page and Chromium SPKI certificate pin
+https://chromium.googlesource.com/chromium/src/+/3391e936295e694b35688b2152103b8d1432153d/chrome/common/chrome_switches.cc .

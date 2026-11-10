@@ -1116,3 +1116,15 @@ supersedes the pending-CI instructions above and closes real-provider HTTP/servi
 qualification for this revision. Next is actual browser/gateway session testing;
 MFA/recovery and production qualification remain open. This entry changes only
 verification documentation; no deployment, billing or filing occurred.
+
+## Latest provider-browser increment (10 November 2026)
+
+Adds two actual Chromium/Keycloak login cases: successful S256/code/nonce/access
+validation and wrong-password rejection. The browser uses only the generated
+fixture certificate SPKI exception; HTTP TLS verification remains unchanged.
+The fixed fictional callback is intercepted, while provider login is real. A shared
+fixture completion helper validates tokens. No OAuth2 Proxy/session/MFA qualification
+is claimed. CI runs both new cases alongside all prior tests. Compilation, YAML,
+diff checks and 48 core tests passed locally; actual provider-browser CI is pending.
+Resume from its CI result, then actual gateway cookies/renewal/logout. No deployment,
+private records, billing or filing. No active implementation remains after publication.

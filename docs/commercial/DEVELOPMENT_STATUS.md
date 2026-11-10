@@ -3223,3 +3223,28 @@ This evidence-only update changes no application/test/workflow code.
 Next: actual OAuth2 Proxy/browser session qualification, cookie renewal/account
 switch/logout and provider key/session revocation, then scanner/draft review.
 No deployment, payment activation or statutory action. No active local task remains.
+
+## Real provider browser sign-in — in progress (10 November 2026)
+
+Recovered clean 38ba6ef; latest verify succeeded, no other checkout/active task.
+Scope: real Chromium against disposable Keycloak over loopback TLS, with an exact
+fixture certificate SPKI exception (not blanket ignore_https_errors), actual login
+form/password rejection and code/nonce/token validation. Retain all prior tests.
+This is provider-browser qualification, not OAuth2 Proxy cookie/session acceptance.
+No production dependency/authentication, public realm, billing or filing change.
+
+Implemented two separate real-provider Chromium cases and a reusable validated
+code/nonce completion helper in the disposable fixture. Only the fixed fictional
+callback page is intercepted; login form/network, credentials, codes and tokens are
+real within the ephemeral test realm. Certificate exceptions match only the generated
+fixture SPKI. No production authentication code or existing assertion was relaxed.
+CI runs the new suite after the existing five native provider cases.
+
+Local verification: Python compilation of both changed/new Python files, workflow
+YAML parse, `git diff --check`, and 48 core tests passed (0.055s). Actual new provider
+browser execution awaits CI: this environment lacks the installed Keycloak archive
+and its Chromium host previously disallowed Unix sockets. No new browser pass or
+full-suite total is claimed before CI. Historical latest remote verify succeeded.
+Next: inspect new provider-browser CI and fix real failures, then implement actual
+OAuth2 Proxy/browser cookie renewal/logout acceptance. The callback interception is
+explicitly a fixture and does not qualify the gateway. No deployment/billing/filing.
