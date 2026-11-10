@@ -23,7 +23,7 @@ def main(argv=None):
         print(json.dumps({'job_id':str(receipt.job_id),'evidence_id':str(receipt.evidence_id),
                           'stored_at':receipt.stored_at.isoformat()}))
         return 0
-    except (ValueError,TypeError,KeyError,PermissionError,EvidenceNotEligible,CSVExtractionConflict,psycopg.Error,OSError):
+    except (ValueError,TypeError,KeyError,RecursionError,PermissionError,EvidenceNotEligible,CSVExtractionConflict,psycopg.Error,OSError):
         print('Extraction unavailable; no completed extraction is confirmed. Retry only the same authorised plan.',file=sys.stderr)
         return 1
 

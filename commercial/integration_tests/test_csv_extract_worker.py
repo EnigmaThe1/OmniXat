@@ -67,6 +67,9 @@ class CSVExtractWorkerTests(CSVExtractWorkerFixture):
         with patch('omnixat_core.csv_extract_worker.psycopg.connect',side_effect=AssertionError('Must not connect')):
             self.assertEqual(self.run_worker(self.plan()|{'amount':'invented'})[0],1)
             self.assertEqual(self.run_worker(raw='{"tenant":"x","tenant":"y"}')[0],1)
+            nested=self.run_worker(raw='['*2000+']'*2000)
+            self.assertEqual(nested[0],1); self.assertEqual(nested[1],'')
+            self.assertNotIn('Traceback',nested[2])
         self.policy(); self.verdict('clean')
         self.assertEqual(self.run_worker(dsn=self.runtime_dsn)[0],1)
         self.assertEqual(self.run_worker(dsn=self.owner_dsn)[0],1)

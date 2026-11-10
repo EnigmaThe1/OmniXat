@@ -1615,3 +1615,11 @@ services, preserving fresh authority and current source eligibility. Production
 scanner/security/restore and statutory approval gates remain open. No active writer
 after publication; fetch/check current remote before resuming. No deployment,
 billing activation, contract, private record publication or statutory submission.
+
+### Extraction-plan recursion failure handling
+
+Final review added generic failure handling for deeply nested JSON plans, before
+database access. The existing CLI invalid-plan test now asserts nonzero/generic
+output without a traceback for this case. All four CLI/database tests passed again
+(1.924s). This changes error handling only; the first published worker CI run
+42881786719 remains in progress and full follow-up CI must verify the final head.
