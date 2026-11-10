@@ -1809,3 +1809,36 @@ are inspectable after reload. Production scanner/security/restore/OCR/model and 
 final-package approval remain open. No active writer after publication; fetch/check
 current remote/diff before resuming. No deployment, billing activation, contract,
 private records or statutory action.
+
+## Verified CSV request lifecycle checkpoint — 10 November 2026
+
+Code 570b16a44b771e61558a0a7465627b94ad043498 passed full workflow
+https://github.com/EnigmaThe1/OmniXat/actions/runs/42911574481 (job 130163288320).
+Reviewed logs: 611 tests passed, no failures/errors/skips: core 70 (0.108s),
+identity 21 (0.391s), PostgreSQL 452 (89.962s), native Keycloak 5 (34.230s),
+provider Chromium 2 (31.143s), gateway Chromium 5 (80.765s), actual ClamAV 5
+(4.856s), customer Chromium 31 (42.705s), retained prototype including browser
+approval 20 (3.474s). Customer container build passed. All three new Chromium
+cases passed: reload/inspection/cancel/history, lost receipt/account-bound retry,
+and expiry clearing with viewer recovery. Actual concurrent PostgreSQL transactions
+passed in both cancellation/storage lock orders. Non-BYPASSRLS function-owner
+coverage passed through inspection, cancellation and requested-worker denial/storage.
+The final targeted local eight-case lifecycle rerun passed (1.927s). Compilation,
+JavaScript syntax and diff checks passed. No test/assertion/timeout was removed,
+skipped or relaxed. This supersedes the pending notes above.
+
+The reader exposes historical metadata/coordinates, with a latest-20 bound and
+exact-job API for older requests; it does not expose originals or monetary values.
+Cancellation retains attribution and stops requested-worker storage when it wins
+the row lock. It cannot undo a recorded result, interrupt parsing or control the
+separate ordinary operator extraction path. Normal request retry cannot restart a
+cancelled plan. New browser tests use the gateway stand-in; independent real
+provider/gateway/ClamAV suites remain separate. No production qualification is implied.
+
+Next: explicit re-authorisation with retained history, then bounded dispatch and
+draft review/corrections. Older-page browser navigation, quotas, background workers,
+production scanner/security/restore/OCR/model and human final-package approval remain
+open. This documentation-only checkpoint leaves runtime identical to the passing
+revision. No active writer remains after publication. Fetch/check current remote,
+dirty state and divergence before resuming. No deployment, billing activation,
+paid contract, private-record publication or statutory submission occurred.
