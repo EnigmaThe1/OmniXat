@@ -1164,3 +1164,16 @@ this host, so inspect full CI before claiming gateway/browser success. If CI fai
 resume from the recorded code/diff and correct the actual failure. Next after green:
 account switch/pending-work recovery, provider logout/session revocation and MFA.
 No deployment, billing, records publication or statutory action.
+
+### Gateway fixture recovery
+
+5b8f7e8 run 42780334595 passed all 461 services, five provider HTTP cases, two
+provider Chromium cases and 20 retained prototype tests. New gateway cases failed:
+HTTP upstream was rejected by the unchanged HTTPS-required app boundary, then the
+next case hit a fixture identity uniqueness conflict. Customer Chromium/container
+steps did not run. The fixture now uses real upstream TLS with the generated root
+explicitly installed through Go SSL_CERT_FILE and restores the identity after each
+case. Landing status/heading checks fail promptly on transport errors. No HTTPS,
+issuer, nonce, email, header or database authority validation was relaxed. Also
+corrected the operator template refresh from five minutes to one minute, below
+the fixture provider's three-minute access-token life. Follow-up CI is required.

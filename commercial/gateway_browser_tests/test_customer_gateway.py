@@ -17,6 +17,8 @@ class CustomerGatewayBrowserTests(CustomerWebFixture):
 
     def setUp(self):
         super().setUp()
+        self.addCleanup(self.owner.execute, 'UPDATE omnixat.identities SET issuer=%s,subject=%s WHERE id=%s',
+                        (self.issuer,self.subject,self.user))
         self.owner.execute('UPDATE omnixat.identities SET issuer=%s,subject=%s WHERE id=%s',
                            (self.provider.issuer,self.provider.subject,self.user))
         app = create_app(verifier=self.provider.verifier, connection_factory=self.records_factory,
@@ -39,7 +41,9 @@ class CustomerGatewayBrowserTests(CustomerWebFixture):
 
     def login(self, page):
         from playwright.sync_api import expect
-        page.goto(self.origin+'/')
+        response = page.goto(self.origin+'/')
+        self.assertEqual(response.status,200)
+        expect(page.get_by_role('heading').filter(has_text='A clearer place')).to_be_visible()
         page.get_by_role('link',name='Sign in',exact=True).click()
         expect(page.locator('#username')).to_be_visible()
         auth = parse_qs(urlsplit(page.url).query)

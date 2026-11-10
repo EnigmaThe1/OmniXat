@@ -58,7 +58,9 @@ class CustomerGateway:
         listener = self.stack.enter_context(loopback_socket())
         port = listener.getsockname()[1]
         self.server = uvicorn.Server(uvicorn.Config(observed_app, access_log=False, log_level='critical',
-                                                   lifespan='off', proxy_headers=False))
+                                                   lifespan='off', proxy_headers=False,
+                                                   ssl_certfile=str(self.provider.certificate_file),
+                                                   ssl_keyfile=str(self.provider.private_key_file)))
         thread = Thread(target=self.server.run, kwargs={'sockets':[listener]}, daemon=True)
         thread.start()
         def stop_app():
@@ -84,7 +86,7 @@ class CustomerGateway:
         settings = tomllib.loads(template.read_text())
         # Environment bindings plus accelerated refresh; all template auth flags retained.
         settings.update(client_id=CLIENT, oidc_issuer_url=self.provider.issuer, redirect_url=CALLBACK,
-            upstreams=[f'http://127.0.0.1:{port}/'], email_domains=['example.test'],
+            upstreams=[f'https://127.0.0.1:{port}/'], email_domains=['example.test'],
             client_secret_file=str(client_secret), cookie_secret_file=str(cookie_secret),
             cookie_refresh='5s', provider_ca_files=[str(self.provider.certificate_file)],
             https_address=f'127.0.0.1:{self.port}', http_address='127.0.0.1:0',
@@ -95,6 +97,8 @@ class CustomerGateway:
         config.chmod(0o600)
         log = self.stack.enter_context((root/'private-gateway.log').open('w+b'))
         environment = {key:os.environ[key] for key in ('PATH','LANG','LC_ALL','TZ') if key in os.environ}
+        # Go's system trust loader uses this explicit fixture root for upstream TLS.
+        environment['SSL_CERT_FILE'] = str(self.provider.certificate_file)
         self.process = subprocess.Popen([str(binary),'--config='+str(config)], stdout=log,
                                         stderr=subprocess.STDOUT, env=environment)
         self.stack.callback(self.stop_proxy)

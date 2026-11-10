@@ -24,7 +24,9 @@ all existing suites, including the unchanged fictional-demo browser approval tes
 
 The gateway configuration comes from `config/oauth2-proxy.customer.example.cfg`.
 Only environment bindings, disabled diagnostic logging and an accelerated five-second
-refresh interval are supplied by the fixture. Generated private files hold the
+refresh interval are supplied by the fixture. The template refresh default is
+one minute, below the disposable provider's three-minute access-token lifetime;
+operators must align refresh/expiry with their exact provider session policy. Generated private files hold the
 32-byte raw cookie key and OIDC client secret. Keycloak's opt-in gateway profile
 adds verified email ID-token claims without granting database authority. Access
 tokens retain the strict records audience/profile and the API's verifier is unchanged.
@@ -35,8 +37,10 @@ ports, hosts-file changes, route interception, token injection or mocked protoco
 responses are needed. The generated certificate has the fictional DNS name and
 loopback IP; Chromium allows only its exact SPKI, with ignore_https_errors=false.
 The gateway verifies the provider certificate against that certificate file, and
-HTTP fixture probes also verify TLS. The ASGI upstream uses private loopback HTTP
-only in this disposable harness; production upstream transport needs qualification.
+HTTP fixture probes also verify TLS. The ASGI upstream also uses TLS: the gateway
+trusts its exact generated root through Go's SSL_CERT_FILE. Proxy header trust and
+insecure upstream certificate bypass remain disabled. Production transport still
+needs qualification for the actual certificate and network setup.
 
 Cases cover real form sign-in/PKCE, secure HttpOnly SameSite=Lax __Host- cookies,
 attributed organisation/note creation, actual access-token replacement after cookie

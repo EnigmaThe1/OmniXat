@@ -3304,3 +3304,16 @@ compilation and installer shell syntax passed; official binary version verified.
 Local socket denial prevents PostgreSQL/browser execution. Full CI is required; no
 new gateway pass is claimed yet. Resume from CI and fix actual failures without
 skipping retained browser tests. No deployment, billing or statutory action.
+
+### Gateway fixture recovery
+
+5b8f7e8 run 42780334595 passed all 461 services, five provider HTTP cases, two
+provider Chromium cases and 20 retained prototype tests. New gateway cases failed:
+HTTP upstream was rejected by the unchanged HTTPS-required app boundary, then the
+next case hit a fixture identity uniqueness conflict. Customer Chromium/container
+steps did not run. The fixture now uses real upstream TLS with the generated root
+explicitly installed through Go SSL_CERT_FILE and restores the identity after each
+case. Landing status/heading checks fail promptly on transport errors. No HTTPS,
+issuer, nonce, email, header or database authority validation was relaxed. Also
+corrected the operator template refresh from five minutes to one minute, below
+the fixture provider's three-minute access-token life. Follow-up CI is required.

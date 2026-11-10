@@ -286,3 +286,10 @@ The separate [actual gateway browser harness](GATEWAY_BROWSER_QUALIFICATION.md)
 connects the maintained gateway/provider and real customer services. Consult its
 current CI evidence in DEVELOPMENT_STATUS.md; the earlier stand-in tests alone do
 not qualify gateway cookies, refresh or logout.
+
+Set cookie refresh below the provider's shortest access-token lifetime with a
+safety margin. The template now uses one minute, compatible with the disposable
+Keycloak profile's three-minute tokens; the old five-minute value could forward
+expired access tokens before attempting refresh. Qualify cookie expiry against
+the actual provider refresh/session limits too. These example timings are not a
+replacement for the operator's production session policy.
