@@ -8,11 +8,12 @@ from qualification.customer_gateway import CustomerGateway
 from qualification.keycloak_customer import KeycloakFixture
 
 
-class CustomerGatewayBrowserTests(CustomerWebFixture):
+class CustomerGatewayFixture(CustomerWebFixture):
+    recovery_profile = False
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.provider = KeycloakFixture(gateway_profile=True).__enter__()
+        cls.provider = KeycloakFixture(gateway_profile=True, recovery_profile=cls.recovery_profile).__enter__()
         cls.addClassCleanup(cls.provider.__exit__, None, None, None)
 
     def setUp(self):
@@ -21,9 +22,11 @@ class CustomerGatewayBrowserTests(CustomerWebFixture):
                         (self.issuer,self.subject,self.user))
         self.owner.execute('UPDATE omnixat.identities SET issuer=%s,subject=%s WHERE id=%s',
                            (self.provider.issuer,self.provider.subject,self.user))
+        spool = getattr(self,'spool',None)
         app = create_app(verifier=self.provider.verifier, connection_factory=self.records_factory,
-                         directory_connection_factory=self.directory_factory, public_origin=self.origin)
-        self.gateway = CustomerGateway(app,self.provider).__enter__()
+                         directory_connection_factory=self.directory_factory, public_origin=self.origin,
+                         evidence_quarantine_dir=spool.name if spool else None)
+        self.gateway = CustomerGateway(app,self.provider,evidence_enabled=spool is not None).__enter__()
         self.addCleanup(self.gateway.__exit__,None,None,None)
 
     def page(self):
@@ -54,6 +57,8 @@ class CustomerGatewayBrowserTests(CustomerWebFixture):
         page.locator('#kc-login').click()
         expect(page.get_by_role('heading',name='Everything starts here.')).to_be_visible()
 
+
+class CustomerGatewayBrowserTests(CustomerGatewayFixture):
     def test_gateway_login_record_write_refresh_and_local_signout(self):
         from playwright.sync_api import expect
         page = self.page(); self.login(page)

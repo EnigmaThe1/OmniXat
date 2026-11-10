@@ -3356,3 +3356,28 @@ customer journeys. Provider-wide logout, stolen-cookie/server-side revocation,
 concurrent refresh, MFA/recovery, key rotation and production restore/security
 qualification remain open. No production readiness, payment, contract, deployment
 or statutory transport claim. No active implementation remains after publication.
+
+## Actual gateway pending-work recovery — in progress (10 November 2026)
+
+Recovered clean 9dd7ed4; current remote check passed, no other checkout/writer or
+commercial-head PR. Scope: real gateway/provider new-tab reauthentication for an
+unsaved organisation and selected evidence file, plus retry denial after a second
+real account signs in, followed by recovery under the initiating account. Use the
+existing permission, expected-actor and quarantine services; no fabricated tokens
+or intercepted protocol responses. Add only fictional generated provider accounts
+and opt-in evidence scopes/grants to the isolated fixture. Retain every prior suite.
+Local network/browser execution may remain host-blocked; CI evidence is required.
+No deployment, paid activation, contracts or statutory action.
+
+Implemented three actual recovery cases plus shared fixture reuse. A separate
+opt-in recovery realm profile creates a generated second account and optional
+evidence scopes; the existing constrained evidence grants/spool are reused. The
+cases require preserved inputs/file digest, real SSO recovery in an opener-free tab,
+no duplicate original, wrong-actor retry 409 and one note after correct-account
+recovery. Provider cookie removal forces real password entry only in the switching
+fixture; provider logout/revocation is not claimed. No production code/dependency,
+permission or authentication rule changed. Local 48 core (0.045s) and 21 identity
+(0.252s) tests passed; five gateway cases collect (two retained plus three new).
+Compilation/diff checks pass. TCP loopback binding passed locally, but actual Chromium launch failed with
+process_singleton_posix socket Operation not permitted; PostgreSQL is absent.
+Actual new browser results require full CI. Resume there, fixing failures without skipping old suites.

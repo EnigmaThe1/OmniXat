@@ -25,8 +25,9 @@ def loopback_socket():
 
 
 class CustomerGateway:
-    def __init__(self, app, provider):
+    def __init__(self, app, provider, *, evidence_enabled=False):
         self.app, self.provider = app, provider
+        self.evidence_enabled = evidence_enabled
         # Only digests and verified metadata, never raw tokens, leave the observer.
         self.observed = []
 
@@ -92,6 +93,8 @@ class CustomerGateway:
             https_address=f'127.0.0.1:{self.port}', http_address='127.0.0.1:0',
             tls_cert_file=str(self.provider.certificate_file), tls_key_file=str(self.provider.private_key_file),
             auth_logging=False, standard_logging=False)
+        if self.evidence_enabled:
+            settings['scope'] += ' evidence:read evidence:register'
         config = root/'gateway.cfg'
         config.write_text('\n'.join(f'{key} = {json.dumps(value)}' for key,value in settings.items()))
         config.chmod(0o600)

@@ -1208,3 +1208,18 @@ open. Local socket restrictions persist, but full CI passed the real browser cas
 The final follow-up records evidence and documentation only. Fetch and inspect the
 current remote/checkpoint before resuming; no active writer/task remains after
 publication. No deployment, paid activation, contracts or statutory action.
+
+## Actual pending-work recovery increment — 10 November 2026
+
+Recovered clean 9dd7ed4; added three real gateway/provider/browser journeys for
+new-tab organisation/file recovery and wrong-account note retry. Existing two
+gateway cases retain their profile; an opt-in recovery fixture adds a generated
+second account, optional evidence scopes and the existing constrained quarantine
+fixture. No tokens are fabricated or protocol responses intercepted. Local 48 core
+and 21 identity tests, compilation, discovery of five gateway cases and diff checks
+passed. TCP loopback binding passed, but local Chromium launch failed with its
+process-singleton Unix socket denied; PostgreSQL is absent. Full CI is required. Inspect
+CI before claiming success. Provider-cookie removal in the switching fixture does
+not qualify provider logout/revocation. Next after green: authorised scanner and
+draft-review customer workflows; production MFA/session/security gates remain open.
+No deployment, billing, paid contract, private records or statutory action.

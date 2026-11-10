@@ -37,9 +37,11 @@ CALLBACK = 'https://workspace.example.test/oauth2/callback'
 REALM = 'omnixat-qualification'
 
 
-def realm_document(subject, password, client_secret, *, gateway_profile=False):
+def realm_document(subject, password, client_secret, *, gateway_profile=False, recovery_account=None):
     """Fictional-only profile for the existing strict access-token verifier."""
     scopes = ['records:read', 'records:write']
+    if recovery_account is not None:
+        scopes += ['evidence:read', 'evidence:register']
     document = {
         'realm': REALM, 'enabled': True, 'sslRequired': 'all',
         'registrationAllowed': False, 'resetPasswordAllowed': False,
@@ -54,7 +56,7 @@ def realm_document(subject, password, client_secret, *, gateway_profile=False):
             'standardFlowEnabled': True, 'implicitFlowEnabled': False,
             'directAccessGrantsEnabled': False, 'serviceAccountsEnabled': False,
             'fullScopeAllowed': False, 'defaultClientScopes': ['records:read'],
-            'optionalClientScopes': ['records:write'],
+            'optionalClientScopes': scopes[1:],
             'attributes': {'pkce.code.challenge.method': 'S256',
                            'access.token.header.type.rfc9068': 'true',
                            'access.token.signed.response.alg': 'RS256'},
@@ -95,6 +97,8 @@ def realm_document(subject, password, client_secret, *, gateway_profile=False):
             for claim, attribute, kind in [('email','email','String'),
                                            ('email_verified','emailVerified','boolean')]
         ]
+    if recovery_account is not None:
+        document['users'].append(recovery_account)
     return document
 
 
@@ -121,8 +125,10 @@ class LoginForm(HTMLParser):
 
 class KeycloakFixture:
     """Explicit context manager; no listener or network request on import."""
-    def __init__(self, *, gateway_profile=False):
-        self.gateway_profile = gateway_profile
+    def __init__(self, *, gateway_profile=False, recovery_profile=False):
+        if recovery_profile and not gateway_profile:
+            raise ValueError("Recovery profile requires the gateway profile")
+        self.gateway_profile, self.recovery_profile = gateway_profile, recovery_profile
 
     def __enter__(self):
         self.stack = ExitStack()
@@ -152,7 +158,15 @@ class KeycloakFixture:
         imports = home/'data/import'
         imports.mkdir(parents=True, exist_ok=True)
         realm_file = imports/(REALM+'-realm.json')
-        realm_file.write_text(json.dumps(realm_document(self.subject, self.password, self.client_secret, gateway_profile=self.gateway_profile)))
+        recovery_account = None
+        if self.recovery_profile:
+            self.secondary_subject, self.secondary_password = str(uuid4()), secrets.token_urlsafe(32)
+            recovery_account = {'id': self.secondary_subject, 'username': 'fictional-second-editor',
+                'enabled': True, 'email': 'fictional-second-editor@example.test', 'emailVerified': True,
+                'firstName': 'Fictional', 'lastName': 'Second editor', 'requiredActions': [],
+                'credentials': [{'type': 'password', 'value': self.secondary_password, 'temporary': False}]}
+        realm_file.write_text(json.dumps(realm_document(self.subject, self.password, self.client_secret,
+            gateway_profile=self.gateway_profile, recovery_account=recovery_account)))
         realm_file.chmod(0o600)
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         self.browser_tls_pin = base64.b64encode(sha256(key.public_key().public_bytes(
