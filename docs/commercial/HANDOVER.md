@@ -1403,3 +1403,22 @@ open. This final follow-up changes documentation only; runtime matches the passi
 CI revision. No active writer remains after publication. Fetch and inspect current
 remote/checks before resuming. No deployment, billing activation, contract, private
 record publication or statutory submission occurred.
+
+## Scanner configuration descriptor validation — 10 November 2026
+
+Fixed the explicit worker's lstat/open race with a shared stdlib-only private-file
+reader. It opens O_NOFOLLOW/O_NONBLOCK/O_CLOEXEC, validates fstat ownership/type/
+permissions on that exact descriptor, bounds reads to 65537 bytes, rejects blank
+or malformed UTF-8 and closes the descriptor on failure. Seven new tests cover
+size boundaries, permissions/owner, symlink, FIFO/directory, pathname replacement
+and cleanup. All 63 offline core tests passed locally (0.652s); compilation and
+diff checks passed. No database/UI/prototype source changed; full browser/daemon/
+container qualification remains pending CI for this revision, with all suites
+retained. Python os documentation checked 10 November 2026:
+https://docs.python.org/3/library/os.html#os.open
+
+This closes one worker configuration qualification gap, not production scanner
+qualification. Ancestor directories and concurrent writes to the same inode must
+still be operator-controlled. Next: request cancellation/re-authorisation and
+bounded dispatch, then qualified extraction/human review. No active writer remains
+after publication. No deployment, payment, contract, private records or filing.

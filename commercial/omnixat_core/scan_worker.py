@@ -2,8 +2,6 @@
 import argparse
 import json
 import os
-from pathlib import Path
-import stat
 import sys
 from uuid import UUID
 
@@ -12,6 +10,7 @@ from .clamd_scanner import ClamdScanner
 from .evidence_scan_postgres import scan_quarantined_evidence, EvidenceScanError
 from .http_api import _pairs
 from .postgres import _tenant_transaction
+from .private_config import private_file
 
 
 def require_requested_scan(connection,tenant,organisation,evidence,policy):
@@ -21,18 +20,6 @@ def require_requested_scan(connection,tenant,organisation,evidence,policy):
                                (organisation,evidence)).fetchone()
         if row is None or row[0]!=policy:
             raise PermissionError('Current authorised scan request required')
-
-
-def private_file(path):
-    source=Path(path)
-    metadata=source.lstat()
-    if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid!=os.geteuid() or metadata.st_mode & 0o077:
-        raise ValueError('Private service-owned file required')
-    with source.open('rb') as stream:
-        content=stream.read(65537)
-    if not content or len(content)>65536:
-        raise ValueError('Bounded configuration required')
-    return content.decode('utf-8').strip()
 
 
 def main(argv=None):
