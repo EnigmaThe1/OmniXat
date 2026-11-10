@@ -33,12 +33,26 @@ class GatewayRecoveryTests(CustomerGatewayFixture, CustomerEvidenceFixture):
         expect(link).to_be_visible()
         expect(link).to_have_attribute('target','_blank')
         expect(link).to_have_attribute('rel','noopener noreferrer')
-        # Context event works even when noopener/COOP severs the opener relation.
-        with page.context.expect_page() as opened:
-            link.click()
-        tab = opened.value
+        # Observe the actual authorization request; the provider may redirect
+        # before rendering its form, so the final page URL need not retain prompt.
+        prompts = []
+        def observe(request):
+            if request.url.startswith(self.provider.issuer+'/protocol/openid-connect/auth?'):
+                prompts.append(parse_qs(urlsplit(request.url).query).get('prompt') == ['login'])
+        page.context.on('request',observe)
+        try:
+            # Context event works when noopener/COOP severs the opener relation.
+            with page.context.expect_page() as opened:
+                link.click()
+            tab = opened.value
+            expect(tab.locator('#password')).to_be_visible()
+        finally:
+            page.context.remove_listener('request',observe)
+        self.assertTrue(bool(prompts) and all(prompts))
+        # Keycloak's reauthentication form locks the previous username. Its
+        # actual restart control permits account correction without cookie edits.
+        tab.get_by_role('button',name='Restart login',exact=True).click()
         expect(tab.locator('#username')).to_be_visible()
-        self.assertEqual(parse_qs(urlsplit(tab.url).query).get('prompt'),['login'])
         tab.locator('#username').fill('fictional-second-editor' if second else 'fictional-editor')
         tab.locator('#password').fill(self.provider.secondary_password if second else self.provider.password)
         tab.locator('#kc-login').click()

@@ -1235,3 +1235,12 @@ real login form, switching to the second account and back using only credentials
 and the existing recovery link. No browser-cookie clearing, protocol interception
 or fabricated tokens remain in the new tests. Follow-up CI is required for this
 configuration change; provider logout/MFA/session revocation are still not claimed.
+
+ef40e80 run 42788896566 retained passing services/native provider/provider browser
+and original two gateway/prototype cases. Three recovery cases reached the real
+Keycloak reauthentication page but failed looking for an editable username; its
+accessibility snapshot shows a locked previous username and Restart login button.
+Tests now exercise that actual provider control before entering the account, with
+provider cookies retained. Pending-work UI copy explains the account-change/restart
+option. No auth rule or assertion is removed, no timeout is extended; follow-up
+CI must prove complete recovery and account correction.

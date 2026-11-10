@@ -32,7 +32,7 @@ async function request(url, options = {}) {
 function clearMessage() { show('error', false); show('notice', false); }
 function tell(text) { $('notice').textContent = text; show('notice', true); }
 function errorMessage(error) {
-  if (error.code === 'session_changed') return 'Sign in with the same account that started this save, then retry. Your pending work is still in this tab.';
+  if (error.code === 'session_changed') return 'Sign in with the same account that started this save, then retry. If your provider shows another account, use its account-change or restart option. Your pending work is still in this tab.';
   if (error.status === 401) return 'Your session has ended. Sign in again to continue.';
   if (error.status === 403) return 'Your access has changed, or this action is not permitted. Sign in again or contact your workspace owner.';
   if (error.status === 404) return 'This record is unavailable in this workspace.';

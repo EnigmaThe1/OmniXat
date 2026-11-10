@@ -112,3 +112,9 @@ The fresh-login request follows [OIDC Core prompt semantics](https://openid.net/
 and the maintained gateway's prompt option in its pinned configuration reference.
 [Keycloak's current login options](https://www.keycloak.org/securing-apps/javascript-adapter)
 also describe enforced login prompts. These sources were rechecked 10 November 2026.
+
+The pinned Keycloak reauthentication page locks the previous username and exposes
+an accessible **Restart login** control. Recovery tests use that real control before
+entering an account, retaining provider cookies and all code/nonce/PKCE handling.
+The pending-work message tells customers to use their provider's account-change
+or restart option if another account is shown. No provider UI is intercepted.
