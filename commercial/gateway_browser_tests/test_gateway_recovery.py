@@ -1,6 +1,7 @@
 """Real gateway/provider reauthentication, original-tab work and actor binding."""
 from hashlib import sha256
 from uuid import uuid4
+from urllib.parse import parse_qs, urlsplit
 
 from test_customer_gateway import CustomerGatewayFixture
 from test_customer_evidence import CustomerEvidenceFixture
@@ -19,19 +20,15 @@ class GatewayRecoveryTests(CustomerGatewayFixture, CustomerEvidenceFixture):
         self.owner.execute("INSERT INTO omnixat.memberships VALUES (%s,%s,'editor',NULL)",(self.a,other))
         self.addCleanup(self.owner.execute,'DELETE FROM omnixat.memberships WHERE user_id=%s',(other,))
 
-    def sign_out_elsewhere(self, page, *, clear_provider=False):
+    def sign_out_elsewhere(self, page):
         from playwright.sync_api import expect
         tab = page.context.new_page()
         tab.goto(self.origin+'/oauth2/sign_out?rd=/')
         expect(tab.get_by_role('link',name='Sign in',exact=True)).to_be_visible()
         tab.close()
         self.assertFalse(any(c['name'].startswith('__Host-omnixat-customer') for c in page.context.cookies(self.origin)))
-        if clear_provider:
-            # Controlled browser cookie removal forces a real password form for
-            # account switching. It is not a provider logout/revocation claim.
-            page.context.clear_cookies(domain='127.0.0.1')
 
-    def recovery_tab(self, page, link, *, second=None):
+    def recovery_tab(self, page, link, *, second=False):
         from playwright.sync_api import expect
         expect(link).to_be_visible()
         expect(link).to_have_attribute('target','_blank')
@@ -40,18 +37,18 @@ class GatewayRecoveryTests(CustomerGatewayFixture, CustomerEvidenceFixture):
         with page.context.expect_page() as opened:
             link.click()
         tab = opened.value
-        if second is not None:
-            expect(tab.locator('#username')).to_be_visible()
-            tab.locator('#username').fill('fictional-second-editor' if second else 'fictional-editor')
-            tab.locator('#password').fill(self.provider.secondary_password if second else self.provider.password)
-            tab.locator('#kc-login').click()
+        expect(tab.locator('#username')).to_be_visible()
+        self.assertEqual(parse_qs(urlsplit(tab.url).query).get('prompt'),['login'])
+        tab.locator('#username').fill('fictional-second-editor' if second else 'fictional-editor')
+        tab.locator('#password').fill(self.provider.secondary_password if second else self.provider.password)
+        tab.locator('#kc-login').click()
         expect(tab.locator('#recovery-ready')).to_be_visible()
         self.assertEqual(tab.url,self.origin+'/app/reauthenticated')
         self.assertIsNone(tab.evaluate('window.opener'))
         self.assertEqual(tab.evaluate('Object.keys(localStorage).length + Object.keys(sessionStorage).length'),0)
         return tab
 
-    def test_real_new_tab_sso_recovery_keeps_pending_organisation(self):
+    def test_real_new_tab_login_recovery_keeps_pending_organisation(self):
         from playwright.sync_api import expect
         page = self.page(); self.login(page)
         original_url = page.url
@@ -118,7 +115,7 @@ class GatewayRecoveryTests(CustomerGatewayFixture, CustomerEvidenceFixture):
         field = page.get_by_label('Note',exact=True)
         body = 'Fictional gateway account-bound retry'
         field.fill(body)
-        self.sign_out_elsewhere(page,clear_provider=True)
+        self.sign_out_elsewhere(page)
         page.get_by_role('button',name='Save note',exact=True).click()
         expect(page.get_by_role('button',name='Retry save',exact=True)).to_be_visible()
         recovery = self.recovery_tab(page,page.locator('#reauth'),second=True)
@@ -133,7 +130,7 @@ class GatewayRecoveryTests(CustomerGatewayFixture, CustomerEvidenceFixture):
         expect(field).to_be_disabled()
         self.assertEqual(page.url,url)
         self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.notes WHERE tenant_id=%s AND body=%s',(self.a,body)).fetchone(),(0,))
-        self.sign_out_elsewhere(page,clear_provider=True)
+        self.sign_out_elsewhere(page)
         recovery = self.recovery_tab(page,page.locator('#reauth'),second=False)
         self.assertEqual(self.gateway.observed[-1][2],self.provider.subject)
         recovery.close()

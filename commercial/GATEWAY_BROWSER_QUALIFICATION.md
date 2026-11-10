@@ -79,27 +79,36 @@ This is bounded compatibility evidence, subject to the open gates above.
 The recovery profile adds a second generated fictional user and optional evidence
 scopes. The recovery class combines the existing constrained evidence fixture with
 the real gateway fixture; ordinary gateway/provider cases keep their original
-scope. No production realm, grant or authentication policy changes.
+scope. No production realm or grant is installed. The operator template requests
+standard OIDC prompt=login for explicit sign-in and recovery. Existing cookie
+sessions and refresh continue normally; no active installation is changed.
 
 Three additional cases sign out through the actual gateway in another tab while
 leaving original work open. The same-account cases retain provider SSO cookies,
-follow the real recovery link in a new tab and check that the original organisation
+follow the real recovery link, complete a fresh login form in the new tab and check
+that the original organisation
 input or exact selected-file SHA-256 survives. Successful writes remain attributed
 to the initiating user. A repeated same-byte upload retains one quarantined original.
 The account-switch case grants a second real user the same editor membership, signs
 in through the real password form, requires `409 session_changed` for the original
 user's retry, then signs back in as the initiator and confirms one attributed note.
 
-To force the password form only for the account-switch fixture, Playwright removes
-provider-domain browser cookies after actual local gateway sign-out. This is a
-controlled browser-session change, **not** proof of provider logout or server-side
-revocation. No fabricated token, browser request route interception or mocked OIDC
-response is used. Recovery pages have no opener and no persistent browser storage.
-The context-level new-page event observes `noopener`/COOP-separated tabs.
+Provider cookies are retained throughout account switching. The real gateway
+requests prompt=login, allowing the customer to enter the initiating account
+instead of silently reusing the wrong SSO account. No browser-cookie manipulation,
+fabricated token, browser request route interception or mocked OIDC response is
+used. This does not qualify provider logout or server-side revocation. Recovery
+pages have no opener and no persistent browser storage; the context-level new-page
+event observes noopener/COOP-separated tabs.
 
 Technical references rechecked 10 November 2026:
 [Playwright browser contexts](https://playwright.dev/python/docs/api/class-browsercontext)
-for filtered cookie removal and `expect_page`, and the
+for `expect_page`, and the
 [pinned gateway endpoints](https://github.com/oauth2-proxy/oauth2-proxy/blob/v7.15.6/docs/docs/features/endpoints.md)
 for local cookie clearing versus provider SSO. Actual pass evidence belongs in the
 latest development status; implementing a case does not establish that it passes.
+
+The fresh-login request follows [OIDC Core prompt semantics](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest)
+and the maintained gateway's prompt option in its pinned configuration reference.
+[Keycloak's current login options](https://www.keycloak.org/securing-apps/javascript-adapter)
+also describe enforced login prompts. These sources were rechecked 10 November 2026.

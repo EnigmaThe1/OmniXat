@@ -1223,3 +1223,15 @@ CI before claiming success. Provider-cookie removal in the switching fixture doe
 not qualify provider logout/revocation. Next after green: authorised scanner and
 draft-review customer workflows; production MFA/session/security gates remain open.
 No deployment, billing, paid contract, private records or statutory action.
+
+### Customer account correction after real recovery proof
+
+2e3cbc8 passed run 42787860362: all 506 tests and container build. Its switching
+fixture removed provider cookies to force the form, which does not show how a
+customer can correct a silently reused SSO account. The operator gateway template
+now requests standard OIDC prompt=login for explicit login/recovery; cookie sessions
+and refresh are unchanged. Recovery tests retain provider cookies and require the
+real login form, switching to the second account and back using only credentials
+and the existing recovery link. No browser-cookie clearing, protocol interception
+or fabricated tokens remain in the new tests. Follow-up CI is required for this
+configuration change; provider logout/MFA/session revocation are still not claimed.

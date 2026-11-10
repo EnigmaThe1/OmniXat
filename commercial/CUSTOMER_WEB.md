@@ -293,3 +293,10 @@ Keycloak profile's three-minute tokens; the old five-minute value could forward
 expired access tokens before attempting refresh. Qualify cookie expiry against
 the actual provider refresh/session limits too. These example timings are not a
 replacement for the operator's production session policy.
+
+The gateway template requests OIDC `prompt=login` for explicit sign-in/recovery.
+Customers can enter the account that started a pending save or upload, even if
+the provider retains a different SSO account. Existing authenticated cookie sessions
+and background refresh remain available. Pending work stays in the original tab;
+server-side expected-actor checks still reject retries by a different account.
+This is not provider-wide logout, MFA or server-side session revocation.
