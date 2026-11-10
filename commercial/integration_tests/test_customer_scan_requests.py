@@ -31,6 +31,7 @@ class CustomerScanRequestFixture(CustomerScanStatusFixture):
             cls.owner.execute(sql.SQL('GRANT USAGE ON SCHEMA omnixat_evidence_requests TO {}').format(sql.Identifier(role)))
         cls.owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.request_scan(text,text,bigint,uuid,uuid,uuid) TO {}').format(sql.Identifier(cls.request_role)))
         cls.owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.cancel_scan(text,text,bigint,uuid,uuid,uuid) TO {}').format(sql.Identifier(cls.request_role)))
+        cls.owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.reauthorise_scan(text,text,bigint,uuid,uuid,uuid,timestamptz) TO {}').format(sql.Identifier(cls.request_role)))
         cls.owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.worker_request(uuid,uuid) TO {}').format(sql.Identifier(cls.scanner_role)))
 
     def setUp(self):
@@ -169,11 +170,12 @@ class CustomerScanRequestTests(CustomerScanRequestFixture):
         with psycopg.connect(make_conninfo(self.admin_dsn,dbname=database,user=name,password=password),autocommit=True) as owner:
             for file in ['0001_tenant_records.sql','0002_identity_memberships.sql','0013_evidence_registrations.sql',
                          '0014_evidence_quarantine.sql','0015_evidence_scan_verdicts.sql','0016_evidence_scan_claims.sql',
-                         '0017_evidence_extraction_gate.sql','0064_customer_scan_status.sql','0065_customer_scan_requests.sql','0066_scan_cancellation.sql']:
+                         '0017_evidence_extraction_gate.sql','0064_customer_scan_status.sql','0065_customer_scan_requests.sql','0066_scan_cancellation.sql','0067_scan_reauthorisation.sql']:
                 owner.execute((MIGRATIONS/file).read_text())
             owner.execute(sql.SQL('GRANT USAGE ON SCHEMA omnixat_evidence_requests TO {},{}').format(sql.Identifier(self.request_role),sql.Identifier(self.scanner_role)))
             owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.request_scan(text,text,bigint,uuid,uuid,uuid) TO {}').format(sql.Identifier(self.request_role)))
             owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.cancel_scan(text,text,bigint,uuid,uuid,uuid) TO {}').format(sql.Identifier(self.request_role)))
+            owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.reauthorise_scan(text,text,bigint,uuid,uuid,uuid,timestamptz) TO {}').format(sql.Identifier(self.request_role)))
             owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.worker_request(uuid,uuid) TO {}').format(sql.Identifier(self.scanner_role)))
         with psycopg.connect(make_conninfo(self.admin_dsn,dbname=database),autocommit=True) as admin:
             admin.execute("INSERT INTO omnixat.tenants VALUES (%s,'Fictional request tenant')",(self.a,))
@@ -198,3 +200,10 @@ class CustomerScanRequestTests(CustomerScanRequestFixture):
         with psycopg.connect(make_conninfo(self.scanner_dsn,dbname=database),autocommit=True) as connection:
             with self.assertRaises(PermissionError):
                 require_requested_scan(connection,self.a,self.org,self.evidence,'fictional-v1')
+
+        with psycopg.connect(make_conninfo(self.admin_dsn,dbname=database),autocommit=True) as admin:
+            stamp=admin.execute('SELECT cancelled_at FROM omnixat.evidence_scan_requests').fetchone()[0].isoformat()
+        with psycopg.connect(make_conninfo(self.request_dsn,dbname=database),autocommit=True) as connection:
+            request_scan(connection,self.verifier,self.token(scope=REQUEST_SCOPES),self.a,self.org,self.evidence,reauthorise_at=stamp)
+        with psycopg.connect(make_conninfo(self.scanner_dsn,dbname=database),autocommit=True) as connection:
+            require_requested_scan(connection,self.a,self.org,self.evidence,'fictional-v1')

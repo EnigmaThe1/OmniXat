@@ -24,7 +24,7 @@ async function request(url, options = {}) {
     let code = 'request_failed';
     try {
       const received = (await response.json()).error?.code;
-      if (['session_changed', 'scan_request_unavailable'].includes(received)) code = received;
+      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable'].includes(received)) code = received;
     } catch (_) { /* Generic error on invalid responses. */ }
     throw new RequestError(response.status, code);
   }
@@ -35,6 +35,7 @@ async function request(url, options = {}) {
 function clearMessage() { show('error', false); show('notice', false); }
 function tell(text) { $('notice').textContent = text; show('notice', true); }
 function errorMessage(error) {
+  if (error.code === 'scan_reauthorisation_unavailable') return 'This cancellation has changed or is unavailable. Refresh scan status before requesting again.';
   if (error.code === 'scan_request_unavailable') return 'A scan cannot be requested yet. The upload must be complete and an operator must configure the scan policy.';
   if (error.code === 'session_changed') return 'Sign in with the same account that started this save, then retry. If your provider shows another account, use its account-change or restart option. Your pending work is still in this tab.';
   if (error.status === 401) return 'Your session has ended. Sign in again to continue.';
@@ -205,19 +206,21 @@ async function viewScanStatus(item, button, panel) {
     if (!labels[result.status]) throw new RequestError(502, 'invalid_response');
     const details = [element('strong', labels[result.status])];
     if (result.policy_version) details.push(element('p', `Scan policy: ${result.policy_version}`));
-    if (result.recorded_at) details.push(element('p', `Observation recorded: ${dateText(result.recorded_at)}`));
+    if (result.recorded_at) details.push(element('p', `${result.status === 'cancelled' ? 'Cancelled' : 'Observation recorded'}: ${dateText(result.recorded_at)}`));
     details.push(element('p', 'Evidence stays in quarantine. A scan result does not validate figures, create accounting entries or approve a filing.'));
     panel.replaceChildren(...details); button.textContent = 'Refresh scan status';
-    if (state.context?.can_request_scan && ['awaiting_scan', 'requested'].includes(result.status)) {
+    if (state.context?.can_request_scan && ['awaiting_scan', 'requested', 'cancelled'].includes(result.status)) {
       const cancelling = result.status === 'requested';
+      const reauthorising = result.status === 'cancelled';
       if (cancelling) panel.append(element('p', 'Cancellation cannot stop a scan already in progress.'));
-      const start = element('button', cancelling ? 'Cancel scan request' : 'Request scan', 'button secondary'); start.type = 'button';
+      const start = element('button', reauthorising ? 'Request scan again' : cancelling ? 'Cancel scan request' : 'Request scan', 'button secondary'); start.type = 'button';
       const actor = state.context.actor_id;
       start.addEventListener('click', async () => {
         start.disabled = true; clearMessage();
         try {
-          await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/${cancelling ? 'scan-cancellations' : 'scan-requests'}`, {
-            method: 'POST', headers: {'Content-Type': 'application/json', 'X-OmniXat-Expected-Actor': actor}, body: '{}'});
+          await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/${reauthorising ? 'scan-reauthorisations' : cancelling ? 'scan-cancellations' : 'scan-requests'}`, {
+            method: 'POST', headers: {'Content-Type': 'application/json', 'X-OmniXat-Expected-Actor': actor,
+              ...(reauthorising ? {'X-OmniXat-Cancellation': result.recorded_at} : {})}, body: '{}'});
           if (epoch !== state.epoch || !panel.isConnected) return;
           await viewScanStatus(item, button, panel);
         } catch (error) {

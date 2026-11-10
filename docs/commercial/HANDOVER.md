@@ -1472,3 +1472,32 @@ request. Next: explicit re-authorisation with preserved history, then qualified
 extraction and human draft review. Production scanner/security/restore gates remain
 open; no automatic processing, deployment, billing, contract, private data or filing.
 No active writer remains after publication; fetch/check remote before resuming.
+
+## Scan re-authorisation checkpoint — 10 November 2026
+
+Added migration 0067, tenant-forced-RLS history snapshots, separately granted
+reauthorise_scan capability, shared cancellation-bound service/POST and Request
+scan again UI. Re-authorisation requires the exact aware cancellation timestamp
+returned by status; it rechecks human authority, locks the request and preserves
+its entire previous request/cancellation snapshot before renewing authority.
+Concurrent retries return one receipt; stale retries cannot undo a later cancel.
+Status uses recorded_at as the cancellation time only for cancelled state and UI
+labels it Cancelled. New grant/setup/API details are in commercial/SCANNING.md.
+
+Local validation: 66 core tests (0.073s), 21 identity (0.365s), and all 418 PostgreSQL
+integration tests (52.302s) passed on disposable PostgreSQL 16.2. Three new cases
+cover history/retry/re-cancellation, concurrent renewal and strict timestamp/scope/
+role rejection. Non-bypass function-owner coverage includes cancel then re-authorise
+and worker admission. Python compilation, JavaScript syntax and diff checks passed.
+Targeted status/re-authorisation cases were rerun after final status/error-copy
+changes. The new real Chromium lifecycle case and retained full CI suites remain
+pending for this revision; no test removed or skipped. Previous cancellation run
+42850504629 passed, closing its pending note.
+
+Normal request retries cannot renew cancelled work; only the explicit action does.
+Existing verdicts are retained/reused rather than forcing a rescan. This is not
+filing approval or automatic scanning. Cancellation still cannot interrupt already
+admitted work. Next: qualify extraction and human draft review through the existing
+evidence gate/shared services. Production scanner/security/restore gates remain
+open. No active writer after publication; fetch/check remote before resuming.
+No deployment, billing, contract, private record publication or statutory submission.

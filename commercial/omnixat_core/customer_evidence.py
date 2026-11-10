@@ -116,14 +116,16 @@ class CustomerEvidence:
         with self.status_connections() as connection:
             return read_scan_status(connection,self.verifier,token,tenant,organisation,evidence)
 
-    def request_scan(self, token, tenant, organisation, evidence, expected, cancel=False):
+    def request_scan(self, token, tenant, organisation, evidence, expected, cancel=False, reauthorise_at=None):
         self.authorize(token,tenant,organisation,expected_actor=expected)
         from .evidence_requests_postgres import request_scan, ScanRequestUnavailable, ScanRequestActorChanged
         try:
             with self.request_connections() as connection:
-                return request_scan(connection,self.verifier,token,tenant,organisation,evidence,expected_actor=expected,cancel=cancel)
+                return request_scan(connection,self.verifier,token,tenant,organisation,evidence,expected_actor=expected,cancel=cancel,reauthorise_at=reauthorise_at)
+        except ValueError:
+            raise ApiError(400,'invalid_cancellation') from None
         except ScanRequestUnavailable:
-            raise ApiError(409,'scan_request_unavailable') from None
+            raise ApiError(409,'scan_reauthorisation_unavailable' if reauthorise_at is not None else 'scan_request_unavailable') from None
         except ScanRequestActorChanged:
             raise ApiError(409,'session_changed') from None
 
@@ -160,6 +162,14 @@ class CustomerEvidence:
             except ValueError:
                 raise ApiError(400, 'invalid_identifier') from None
             initiating_actor = expected_actor(request, writing=request.method == 'POST')
+            reauthorise_at=None
+            cancellation_headers=request.headers.getlist('x-omnixat-cancellation')
+            if request.url.path.endswith('/scan-reauthorisations'):
+                if len(cancellation_headers)!=1 or not cancellation_headers[0]:
+                    raise ApiError(400,'invalid_cancellation')
+                reauthorise_at=cancellation_headers[0]
+            elif cancellation_headers:
+                raise ApiError(400,'unsupported_parameter')
             if request.headers.getlist('idempotency-key'):
                 raise ApiError(400, 'unsupported_parameter')
             if request.method in ('GET', 'HEAD'):
@@ -204,7 +214,7 @@ class CustomerEvidence:
                     raise ApiError(408,'request_timeout') from None
                 if content!=b'{}':
                     raise ApiError(400,'invalid_request')
-                result=await run_in_threadpool(self.request_scan,token,tenant,organisation,evidence,initiating_actor,request.url.path.endswith('/scan-cancellations'))
+                result=await run_in_threadpool(self.request_scan,token,tenant,organisation,evidence,initiating_actor,request.url.path.endswith('/scan-cancellations'),reauthorise_at)
                 return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=202)
             media_types = request.headers.getlist('content-type')
             encodings = request.headers.getlist('content-encoding')
@@ -275,5 +285,7 @@ class CustomerEvidence:
             routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/scan-requests',
                                 self.endpoint,methods=['POST']))
             routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/scan-cancellations',
+                                self.endpoint,methods=['POST']))
+            routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/scan-reauthorisations',
                                 self.endpoint,methods=['POST']))
         return routes

@@ -9,7 +9,7 @@ record durable scan requests; only the explicit trusted worker processes them.
 
 ## Customer read capability
 
-Apply checksum-checked migrations through **0066** with the migration owner.
+Apply checksum-checked migrations through **0067** with the migration owner.
 Create a separate non-owner, non-superuser, non-BYPASSRLS status login. Grant only:
 
 ```sql
@@ -226,3 +226,37 @@ notes; automated dispatch and production scanner qualification remain open.
 SECURITY DEFINER/search-path semantics rechecked 10 November 2026 against
 https://www.postgresql.org/docs/current/sql-createfunction.html. Cancellation
 retains forced tenant RLS and separately revoked PUBLIC execute.
+
+## Explicit re-authorisation after cancellation
+
+Migration 0067 adds tenant-forced-RLS request history and an execute-only action:
+
+```sql
+GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.reauthorise_scan(text,text,bigint,uuid,uuid,uuid,timestamptz)
+  TO customer_scan_requester;
+```
+
+The website offers Request scan again for cancelled status. The status recorded_at
+field now contains the cancellation time for this state and the UI labels it
+Cancelled; other states retain observation semantics. POST
+`.../evidence/{evidence}/scan-reauthorisations` uses exact body `{}` and requires
+`X-OmniXat-Cancellation` with that exact aware ISO timestamp, plus the existing
+scopes/origin/expected-actor checks. Missing/malformed timestamps reject; changed
+cancellation returns 409 and requires refresh. The timestamp identifies a state;
+it never grants authority. Clients cannot choose policy or requester.
+
+A locked request row serialises changes. Before renewing it, the service appends
+the entire previous request/cancellation snapshot and first re-authorising actor/time
+to history, then resets the active request with fresh human authority. Concurrent
+retries of the same cancellation return the same receipt. A retry cannot undo a
+later cancellation. No direct history read/update/delete capability is exposed.
+Normal request retries still cannot re-authorise cancelled work. Cancellation itself
+applies to the current-policy request, including a renewed one; callers must refresh
+after an uncertain outcome. Existing verdicts are retained and may be reused; this
+action is not a forced rescan or filing approval. No automatic processor starts.
+
+SECURITY DEFINER semantics rechecked 10 November 2026 against
+https://www.postgresql.org/docs/current/sql-createfunction.html. Re-authorisation
+retains fixed search_path, row_security and revoked PUBLIC execute. Earlier notes
+calling re-authorisation unfinished are superseded by this section. Production
+scanner qualification, extraction and human draft review remain open.
