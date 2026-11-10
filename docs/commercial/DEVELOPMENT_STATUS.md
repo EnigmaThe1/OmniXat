@@ -3282,3 +3282,25 @@ operation. Next resumable increment: run the maintained gateway against the same
 disposable provider and customer app, then verify actual browser session issuance,
 renewal and logout through shared services. No active writer remains after this
 checkpoint; no deployment, paid activation, private records or statutory action.
+
+## Actual gateway browser sessions — in progress (10 November 2026)
+
+Recovered clean ed78024 from the connected remote; latest verify passed, no
+commercial PR or other checkout/task writer. Scope: checksum-pinned OAuth2 Proxy
+7.15.6 (official release checked today) using the existing customer config template,
+disposable Keycloak, actual customer ASGI/PostgreSQL services and real Chromium.
+Qualify HTTPS-only host cookies, forwarded access tokens, refresh, local sign-out,
+spoofed headers and persisted membership revocation. No live realm or deployment.
+Provider logout/MFA/recovery and production operation remain separate gates.
+Local socket binding is denied by this host; actual network/browser qualification
+must run on CI. Retain all existing suites and report their actual results.
+
+Implemented explicit gateway/ASGI loopback fixtures and two real-browser journeys,
+using the existing template and a checksum-pinned official download. Generated
+email claims exist only in the disposable provider profile. Token observation stores
+digests plus verified metadata; no credentials/logs/screenshots are uploaded.
+Local checks: 48 core tests passed (0.094s), 21 identity tests passed (0.299s), Python
+compilation and installer shell syntax passed; official binary version verified.
+Local socket denial prevents PostgreSQL/browser execution. Full CI is required; no
+new gateway pass is claimed yet. Resume from CI and fix actual failures without
+skipping retained browser tests. No deployment, billing or statutory action.

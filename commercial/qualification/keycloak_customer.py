@@ -37,10 +37,10 @@ CALLBACK = 'https://workspace.example.test/oauth2/callback'
 REALM = 'omnixat-qualification'
 
 
-def realm_document(subject, password, client_secret):
+def realm_document(subject, password, client_secret, *, gateway_profile=False):
     """Fictional-only profile for the existing strict access-token verifier."""
     scopes = ['records:read', 'records:write']
-    return {
+    document = {
         'realm': REALM, 'enabled': True, 'sslRequired': 'all',
         'registrationAllowed': False, 'resetPasswordAllowed': False,
         'bruteForceProtected': True, 'accessTokenLifespan': 180,
@@ -79,6 +79,25 @@ def realm_document(subject, password, client_secret):
                    'credentials': [{'type': 'password', 'value': password, 'temporary': False}]}],
     }
 
+    if gateway_profile:
+        document['clientScopes'] += [
+            {'name': name, 'protocol': 'openid-connect',
+             'attributes': {'include.in.token.scope': 'true'}} for name in ['profile','email']]
+        document['clients'][0]['defaultClientScopes'] += ['profile','email']
+        # OIDC gateway requires a verified email in the ID token. Keep this
+        # explicit and separate from the access token's record authority.
+        document['clients'][0]['protocolMappers'] += [
+            {'name': 'gateway-'+claim, 'protocol': 'openid-connect',
+             'protocolMapper': 'oidc-usermodel-property-mapper',
+             'config': {'user.attribute': attribute, 'claim.name': claim,
+                        'jsonType.label': kind, 'id.token.claim': 'true',
+                        'access.token.claim': 'false', 'userinfo.token.claim': 'true'}}
+            for claim, attribute, kind in [('email','email','String'),
+                                           ('email_verified','emailVerified','boolean')]
+        ]
+    return document
+
+
 
 class LoginForm(HTMLParser):
     def __init__(self):
@@ -102,6 +121,9 @@ class LoginForm(HTMLParser):
 
 class KeycloakFixture:
     """Explicit context manager; no listener or network request on import."""
+    def __init__(self, *, gateway_profile=False):
+        self.gateway_profile = gateway_profile
+
     def __enter__(self):
         self.stack = ExitStack()
         try:
@@ -130,7 +152,7 @@ class KeycloakFixture:
         imports = home/'data/import'
         imports.mkdir(parents=True, exist_ok=True)
         realm_file = imports/(REALM+'-realm.json')
-        realm_file.write_text(json.dumps(realm_document(self.subject, self.password, self.client_secret)))
+        realm_file.write_text(json.dumps(realm_document(self.subject, self.password, self.client_secret, gateway_profile=self.gateway_profile)))
         realm_file.chmod(0o600)
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         self.browser_tls_pin = base64.b64encode(sha256(key.public_key().public_bytes(
@@ -140,13 +162,15 @@ class KeycloakFixture:
         certificate = (x509.CertificateBuilder().subject_name(name).issuer_name(name)
                        .public_key(key.public_key()).serial_number(x509.random_serial_number())
                        .not_valid_before(now-timedelta(minutes=1)).not_valid_after(now+timedelta(hours=1))
-                       .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ip_address('127.0.0.1'))]), critical=False)
+                       .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ip_address('127.0.0.1')),
+                                                                                x509.DNSName('workspace.example.test')]), critical=False)
                        .sign(key, hashes.SHA256()))
         cert, private = root/'tls.pem', root/'tls-key.pem'
         cert.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
         private.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                                               serialization.NoEncryption()))
         private.chmod(0o600)
+        self.certificate_file, self.private_key_file = cert, private
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0))
             port = listener.getsockname()[1]

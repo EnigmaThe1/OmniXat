@@ -281,3 +281,8 @@ Keycloak 26.8.2, followed by the same tenant HTTP/PostgreSQL services. It keeps 
 strict production token verifier unchanged. This is separate from the actual-
 Chromium workspace suite's gateway stand-in. Exact OAuth2 Proxy cookie/login/logout,
 MFA/recovery and signing-key rotation remain required production acceptance.
+
+The separate [actual gateway browser harness](GATEWAY_BROWSER_QUALIFICATION.md)
+connects the maintained gateway/provider and real customer services. Consult its
+current CI evidence in DEVELOPMENT_STATUS.md; the earlier stand-in tests alone do
+not qualify gateway cookies, refresh or logout.

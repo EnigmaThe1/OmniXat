@@ -1151,3 +1151,16 @@ still use a gateway stand-in. MFA/recovery and production qualification remain o
 This documentation-only follow-up records the tested code revision; it changes no
 runtime files. Fetch and inspect remote/checkpoint before resuming. No active task
 remains after publication; no deployment, billing, contracts or statutory action.
+
+## Actual gateway increment — 10 November 2026
+
+Recovered clean ed78024 and added the explicit OAuth2 Proxy 7.15.6 + Keycloak
+loopback customer harness described in commercial/GATEWAY_BROWSER_QUALIFICATION.md.
+Two real Chromium cases exercise cookie/login/refresh/local sign-out and permission
+boundaries through real ASGI/PostgreSQL. The provider gains an opt-in email profile;
+existing strict access-token checks and prior suites remain. Local 48 core and 21
+identity tests, compilation and installer syntax pass. Socket binding is denied on
+this host, so inspect full CI before claiming gateway/browser success. If CI fails,
+resume from the recorded code/diff and correct the actual failure. Next after green:
+account switch/pending-work recovery, provider logout/session revocation and MFA.
+No deployment, billing, records publication or statutory action.
