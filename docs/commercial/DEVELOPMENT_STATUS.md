@@ -3860,3 +3860,27 @@ database access. The existing CLI invalid-plan test now asserts nonzero/generic
 output without a traceback for this case. All four CLI/database tests passed again
 (1.924s). This changes error handling only; the first published worker CI run
 42881786719 remains in progress and full follow-up CI must verify the final head.
+
+## Verified CSV extraction worker checkpoint — 10 November 2026
+
+Published implementation 61db8d32fbdbe9fc2dfaebe4ac0c7c248ee5b88e and recursion
+handling 932a0b9a7b4d8ae07e58403b184b8ca03bb2ac6b. Both full CI runs passed;
+final code run: https://github.com/EnigmaThe1/OmniXat/actions/runs/42882374494.
+Reviewed job 130062418158 logs: 576 tests passed, none skipped: core 70 (0.088s),
+identity 21 (0.250s), PostgreSQL integration 428 (67.545s), native provider 5
+(29.477s), provider Chromium 2 (25.431s), gateway Chromium 5 (66.391s), actual
+ClamAV scanner 4 (2.598s), customer Chromium 21 (21.963s), retained fictional
+prototype including browser approval 20 (3.216s). Customer container build passed.
+The new daemon -> explicit worker -> candidate inspection test passed. Its gateway
+is a stand-in; independent real provider/gateway suites passed separately. Synthetic
+scanner rules do not establish production malware coverage. Diff checks passed;
+remote and reviewed local code trees matched after expected-head non-force updates.
+
+No active writer remains after this documentation checkpoint. Resume by fetching and
+checking current remote/dirty/divergence state. Next bounded increment: durable
+customer extraction requests and authorised dispatch using shared source-eligibility
+services, then focused answers/draft workflows. Extraction remains operator-invoked;
+no public trigger, automated OCR/model processing, answer submission, draft approval
+or ledger posting was added. Production scanner/security/restore qualification and
+human final-package approval gates remain open. No deployment, billing activation,
+paid contract, real-record publication or statutory submission occurred.
