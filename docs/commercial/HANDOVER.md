@@ -1108,3 +1108,11 @@ or weakened, no production dependency/host changed. YAML/all embedded shell synt
 retained-browser structural checks and 48 core tests passed locally. Inspect the
 new CI for actual full qualification, then resume real browser/gateway identity.
 No active implementation remains after publication; no deployment/billing/filing.
+
+CI recovery is verified: run 42766550297 for 4e485e6 passed **499 tests** (461
+services, 5 actual Keycloak, 13 customer Chromium, 20 unchanged prototype) and the
+container build. Official HTTPS Ubuntu sources resolved the setup stall. This
+supersedes the pending-CI instructions above and closes real-provider HTTP/service
+qualification for this revision. Next is actual browser/gateway session testing;
+MFA/recovery and production qualification remain open. This entry changes only
+verification documentation; no deployment, billing or filing occurred.

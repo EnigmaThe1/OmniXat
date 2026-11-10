@@ -3209,3 +3209,17 @@ https://documentation.ubuntu.com/security/software-integrity/archive-verificatio
 Ubuntu documents the noble-security pocket at the same official HTTPS archive.
 Next: inspect the new CI, fix any remaining genuine failure, then continue the real
 OAuth2 Proxy/browser identity qualification. No active local implementation remains.
+
+### CI recovery verified — 10 November 2026
+
+Run https://github.com/EnigmaThe1/OmniXat/actions/runs/42766550297 for 4e485e6
+completed successfully: 48 core + 21 identity + 392 PostgreSQL/HTTP + 5 actual
+Keycloak + 13 customer Chromium + 20 unchanged prototype = **499 tests passed**,
+plus the customer container build. Logs were inspected. Service integration took
+58.338s, actual provider 25.830s, customer browser 11.733s and prototype 3.198s.
+This closes both the APT blocker and the preceding real-provider pending-CI gate.
+Every retained browser test ran; no assertions or timeouts were weakened.
+This evidence-only update changes no application/test/workflow code.
+Next: actual OAuth2 Proxy/browser session qualification, cookie renewal/account
+switch/logout and provider key/session revocation, then scanner/draft review.
+No deployment, payment activation or statutory action. No active local task remains.
