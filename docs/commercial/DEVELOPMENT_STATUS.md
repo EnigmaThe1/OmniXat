@@ -3402,3 +3402,9 @@ Tests now exercise that actual provider control before entering the account, wit
 provider cookies retained. Pending-work UI copy explains the account-change/restart
 option. No auth rule or assertion is removed, no timeout is extended; follow-up
 CI must prove complete recovery and account correction.
+
+Account-correction acceptance also retains the wrong user's still-valid gateway
+cookie for the final recovery link: no second manual local sign-out is performed
+before restoring the initiating account. This proves the existing link can start
+fresh login directly from an authenticated wrong-account session. No runtime rule
+is changed by this final test strengthening; follow-up CI remains required.

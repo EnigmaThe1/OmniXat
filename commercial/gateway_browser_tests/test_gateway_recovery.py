@@ -144,7 +144,9 @@ class GatewayRecoveryTests(CustomerGatewayFixture, CustomerEvidenceFixture):
         expect(field).to_be_disabled()
         self.assertEqual(page.url,url)
         self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.notes WHERE tenant_id=%s AND body=%s',(self.a,body)).fetchone(),(0,))
-        self.sign_out_elsewhere(page)
+        # Keep the wrong account's valid gateway/provider cookies. The existing
+        # recovery link must permit correction without another manual sign-out.
+        self.assertTrue(any(c['name'].startswith('__Host-omnixat-customer') for c in page.context.cookies(self.origin)))
         recovery = self.recovery_tab(page,page.locator('#reauth'),second=False)
         self.assertEqual(self.gateway.observed[-1][2],self.provider.subject)
         recovery.close()
