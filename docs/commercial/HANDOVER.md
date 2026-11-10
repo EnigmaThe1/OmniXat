@@ -1250,3 +1250,27 @@ cookie for the final recovery link: no second manual local sign-out is performed
 before restoring the initiating account. This proves the existing link can start
 fresh login directly from an authenticated wrong-account session. No runtime rule
 is changed by this final test strengthening; follow-up CI remains required.
+
+## Verified pending-work recovery handover — 10 November 2026
+
+`558bb37d0374dcfdee7f528cdafccdb7c9b6e272` passed
+[run 42790308992](https://github.com/EnigmaThe1/OmniXat/actions/runs/42790308992):
+**506 tests** (48 core, 21 identity, 392 PostgreSQL, five native provider, two
+provider Chromium, five gateway Chromium, 13 customer Chromium and all 20 retained
+prototype cases), plus customer container build. This supersedes pending notes
+above. The three new cases prove original-tab organisation/file recovery and
+wrong-account retry rejection/correction through real gateway/provider services.
+The template requests prompt=login; the pinned provider exposes Restart login to
+change the locked username. The UI explains this option. Direct correction uses
+the existing recovery link with the wrong session still valid; no second manual
+sign-out, cookie editing, fabricated tokens or protocol interception is required.
+
+Next: authorised scanning/status and draft review through customer evidence UI
+and shared quarantine/worker services. No upload is a scan, extraction or ledger
+entry. Production MFA/account recovery, provider logout, server-side/copy-cookie
+revocation, key rotation, concurrent refresh and security/restore remain open.
+Local TCP binding works, but Chromium's Unix socket is denied and PostgreSQL is
+absent; full CI passed actual browser/database cases. See the gateway guide for
+setup/sources. This final follow-up changes documentation only. Fetch/check remote
+before resuming. No active writer/task remains after publication; no deployment,
+billing activation, paid contract, private records or statutory action.

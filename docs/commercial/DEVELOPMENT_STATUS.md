@@ -3408,3 +3408,37 @@ cookie for the final recovery link: no second manual local sign-out is performed
 before restoring the initiating account. This proves the existing link can start
 fresh login directly from an authenticated wrong-account session. No runtime rule
 is changed by this final test strengthening; follow-up CI remains required.
+
+### Verified pending-work/account-correction checkpoint — 10 November 2026
+
+`558bb37d0374dcfdee7f528cdafccdb7c9b6e272` passed
+[GitHub Actions run 42790308992](https://github.com/EnigmaThe1/OmniXat/actions/runs/42790308992).
+Logs report **506 tests passed**: 48 core (0.094s), 21 identity (0.257s), 392
+PostgreSQL integration (68.055s), five native provider (34.206s), two provider
+Chromium (30.491s), five gateway Chromium (79.006s), 13 customer Chromium
+(15.416s), and all 20 retained prototype cases including browser approval (3.509s).
+The customer container build passed. No test was removed, skipped or given a longer
+timeout to obtain this result. Local 48 core/21 identity tests, Python compilation,
+JavaScript syntax, TOML parsing and diff checks passed. TCP binding is available,
+but local Chromium cannot create its process-singleton Unix socket and PostgreSQL
+is absent; CI supplies actual browser/database evidence.
+
+This closes the pending follow-up above. The final code requests prompt=login on
+explicit sign-in/recovery, uses Keycloak's actual Restart login control to correct
+an account and preserves the original tab's organisation input/selected file.
+Actual file digest, single quarantined original, wrong-actor 409 and one correctly
+attributed note are verified. Direct correction retains the wrong account's valid
+gateway/provider cookies and uses the existing recovery link without a second
+manual local sign-out. No cookies are edited, no tokens fabricated and no protocol
+response intercepted in the final recovery cases. Background refresh and all prior
+authority checks still pass. The pending-work message explains the provider's
+account-change/restart option.
+
+Next concrete increment: authorised scanning/status and draft review through the
+customer website using the existing evidence/quarantine services and a qualified
+trusted scanner adapter. Uploaded evidence remains quarantined; no clean verdict,
+extraction or accounting entry is implied by upload. Production MFA/account recovery,
+provider-wide logout, stolen-cookie/server-side revocation, key rotation, concurrent
+refresh and restoration/security qualification remain open. The final follow-up is
+documentation only. No active implementation remains after publication; no deployment,
+paid activation, contract, private records or statutory action occurred.

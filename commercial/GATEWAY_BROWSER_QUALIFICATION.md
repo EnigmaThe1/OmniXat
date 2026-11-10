@@ -51,7 +51,7 @@ No raw tokens, passwords, traces, screenshots or provider/gateway private logs a
 uploaded. The UI's existing Sign out link clears the local gateway cookie; it does
 **not** end the provider SSO session or invalidate copied cookie sessions.
 
-Production MFA/recovery, account switch with pending work, provider-wide logout,
+Production MFA/account recovery, provider-wide logout,
 server-side session revocation, key rotation, concurrent refresh and restore/security
 qualification remain open. Passing this harness alone does not establish launch
 readiness, enable payments or authorise statutory submissions.
@@ -118,3 +118,12 @@ an accessible **Restart login** control. Recovery tests use that real control be
 entering an account, retaining provider cookies and all code/nonce/PKCE handling.
 The pending-work message tells customers to use their provider's account-change
 or restart option if another account is shown. No provider UI is intercepted.
+
+Final recovery evidence, checked 10 November 2026:
+[run 42790308992](https://github.com/EnigmaThe1/OmniXat/actions/runs/42790308992)
+passed **506 tests** and the container build, including all five real gateway cases.
+The three recovery cases retain provider cookies and prove original-tab inputs,
+exact file digest and deduplication, wrong-account 409, and direct account correction
+with the wrong gateway session still valid. No second manual sign-out, cookie
+editing, fabricated token or protocol interception is needed. These bounded cases
+supersede the earlier pending notes; the remaining production gates still apply.
