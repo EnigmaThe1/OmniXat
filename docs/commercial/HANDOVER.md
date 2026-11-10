@@ -1683,3 +1683,30 @@ changed. Exact/unavailable and lost-receipt/account-switch answer cases passed.
 The follow-up includes hidden regions for the empty-DOM assertions and retains the
 established navigation-message prefix. No assertion, timeout or test is removed or
 relaxed; denied candidate DOM must still be empty. Full follow-up CI remains required.
+
+## Verified customer clarification checkpoint — 10 November 2026
+
+Final code 7be9f198f2b064d75eaa893dfc22c98850687da5 passed full workflow
+https://github.com/EnigmaThe1/OmniXat/actions/runs/42893757572 (job 130101324786).
+Reviewed logs: 588 tests passed, no failures/errors/skips: core 70 (0.113s),
+identity 21 (0.233s), PostgreSQL 436 (76.742s), native Keycloak 5 (25.312s),
+provider Chromium 2 (24.222s), gateway Chromium 5 (66.815s), actual ClamAV 4
+(3.148s), customer Chromium 25 (27.671s), retained prototype including browser
+approval 20 (3.388s). Customer container build passed. All four new browser cases
+passed, including same-account recovery after expiry and empty denied candidate DOM.
+This supersedes the pending/failing browser notes above. No test/assertion/timeout
+was removed or increased. The follow-up fixed hidden-DOM locator selection and
+navigation-copy compatibility; the full suite reran. The new answer journey uses
+a gateway stand-in; independent real provider/gateway suites passed separately.
+
+Answers preserve original candidates, exact decimal text and persisted human
+attribution. They are immutable here; correction history/UI remains unfinished.
+Pending retry state is tab-only, so inspect saved answers after close/reload.
+No draft approval, ledger posting, extraction request dispatch or production
+OCR/malware qualification is implied. Production scanner/security/restore and
+human final-package approval gates remain open. Next bounded increment: durable
+authorised customer extraction requests and shared dispatch, then draft review
+and corrections. Fetch/check current remote and dirty/divergence state before
+resuming; no active writer remains after this documentation-only checkpoint.
+Runtime matches the passing code revision. No deployment, billing activation,
+paid contract, private record publication or statutory submission occurred.
