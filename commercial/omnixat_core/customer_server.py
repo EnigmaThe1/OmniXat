@@ -38,6 +38,8 @@ def create_configured_app():
         public_keys={kid:load_pem_public_key(pem.encode('ascii')) for kid,pem in keys.items()})
     record_dsn = _file(os.environ['OMNIXAT_RECORD_DSN_FILE'],secret=True)
     directory_dsn = _file(os.environ['OMNIXAT_DIRECTORY_DSN_FILE'],secret=True)
+    status_dsn_path = os.environ.get('OMNIXAT_SCAN_STATUS_DSN_FILE')
+    status_dsn = _file(status_dsn_path,secret=True) if status_dsn_path else None
     admission = BoundedSemaphore(16)
     def factory(dsn):
         @contextmanager
@@ -53,4 +55,5 @@ def create_configured_app():
         return lease
     return create_app(verifier=verifier,connection_factory=factory(record_dsn),
                       directory_connection_factory=factory(directory_dsn),public_origin=origin,
-                      evidence_quarantine_dir=os.environ.get("OMNIXAT_EVIDENCE_SPOOL_DIR"))
+                      evidence_quarantine_dir=os.environ.get("OMNIXAT_EVIDENCE_SPOOL_DIR"),
+                      scan_status_connection_factory=factory(status_dsn) if status_dsn else None)

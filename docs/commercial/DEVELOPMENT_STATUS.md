@@ -3442,3 +3442,29 @@ provider-wide logout, stolen-cookie/server-side revocation, key rotation, concur
 refresh and restoration/security qualification remain open. The final follow-up is
 documentation only. No active implementation remains after publication; no deployment,
 paid activation, contract, private records or statutory action occurred.
+
+## Trusted scanner and customer scan status — in progress (10 November 2026)
+
+Recovered clean a3999b5. Its latest run 42791352363 passed all 506 tests but
+container pip download failed with BrokenPipeError; keep that failure distinct
+from the preceding passing build. No other writer/checkout or commercial-head PR.
+Scope: bounded private-socket ClamAV INSTREAM adapter and explicit trusted worker,
+real daemon qualification using harmless custom test signatures, plus execute-only
+tenant/identity-scoped status API and customer UI. Reuse quarantine/scan claims and
+active-policy rules; no customer verdict, scanner selection, payload download or
+scan/claim mutation privilege on the web process. No automated customer request
+queue, extraction or ledger effects in this increment. Real malware/signature
+coverage and production scanner configuration still require qualification.
+
+Implemented the private-socket adapter/explicit worker, migration 0064 metadata
+capability, opt-in same-origin GET route, server DSN configuration and refreshable
+customer status panels. New checks: eight offline protocol cases; seven PostgreSQL
+status/privilege cases (including forced-RLS non-bypass function owner); two status
+Chromium cases; three actual ClamAV/worker/status qualification cases. CI retains
+all old suites and installs the official daemon for a harmless synthetic-rule test.
+Local 56 core tests passed (0.057s), 21 identity tests passed (0.346s), compilation,
+JavaScript syntax, test discovery and diff checks passed. PostgreSQL/ClamAV are not
+installed here and local Chromium remains host-restricted; new integration/browser
+passes and the container retry await CI. See commercial/SCANNING.md for exact
+configuration, grants, trust boundary and open production gates. No real records,
+payment activation, deployment, contracts or statutory action.

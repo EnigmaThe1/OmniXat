@@ -52,8 +52,11 @@ def evidence_actor(connection, verifier, token, tenant, *, write=False, expected
 
 
 class CustomerEvidence:
-    def __init__(self, verifier, connection_factory, quarantine_dir):
+    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None):
         self.verifier, self.connections = verifier, connection_factory
+        if status_connections is not None and not callable(status_connections):
+            raise ValueError('Server-owned status connection factory required')
+        self.status_connections = status_connections
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
@@ -104,6 +107,12 @@ class CustomerEvidence:
         return {key: value.isoformat() if hasattr(value, 'isoformat') else
                 str(value) if isinstance(value, UUID) else value for key, value in row.items()}
 
+    def scan_status(self, token, tenant, organisation, evidence):
+        self.authorize(token, tenant, organisation)
+        from .evidence_status_postgres import read_scan_status
+        with self.status_connections() as connection:
+            return read_scan_status(connection,self.verifier,token,tenant,organisation,evidence)
+
     def persist(self, token, tenant, organisation, source, media_type, size, expected=None):
         source.seek(0)
         with stage_evidence(source, media_type=media_type, quarantine_dir=self.directory,
@@ -143,7 +152,8 @@ class CustomerEvidence:
                 if evidence is not None:
                     if request.query_params:
                         raise ApiError(400, 'unsupported_parameter')
-                    result = await run_in_threadpool(self.receipt, token, tenant, organisation, evidence)
+                    operation = self.scan_status if request.url.path.endswith('/scan-status') else self.receipt
+                    result = await run_in_threadpool(operation, token, tenant, organisation, evidence)
                     return JSONResponse({'data':result,'request_id':request.scope['request_id']})
                 pairs = list(request.query_params.multi_items())
                 if any(k not in ('after','limit') for k,v in pairs) or len(dict(pairs))!=len(pairs):
@@ -220,7 +230,11 @@ class CustomerEvidence:
             return error_response(request.scope,500,'internal_error')
 
     def routes(self):
-        return [Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence',
+        routes = [Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence',
                       self.endpoint,methods=['GET','POST']),
                 Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}',
                       self.endpoint,methods=['GET'])]
+        if self.status_connections is not None:
+            routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/scan-status',
+                                self.endpoint,methods=['GET']))
+        return routes

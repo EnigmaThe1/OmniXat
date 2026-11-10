@@ -172,10 +172,45 @@ function renderEvidence() {
     receipt.setAttribute('role', 'region'); receipt.setAttribute('aria-label', `Evidence receipt ${item.id}`);
     button.setAttribute('aria-controls', receipt.id);
     button.addEventListener('click', () => viewReceipt(item, button, receipt));
-    row.append(button, receipt); list.append(row);
+    row.append(button, receipt);
+    if (state.context.scan_status_access) {
+      const scanButton = element('button', 'Check scan status', 'button secondary');
+      scanButton.type = 'button';
+      const scanPanel = element('div', undefined, 'evidence-receipt');
+      scanPanel.id = `scan-status-${item.id}`; scanPanel.hidden = true;
+      scanPanel.setAttribute('role', 'region'); scanPanel.setAttribute('aria-label', `Scan status ${item.id}`);
+      scanButton.setAttribute('aria-controls', scanPanel.id); scanButton.setAttribute('aria-expanded', 'false');
+      scanButton.addEventListener('click', () => viewScanStatus(item, scanButton, scanPanel));
+      row.append(scanButton, scanPanel);
+    }
+    list.append(row);
   }
   $('evidence-count').textContent = `${state.evidence.length} loaded`;
   show('empty-evidence', state.evidence.length === 0); show('more-evidence', Boolean(state.evidenceCursor));
+}
+async function viewScanStatus(item, button, panel) {
+  const epoch = state.epoch;
+  panel.hidden = false; panel.replaceChildren(element('p', 'Checking scan status…'));
+  panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
+  try {
+    const result = await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/scan-status`);
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    const labels = {upload_incomplete: 'Upload incomplete', not_configured: 'Scanning is not configured',
+      awaiting_scan: 'Awaiting a trusted scanner', scanning: 'Scan in progress',
+      blocked: 'Blocked by the scan policy', scanned: 'Scan completed — no detections under this policy'};
+    if (!labels[result.status]) throw new RequestError(502, 'invalid_response');
+    const details = [element('strong', labels[result.status])];
+    if (result.policy_version) details.push(element('p', `Scan policy: ${result.policy_version}`));
+    if (result.recorded_at) details.push(element('p', `Observation recorded: ${dateText(result.recorded_at)}`));
+    details.push(element('p', 'Evidence stays in quarantine. A scan result does not validate figures, create accounting entries or approve a filing.'));
+    panel.replaceChildren(...details); button.textContent = 'Refresh scan status';
+  } catch (error) {
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    panel.replaceChildren(element('p', errorMessage(error))); button.textContent = 'Retry scan status';
+    if (error.status === 401 || error.status === 403 || error.status === 404) {
+      panel.replaceChildren(); fail(error);
+    }
+  } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; }
 }
 async function viewReceipt(item, button, panel) {
   if (!panel.hidden) {

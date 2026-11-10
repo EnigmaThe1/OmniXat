@@ -1274,3 +1274,17 @@ absent; full CI passed actual browser/database cases. See the gateway guide for
 setup/sources. This final follow-up changes documentation only. Fetch/check remote
 before resuming. No active writer/task remains after publication; no deployment,
 billing activation, paid contract, private records or statutory action.
+
+## Trusted scanner/status increment — 10 November 2026
+
+Recovered clean a3999b5; latest run 42791352363 passed 506 tests but failed the
+container pip download with BrokenPipeError. Implemented private Unix-socket ClamAV
+adapter and explicit single-item trusted worker plus migration 0064, separate
+execute-only customer status capability, optional server DSN and UI refresh.
+No scanner credentials/original read/claim or verdict mutation on the web process.
+Eight new offline protocol tests pass (56 core total); 21 identity tests pass.
+Seven new PostgreSQL, two Chromium and three actual-daemon qualification tests
+await CI. Synthetic test signatures are not production malware protection. Read
+commercial/SCANNING.md before resuming; inspect CI, fix actual failures and verify
+container build. Next: durable authorised customer scan requests and qualified
+extraction/draft review. No deployment, billing, contract, private data or filing.

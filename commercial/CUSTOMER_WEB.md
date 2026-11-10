@@ -300,3 +300,8 @@ the provider retains a different SSO account. Existing authenticated cookie sess
 and background refresh remain available. Pending work stays in the original tab;
 server-side expected-actor checks still reject retries by a different account.
 This is not provider-wide logout, MFA or server-side session revocation.
+
+[Optional scan status and trusted worker](SCANNING.md) connect current-policy
+metadata to the evidence list. The status reader uses separate execute-only grants
+and OMNIXAT_SCAN_STATUS_DSN_FILE; the web process receives no scanner credentials
+or original-byte read capability. This does not automatically queue or scan uploads.
