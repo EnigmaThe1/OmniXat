@@ -3077,3 +3077,29 @@ complete the fictional hosted login in the opened tab before exercising the actu
 return page/API/database. No assertion, timeout, application guard or prototype
 code was removed or weakened. This remains gateway simulation, not live provider
 qualification. Inspect the follow-up CI and recovery mobile screenshot.
+
+### Supported-runner session recovery verification — complete
+
+[Run 42754414906](https://github.com/EnigmaThe1/OmniXat/actions/runs/42754414906)
+for published `5c806e9` completed successfully on 10 November 2026:
+**48 core + 21 identity + 392 PostgreSQL/HTTP + 13 real Chromium customer + 20
+unchanged prototype = 494 tests passed**, plus the customer container build.
+Integration took **50.656s**, customer browser **10.834s**, prototype **2.932s**;
+PostgreSQL was **16.15**, Python **3.12.16**. Logs confirm all four new recovery
+regressions passed, including the retained exact-file/request retry and account
+switch checks. No test was skipped or weakened. The earlier fixture failures are
+resolved; this supersedes the pending-CI instructions above.
+
+The actual customer-session-recovery-mobile.png from that run was downloaded and
+visually inspected: readable return/same-account instructions, correct explicit
+statement that the check has saved nothing, and no horizontal overflow. Browser
+assertions also confirm null opener, preserved original tab/File, one saved record
+and no browser storage. The tested published tree was fetched and matched the local
+source. This final follow-up records evidence only; application/test code is unchanged.
+
+Next: qualify the exact maintained gateway/provider session, cookie renewal,
+revocation/key rotation and provider logout with fictional accounts, then connect
+authorised scanning and customer draft review. No external provider/session or
+whole-platform production qualification is claimed by these stand-in browser tests.
+No deployment, paid activation or statutory action occurred. No unfinished local
+implementation or failed CI remains for this increment.

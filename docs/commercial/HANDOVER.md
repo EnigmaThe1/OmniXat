@@ -1061,3 +1061,14 @@ fulfilled-redirect interception issues (11 passed). Fixtures now await initial
 evidence load and explicitly navigate the opened fictional gateway tab to the
 actual recovery page. Assertions/timeouts and application code remain intact.
 Inspect the follow-up CI; no browser/container success is claimed for that fix yet.
+
+Session recovery is now CI-verified: run 42754414906 for published 5c806e9 passed
+**494 tests** (461 services, all 13 real customer Chromium, all 20 unchanged
+prototype) and the customer container build. The recovery mobile screenshot was
+downloaded and visually inspected for readable instructions and no overflow.
+This supersedes the preceding pending-CI instruction and records resolution of
+both fixture failures. Application/test code is unchanged by this evidence entry.
+No active implementation remains. Resume with exact maintained gateway/provider
+login, renewal/revocation/key rotation/logout qualification, then authorised
+scanner and customer draft review; fictional gateway fixtures are not a real
+provider acceptance result. No deployment, payment activation or filing occurred.
