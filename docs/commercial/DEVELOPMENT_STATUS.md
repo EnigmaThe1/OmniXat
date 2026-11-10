@@ -3175,3 +3175,37 @@ with actual OAuth2 Proxy/browser login, cookie renewal/account switch/logout and
 provider key/session revocation; connect that qualified journey to authorised
 scanner and draft review. Do not substitute these HTTP form tests for the actual
 browser/gateway acceptance matrix. No active implementation remains after publication.
+
+## Restore complete CI qualification — in progress (10 November 2026)
+
+Recovered clean f95392d. Run 42760709436 exhausted its 20-minute budget inside
+Playwright's APT dependency setup: logs show repeated Azure Ubuntu mirror retries
+and stalled package indexes. No service/provider/customer browser test ran; the
+retained prototype browser failed because Chromium was not installed. This is not
+a passing qualification result. Scope: repair Ubuntu hosted-runner package setup
+using official HTTPS Ubuntu sources, verified archive signing and bounded network
+retries, preserving every existing test and production dependency.
+
+Implemented a hosted-Ubuntu-24.04-only preparation step. It replaces the runner's
+Ubuntu mirror indirection with https://archive.ubuntu.com/ubuntu/ for all four noble
+pockets, retaining the Ubuntu archive signing key and all components. APT transport
+timeouts are 30 seconds with two retries and update errors fail closed; dependency
+installation has an eight-minute step budget. No TLS/package signature verification
+is disabled. These commands run only on the ephemeral GitHub-hosted runner, not the
+application host. All service, real-provider, customer browser, container and retained
+prototype steps remain. No test code/assertion/timeout was changed.
+
+Verification: workflow YAML parsed, `bash -n` passed for every embedded run block,
+structural checks confirmed both browser steps remain (prototype still always()),
+and `cd commercial && python3 -m unittest discover -s tests -q` passed 48 tests in
+0.069s. `git diff --check` passed. Local host package sources were not changed;
+actual package installation and complete qualification require the new CI run.
+No service code/schema/dependency version changed, so prior 466 local service/provider
+results are historical evidence, not a new full-suite pass. No deployment or billing.
+
+Primary references checked 10 November 2026: Playwright browser installation
+https://playwright.dev/python/docs/browsers and Ubuntu archive integrity
+https://documentation.ubuntu.com/security/software-integrity/archive-verification/ .
+Ubuntu documents the noble-security pocket at the same official HTTPS archive.
+Next: inspect the new CI, fix any remaining genuine failure, then continue the real
+OAuth2 Proxy/browser identity qualification. No active local implementation remains.

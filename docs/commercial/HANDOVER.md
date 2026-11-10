@@ -1095,3 +1095,16 @@ login, cookie renewal/account switch/logout, key/session revocation and producti
 MFA/recovery qualification, followed by authorised scanner and draft review. No
 provider service was deployed, no real credentials/records were published and no
 billing or statutory action occurred. No active implementation remains after publication.
+
+## Latest CI recovery checkpoint (10 November 2026)
+
+f95392d's run 42760709436 timed out in APT browser dependency installation against
+the runner's Azure mirror. Services/provider/browser/container were never exercised;
+the retained prototype failed with Chromium unavailable. Do not call that run green.
+The workflow now uses official HTTPS Ubuntu noble sources on an explicitly guarded
+GitHub-hosted Ubuntu 24.04 runner, keeps archive signature verification, bounds APT
+retries/timeouts and gives dependency setup an eight-minute budget. No test removed
+or weakened, no production dependency/host changed. YAML/all embedded shell syntax,
+retained-browser structural checks and 48 core tests passed locally. Inspect the
+new CI for actual full qualification, then resume real browser/gateway identity.
+No active implementation remains after publication; no deployment/billing/filing.
