@@ -7,7 +7,7 @@ class CustomerCSVAnswerBrowserTests(CustomerCSVAnswerFixture):
         page,errors=self.browser(token=self.token(scope=ANSWER_SCOPES))
         page.goto(self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}')
         page.get_by_role('button',name='Inspect CSV candidates',exact=True).click()
-        return page,errors,page.get_by_role('region',name='CSV candidates '+self.evidence,exact=True)
+        return page,errors,page.get_by_role('region',name='CSV candidates '+self.evidence,exact=True,include_hidden=True)
 
     def test_exact_answer_then_unavailable_after_reload_with_mobile_layout(self):
         from playwright.sync_api import expect

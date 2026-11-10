@@ -3924,3 +3924,14 @@ Next: durable authorised customer extraction requests, then draft review/correct
 through shared services. Production scanner/security/restore and statutory approval
 gates remain open. No active writer after publication; fetch/check current remote
 before resuming. No deployment, billing, contract, private records or filing action.
+
+### First clarification CI result and browser assertion follow-up
+
+Run 42892463713 passed core/identity/PostgreSQL, native provider, provider/gateway
+Chromium, ClamAV and retained prototype tests. Customer Chromium had two new
+locator errors after deliberately hiding the workspace (the locator excluded hidden
+regions) and one existing copy assertion regression after the navigation message
+changed. Exact/unavailable and lost-receipt/account-switch answer cases passed.
+The follow-up includes hidden regions for the empty-DOM assertions and retains the
+established navigation-message prefix. No assertion, timeout or test is removed or
+relaxed; denied candidate DOM must still be empty. Full follow-up CI remains required.

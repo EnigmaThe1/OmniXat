@@ -78,7 +78,7 @@ function navigate(path) {
   }
   if (document.querySelector('.csv-answer[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
   if (state.org && ($('note-body').value.trim() || $('evidence-file').files.length)) {
-    tell('Save or clear the pending note, file or answer before leaving this organisation.'); workspaceOptions(); return;
+    tell('Save or clear the note, selected file or answer before leaving this organisation.'); workspaceOptions(); return;
   }
   history.pushState({}, '', path); loadRoute();
 }
@@ -499,7 +499,7 @@ document.addEventListener('click', event => {
 window.addEventListener('popstate', () => {
   if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
     history.pushState({}, '', tenantPath(state.tenant) + (state.org ? `/organisations/${state.org}` : ''));
-    tell('Save or clear the pending note, file or answer before leaving this organisation.');
+    tell('Save or clear the note, selected file or answer before leaving this organisation.');
   } else loadRoute();
 });
 window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
