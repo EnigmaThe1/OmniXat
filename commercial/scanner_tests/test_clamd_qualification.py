@@ -7,14 +7,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import psycopg
-from test_customer_scan_status import CustomerScanStatusFixture
+from test_customer_scan_requests import CustomerScanRequestFixture
 from omnixat_core.clamd_scanner import ClamdScanner, ScannerUnavailable
 from omnixat_core.evidence_scan_postgres import scan_quarantined_evidence, EvidenceScanError
 from omnixat_core.scan_worker import main
 from qualification.clamd import ClamdFixture
 
 
-class ClamdQualificationTests(CustomerScanStatusFixture):
+class ClamdQualificationTests(CustomerScanRequestFixture):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -31,9 +31,11 @@ class ClamdQualificationTests(CustomerScanStatusFixture):
         settings.write_text(json.dumps({'socket_path':str(self.daemon.socket_path),
             'expected_version':self.daemon.expected_version,'policy_version':self.daemon.policy_version}))
         dsn.write_text(self.scanner_dsn); settings.chmod(0o600); dsn.chmod(0o600)
+        self.policy(self.daemon.policy_version)
+        self.assertEqual(self.request().status_code,202)
         output=StringIO()
         with patch.dict(os.environ,{'OMNIXAT_SCANNER_CONFIG_FILE':str(settings),'OMNIXAT_SCANNER_DSN_FILE':str(dsn)}),redirect_stdout(output):
-            self.assertEqual(main(['--tenant',self.a,'--organisation',str(self.org),'--evidence',self.evidence]),0)
+            self.assertEqual(main(['--tenant',self.a,'--organisation',str(self.org),'--evidence',self.evidence,'--requested']),0)
         receipt=json.loads(output.getvalue()); self.assertEqual(receipt['verdict'],'clean')
         self.policy(self.daemon.policy_version)
         self.assertEqual(self.status().json()['data']['status'],'scanned')

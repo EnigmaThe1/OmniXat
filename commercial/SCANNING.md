@@ -4,11 +4,12 @@ This increment connects the existing quarantine/scan-claim services to a bounded
 ClamAV INSTREAM adapter and provides read-only status in the customer website.
 It is opt-in infrastructure, not an automatic processing pipeline or production
 malware-coverage claim. Originals remain in quarantine. No extraction, ledger
-entry, customer scan-request queue, filing or payment is started by these routes.
+entry, filing or payment is started by these routes. Customers can explicitly
+record durable scan requests; only the explicit trusted worker processes them.
 
 ## Customer read capability
 
-Apply checksum-checked migrations through **0064** with the migration owner.
+Apply checksum-checked migrations through **0065** with the migration owner.
 Create a separate non-owner, non-superuser, non-BYPASSRLS status login. Grant only:
 
 ```sql
@@ -37,6 +38,7 @@ queries and POST requests are rejected.
 | upload_incomplete | No stored original; upload the same file again |
 | not_configured | Operator has not selected an active qualified scan policy |
 | awaiting_scan | No current-policy observation or live claim; this does not mean queued |
+| requested | A durable current-policy request exists; awaiting an operator-run worker |
 | scanning | A live current-policy worker claim exists |
 | blocked | A blocked current-policy observation exists; it takes precedence |
 | scanned | A clean exact-byte observation exists under the active policy with no live claim |
@@ -45,6 +47,45 @@ Old-policy observations cannot become current merely by refreshing the page. The
 status display is a point-in-time observation; it grants no extraction authority.
 The existing extraction gate must recheck current policy/claims/verdicts itself.
 The customer can refresh status, but cannot submit a verdict or choose a scanner.
+
+## Customer scan requests
+
+Provision a **separate** non-owner, non-superuser, non-BYPASSRLS request login:
+
+```sql
+GRANT USAGE ON SCHEMA omnixat_evidence_requests TO customer_scan_requester;
+GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.request_scan(text,text,bigint,uuid,uuid,uuid)
+  TO customer_scan_requester;
+```
+
+Give this login no direct omnixat schema/table privileges, scanner functions or
+policy/verdict writes. Configure a private `OMNIXAT_SCAN_REQUEST_DSN_FILE` (or
+`scan_request_connection_factory`) as well as status access and evidence intake.
+The customer sees Request scan only for an awaiting-scan item when the current
+human owner/editor has records:read, records:write, evidence:read and evidence:scan.
+`evidence:register` alone does not grant scan requests. The optional scope must be
+provisioned by the trusted identity provider; token role claims cannot grant it.
+
+`POST /v1/workspaces/{tenant}/organisations/{organisation}/evidence/{evidence}/scan-requests`
+accepts only the exact JSON body `{}` with Content-Type application/json, no query,
+encoding or idempotency-key. Same-origin gateway rules apply. The optional expected
+actor header restricts account continuity. It returns 202 and evidence_id,
+policy_version and requested_at; this is a durable request receipt, not completion.
+The unique tenant/evidence/current-policy key makes retries/concurrent requests
+return the same first receipt and attribution. The SQL capability rechecks human
+membership/cutoff on every invocation and locks the policy through commit; policy
+comes from the operator, never the client. Incomplete/missing uploads or no policy
+cannot enqueue. Request admission does not continuously lock member authority.
+
+Status precedence retains blocked/scanning/scanned before requested. Old-policy
+requests do not enable work under a newer policy; the customer can request the new
+policy separately. A receipt persists after requester revocation but worker
+admission rejects disabled/revoked/downgraded identities or a newer token cutoff.
+Status requested means a historical durable request exists, not guaranteed current
+authority or an active scheduled processor. Cancellation/re-authorisation of the
+same-policy first request, enumeration/dispatch and automated retries remain open.
+No request table, requester identifiers, token timestamps or original bytes are
+exposed by status. No bearer token is stored in the request record.
 
 ## Explicit worker
 
@@ -71,6 +112,19 @@ These are placeholders, not working release settings. Run explicitly from commer
 python3 -m omnixat_core.scan_worker --tenant TENANT_UUID \
   --organisation ORGANISATION_UUID --evidence EVIDENCE_UUID
 ```
+
+For customer-requested work, separately grant the scanner login:
+
+```sql
+GRANT USAGE ON SCHEMA omnixat_evidence_requests TO scanner_worker;
+GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.worker_request(uuid,uuid) TO scanner_worker;
+```
+
+Add `--requested` to the command. Admission requires a current-policy durable
+request, matching configured qualified policy, and still-authorised requester.
+The check happens before the existing bounded scan; it is not continuous
+cancellation of an in-flight scan. The earlier command without this flag remains
+an explicit operator-authorised single-item tool. No scheduled processor starts.
 
 Scope must come from an operator-authorised task; never dispatch arbitrary browser
 IDs directly to this worker. No service starts on import. The worker returns a
@@ -116,4 +170,11 @@ Sources checked **10 November 2026**: [ClamD protocol](https://docs.clamav.net/m
 [signature target types](https://docs.clamav.net/appendix/FileTypes.html), and the
 [official Ubuntu package](https://packages.ubuntu.com/noble-updates/clamav-daemon).
 No legal rule or financial amount changed in this increment. Durable customer
-scan requests, qualified extraction and draft review remain subsequent work.
+request dispatch/cancellation/re-authorisation, qualified extraction and draft
+review remain subsequent work.
+
+PostgreSQL capability/RLS semantics checked **10 November 2026** against the
+[official row security documentation](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
+and [SECURITY DEFINER guidance](https://www.postgresql.org/docs/current/sql-createfunction.html).
+New functions fix search_path, enable row_security and revoke PUBLIC execute.
+Tests include a non-BYPASSRLS migration owner with forced RLS.

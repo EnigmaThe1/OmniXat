@@ -118,10 +118,14 @@ verdicts from a trusted scanner callback using recoverable PostgreSQL claims.
 A separate read gate checks the active scan policy before releasing an original
 to trusted worker code. CSV decimal candidates can be stored with source
 provenance and safe retries. Scoped review shows attributed answers alongside
-original candidates and prompts only for unanswered cells. No real scanner, OCR, model or upload route is wired.
+original candidates and prompts only for unanswered cells. OCR and model processing remain unwired; see the opt-in intake/scanning additions below.
 
 [Optional customer evidence intake](CUSTOMER_WEB.md#opt-in-evidence-intake) connects
 bounded file uploads, paginated metadata and inspectable fingerprint receipts to the shared registry/quarantine
 services with fresh human authority and explicit evidence scopes. It is disabled
 unless an operator configures a private spool and database grants. Stored files
 remain quarantined; no scanner, extraction, posting or filing is enabled by upload.
+
+[Trusted scanning and durable requests](SCANNING.md) connect an explicit private-socket
+ClamAV worker, separate customer status/request capabilities and Request scan UI.
+They do not automatically process uploads or qualify production malware coverage.

@@ -127,7 +127,7 @@ class CustomerScanStatusTests(CustomerScanStatusFixture):
         with psycopg.connect(make_conninfo(self.admin_dsn,dbname=database,user=name,password=password),autocommit=True) as owner:
             for file in ['0001_tenant_records.sql','0002_identity_memberships.sql','0013_evidence_registrations.sql',
                          '0014_evidence_quarantine.sql','0015_evidence_scan_verdicts.sql','0016_evidence_scan_claims.sql',
-                         '0017_evidence_extraction_gate.sql','0064_customer_scan_status.sql']:
+                         '0017_evidence_extraction_gate.sql','0064_customer_scan_status.sql','0065_customer_scan_requests.sql']:
                 owner.execute((MIGRATIONS/file).read_text())
             owner.execute(sql.SQL('GRANT USAGE ON SCHEMA omnixat_evidence_status TO {}').format(sql.Identifier(self.status_role)))
             owner.execute(sql.SQL('GRANT EXECUTE ON FUNCTION omnixat_evidence_status.read_status(text,text,bigint,uuid,uuid) TO {}').format(sql.Identifier(self.status_role)))

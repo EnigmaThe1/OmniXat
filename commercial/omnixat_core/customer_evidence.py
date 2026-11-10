@@ -52,11 +52,14 @@ def evidence_actor(connection, verifier, token, tenant, *, write=False, expected
 
 
 class CustomerEvidence:
-    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None):
+    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None):
         self.verifier, self.connections = verifier, connection_factory
         if status_connections is not None and not callable(status_connections):
             raise ValueError('Server-owned status connection factory required')
         self.status_connections = status_connections
+        if request_connections is not None and not callable(request_connections):
+            raise ValueError('Server-owned request connection factory required')
+        self.request_connections = request_connections
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
@@ -112,6 +115,17 @@ class CustomerEvidence:
         from .evidence_status_postgres import read_scan_status
         with self.status_connections() as connection:
             return read_scan_status(connection,self.verifier,token,tenant,organisation,evidence)
+
+    def request_scan(self, token, tenant, organisation, evidence, expected):
+        self.authorize(token,tenant,organisation,expected_actor=expected)
+        from .evidence_requests_postgres import request_scan, ScanRequestUnavailable, ScanRequestActorChanged
+        try:
+            with self.request_connections() as connection:
+                return request_scan(connection,self.verifier,token,tenant,organisation,evidence,expected_actor=expected)
+        except ScanRequestUnavailable:
+            raise ApiError(409,'scan_request_unavailable') from None
+        except ScanRequestActorChanged:
+            raise ApiError(409,'session_changed') from None
 
     def persist(self, token, tenant, organisation, source, media_type, size, expected=None):
         source.seek(0)
@@ -172,6 +186,26 @@ class CustomerEvidence:
                 return JSONResponse({'data':result,'request_id':request.scope['request_id']})
             if request.query_params:
                 raise ApiError(400, 'unsupported_parameter')
+            if evidence is not None:
+                # This action has no customer-selectable policy, verdict or payload.
+                # Read at most the fixed empty JSON document, with a bounded wait.
+                if request.headers.getlist('content-type') != ['application/json'] or request.headers.getlist('content-encoding'):
+                    raise ApiError(415,'unsupported_media_type')
+                if request.headers.getlist('content-length') not in ([],['2']):
+                    raise ApiError(400,'invalid_request')
+                content=bytearray()
+                try:
+                    with anyio.fail_after(5):
+                        async for chunk in request.stream():
+                            if len(content)+len(chunk)>2:
+                                raise ApiError(400,'invalid_request')
+                            content.extend(chunk)
+                except TimeoutError:
+                    raise ApiError(408,'request_timeout') from None
+                if content!=b'{}':
+                    raise ApiError(400,'invalid_request')
+                result=await run_in_threadpool(self.request_scan,token,tenant,organisation,evidence,initiating_actor)
+                return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=202)
             media_types = request.headers.getlist('content-type')
             encodings = request.headers.getlist('content-encoding')
             if len(media_types)!=1 or media_types[0] not in EVIDENCE_MEDIA_TYPES or encodings not in ([], ['identity']):
@@ -237,4 +271,7 @@ class CustomerEvidence:
         if self.status_connections is not None:
             routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/scan-status',
                                 self.endpoint,methods=['GET']))
+        if self.request_connections is not None:
+            routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/scan-requests',
+                                self.endpoint,methods=['POST']))
         return routes

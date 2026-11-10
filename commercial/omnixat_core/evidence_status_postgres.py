@@ -11,7 +11,7 @@ def read_scan_status(connection, verifier, token, tenant, organisation, evidence
     tenant,organisation,evidence=(UUID(str(x)) for x in (tenant,organisation,evidence))
     with _tenant_transaction(connection,tenant,tables_required=(
             'identities','memberships','evidence_registrations','evidence_quarantine',
-            'evidence_scan_verdicts','evidence_scan_claims')):
+            'evidence_scan_verdicts','evidence_scan_claims','evidence_scan_requests')):
         with connection.cursor(row_factory=dict_row) as cursor:
             cursor.execute("SELECT has_schema_privilege('omnixat','USAGE,CREATE') AS direct_access")
             if cursor.fetchone()['direct_access']:

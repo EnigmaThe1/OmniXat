@@ -137,7 +137,7 @@ class Boundary:
             await self.app(scope, receive, safe_send)
 
 
-def create_app(*, verifier, connection_factory, allowed_hosts, directory_connection_factory=None, evidence_quarantine_dir=None, scan_status_connection_factory=None):
+def create_app(*, verifier, connection_factory, allowed_hosts, directory_connection_factory=None, evidence_quarantine_dir=None, scan_status_connection_factory=None, scan_request_connection_factory=None):
     """Return ASGI app only. Factory must bound acquisition and lease exclusively."""
     if (not isinstance(allowed_hosts, (list, tuple)) or not allowed_hosts
             or any(not isinstance(h, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]{0,252}', h)
@@ -164,6 +164,8 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
                         context['evidence_access'] = evidence_quarantine_dir is not None and 'evidence:read' in scopes
                         context['scan_status_access'] = (context['evidence_access']
                             and scan_status_connection_factory is not None)
+                        context['can_request_scan'] = (context['scan_status_access'] and scan_request_connection_factory is not None
+                            and context['can_write'] and records._actor.actor_kind == 'human' and 'evidence:scan' in scopes)
                         context['can_upload_evidence'] = (context['evidence_access'] and context['can_write']
                             and records._actor.actor_kind == 'human' and 'evidence:register' in scopes)
                         return context
@@ -293,6 +295,7 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
     if evidence_quarantine_dir is not None:
         from .customer_evidence import CustomerEvidence
         routes.extend(CustomerEvidence(verifier, connection_factory, evidence_quarantine_dir,
-                                       status_connections=scan_status_connection_factory).routes())
+                                       status_connections=scan_status_connection_factory,
+                                       request_connections=scan_request_connection_factory).routes())
     app = Starlette(debug=False,routes=routes,exception_handlers={HTTPException:http_error})
     return Boundary(app, allowed_hosts)

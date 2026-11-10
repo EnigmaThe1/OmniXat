@@ -22,7 +22,10 @@ async function request(url, options = {}) {
     signal: AbortSignal.timeout(15000), ...options});
   if (!response.ok) {
     let code = 'request_failed';
-    try { if ((await response.json()).error?.code === 'session_changed') code = 'session_changed'; } catch (_) { /* Generic error on invalid responses. */ }
+    try {
+      const received = (await response.json()).error?.code;
+      if (['session_changed', 'scan_request_unavailable'].includes(received)) code = received;
+    } catch (_) { /* Generic error on invalid responses. */ }
     throw new RequestError(response.status, code);
   }
   const document = await response.json();
@@ -32,6 +35,7 @@ async function request(url, options = {}) {
 function clearMessage() { show('error', false); show('notice', false); }
 function tell(text) { $('notice').textContent = text; show('notice', true); }
 function errorMessage(error) {
+  if (error.code === 'scan_request_unavailable') return 'A scan cannot be requested yet. The upload must be complete and an operator must configure the scan policy.';
   if (error.code === 'session_changed') return 'Sign in with the same account that started this save, then retry. If your provider shows another account, use its account-change or restart option. Your pending work is still in this tab.';
   if (error.status === 401) return 'Your session has ended. Sign in again to continue.';
   if (error.status === 403) return 'Your access has changed, or this action is not permitted. Sign in again or contact your workspace owner.';
@@ -196,7 +200,7 @@ async function viewScanStatus(item, button, panel) {
     const result = await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/scan-status`);
     if (epoch !== state.epoch || !panel.isConnected) return;
     const labels = {upload_incomplete: 'Upload incomplete', not_configured: 'Scanning is not configured',
-      awaiting_scan: 'Awaiting a trusted scanner', scanning: 'Scan in progress',
+      awaiting_scan: 'Awaiting a trusted scanner', requested: 'Scan requested — awaiting an operator-run worker', scanning: 'Scan in progress',
       blocked: 'Blocked by the scan policy', scanned: 'Scan completed — no detections under this policy'};
     if (!labels[result.status]) throw new RequestError(502, 'invalid_response');
     const details = [element('strong', labels[result.status])];
@@ -204,6 +208,23 @@ async function viewScanStatus(item, button, panel) {
     if (result.recorded_at) details.push(element('p', `Observation recorded: ${dateText(result.recorded_at)}`));
     details.push(element('p', 'Evidence stays in quarantine. A scan result does not validate figures, create accounting entries or approve a filing.'));
     panel.replaceChildren(...details); button.textContent = 'Refresh scan status';
+    if (state.context?.can_request_scan && result.status === 'awaiting_scan') {
+      const start = element('button', 'Request scan', 'button secondary'); start.type = 'button';
+      const actor = state.context.actor_id;
+      start.addEventListener('click', async () => {
+        start.disabled = true; clearMessage();
+        try {
+          await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/scan-requests`, {
+            method: 'POST', headers: {'Content-Type': 'application/json', 'X-OmniXat-Expected-Actor': actor}, body: '{}'});
+          if (epoch !== state.epoch || !panel.isConnected) return;
+          await viewScanStatus(item, button, panel);
+        } catch (error) {
+          if (epoch !== state.epoch || !panel.isConnected) return;
+          panel.replaceChildren(); fail(error);
+        }
+      });
+      panel.append(start);
+    }
   } catch (error) {
     if (epoch !== state.epoch || !panel.isConnected) return;
     panel.replaceChildren(element('p', errorMessage(error))); button.textContent = 'Retry scan status';

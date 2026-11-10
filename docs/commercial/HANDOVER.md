@@ -1331,3 +1331,36 @@ configuration, grants and limits. This follow-up changes documentation only.
 Fetch/check branch, working tree, remote movement and checks before resuming.
 No active writer remains after publication. No deployment, billing activation,
 paid contract, private records or statutory submission occurred.
+
+## Durable scan-request implementation checkpoint — 10 November 2026
+
+Implemented migration 0065 and shared request service, strict opt-in POST,
+separate execute-only request DSN/capability, customer Request scan UI, requested
+status and explicit worker --requested admission. Natural tenant/evidence/policy
+idempotency preserves the first receipt/actor, including four concurrent requests.
+No client policy, verdict, original download or auto-started scanner. New scope:
+evidence:scan plus records:read/write and evidence:read; only current human
+owner/editor memberships qualify. The worker checks current policy and requester
+revocation/disable/role/token-cutoff before the bounded existing scanner operation.
+Read-only status and request credentials stay separate from scanner credentials.
+
+Local verification: 56 core tests passed (0.154s), 21 identity (0.510s), all 408
+PostgreSQL integration tests (75.210s) on disposable PostgreSQL 16.2/psycopg 3.3.8,
+including nine new request tests, a non-bypass migration owner, tenant isolation,
+concurrency, strict transport, grants, actor continuity and revocation/cutoff.
+Python compilation, JavaScript syntax and git diff --check passed. An initial
+non-bypass test exposed SELECT row locks requiring authority beyond the existing
+RLS policies; request admission now uses the established fresh lookup and locks
+only the active policy. No identity RLS policy was widened. Member authority is
+not continuously locked; the worker independently rechecks it before processing.
+Local Chromium download returned invalid/truncated ZIPs; no local browser pass is
+claimed. Two new browser cases and the strengthened actual-daemon worker test
+await full CI; all prior suites and container/prototype checks remain intact.
+
+Read commercial/SCANNING.md for setup, grants and explicit limits. Requests do not
+start an automatic processor. Historical request status is not proof that its
+requester remains authorised. Same-policy first-request cancellation/re-authorisation
+and bounded dispatch/retry remain the next resumable step, then qualified extraction
+and human draft review. Scanner qualification uses synthetic rules; production
+malware coverage/configuration/security/restore remain open. Nothing deployed,
+billed, contracted, privately disclosed or submitted to an authority.
