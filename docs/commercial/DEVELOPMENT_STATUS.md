@@ -3481,3 +3481,33 @@ empty text. The locator now includes hidden regions so the security assertion
 still requires empty DOM content. No production code, auth rule or timeout is
 changed; no test skipped. Container build did not run after this error. Inspect
 follow-up full CI and build before claiming completion.
+
+### Scanner/status verified checkpoint — 10 November 2026
+
+Code 029189b29a9f0ed470517455f8f5d9b019a1da41 passed the complete commercial
+workflow run 42798834630 (job 129770822486): 526 tests, zero failures/errors/skips,
+and the customer container build. Exact suite results: 56 core (0.126s),
+21 identity (0.314s), 399 PostgreSQL (72.733s), five native Keycloak (37.178s),
+two provider Chromium (32.996s), five gateway Chromium (82.995s), three actual
+ClamAV worker/status qualification (1.934s), 15 customer Chromium (18.965s), and
+all 20 retained fictional-demo tests including browser approval (3.966s).
+This supersedes the pending and failed-run notes above. The hidden-region
+locator correction preserves the empty-DOM session-expiry assertion.
+
+Qualification used Ubuntu clamav-daemon 1.5.4+dfsg-0ubuntu0.24.04.1 and a private
+synthetic NDB rule only. It proves real protocol/worker/persistence/status/UI
+behaviour, not production malware coverage. Scanner-browser qualification uses
+the existing gateway stand-in; separate real provider/gateway suites also pass.
+Production requires qualified immutable scanner configuration/signature policy,
+protected socket/credentials and operational security/restore validation.
+Uploads remain quarantined; no automatic scan, extraction, ledger entry or final
+approval is implied. Scan status is point-in-time and must be rechecked by any
+future extraction gate. No customer original is exposed through the status API.
+
+Next resumable scope: durable authorised customer scan requests through shared
+services (permissions, policy validation, retry/idempotency and tenant isolation),
+then qualified extraction and human draft review. See commercial/SCANNING.md for
+configuration, grants and limits. This follow-up changes documentation only.
+Fetch/check branch, working tree, remote movement and checks before resuming.
+No active writer remains after publication. No deployment, billing activation,
+paid contract, private records or statutory submission occurred.
