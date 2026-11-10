@@ -116,12 +116,12 @@ class CustomerEvidence:
         with self.status_connections() as connection:
             return read_scan_status(connection,self.verifier,token,tenant,organisation,evidence)
 
-    def request_scan(self, token, tenant, organisation, evidence, expected):
+    def request_scan(self, token, tenant, organisation, evidence, expected, cancel=False):
         self.authorize(token,tenant,organisation,expected_actor=expected)
         from .evidence_requests_postgres import request_scan, ScanRequestUnavailable, ScanRequestActorChanged
         try:
             with self.request_connections() as connection:
-                return request_scan(connection,self.verifier,token,tenant,organisation,evidence,expected_actor=expected)
+                return request_scan(connection,self.verifier,token,tenant,organisation,evidence,expected_actor=expected,cancel=cancel)
         except ScanRequestUnavailable:
             raise ApiError(409,'scan_request_unavailable') from None
         except ScanRequestActorChanged:
@@ -204,7 +204,7 @@ class CustomerEvidence:
                     raise ApiError(408,'request_timeout') from None
                 if content!=b'{}':
                     raise ApiError(400,'invalid_request')
-                result=await run_in_threadpool(self.request_scan,token,tenant,organisation,evidence,initiating_actor)
+                result=await run_in_threadpool(self.request_scan,token,tenant,organisation,evidence,initiating_actor,request.url.path.endswith('/scan-cancellations'))
                 return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=202)
             media_types = request.headers.getlist('content-type')
             encodings = request.headers.getlist('content-encoding')
@@ -273,5 +273,7 @@ class CustomerEvidence:
                                 self.endpoint,methods=['GET']))
         if self.request_connections is not None:
             routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/scan-requests',
+                                self.endpoint,methods=['POST']))
+            routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/scan-cancellations',
                                 self.endpoint,methods=['POST']))
         return routes

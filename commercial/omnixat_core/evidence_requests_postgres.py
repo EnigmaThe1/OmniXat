@@ -13,7 +13,9 @@ class ScanRequestActorChanged(Exception):
     """An optional initiating identity no longer matches."""
 
 
-def request_scan(connection, verifier, token, tenant, organisation, evidence, *, expected_actor=None):
+def request_scan(connection, verifier, token, tenant, organisation, evidence, *, expected_actor=None, cancel=False):
+    if type(cancel) is not bool:
+        raise ValueError('Explicit cancellation flag required')
     identity=verifier.verify(token)
     if not {'records:read','records:write','evidence:read','evidence:scan'} <= identity.scopes:
         raise PermissionError('Scan request scopes required')
@@ -26,7 +28,8 @@ def request_scan(connection, verifier, token, tenant, organisation, evidence, *,
                 cursor.execute("SELECT has_schema_privilege('omnixat','USAGE,CREATE') AS direct_access")
                 if cursor.fetchone()['direct_access']:
                     raise PermissionError('Dedicated scan request grants required')
-                cursor.execute('SELECT * FROM omnixat_evidence_requests.request_scan(%s,%s,%s,%s,%s,%s)',
+                function='cancel_scan' if cancel else 'request_scan'
+                cursor.execute('SELECT * FROM omnixat_evidence_requests.'+function+'(%s,%s,%s,%s,%s,%s)',
                                (identity.issuer,identity.subject,identity.issued_at,organisation,evidence,expected_actor))
                 row=cursor.fetchone()
                 if row is None:

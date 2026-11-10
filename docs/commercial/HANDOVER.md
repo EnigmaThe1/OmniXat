@@ -1446,3 +1446,29 @@ overall wall-clock SLA; per-service timeouts apply. Production scanner qualifica
 still uses synthetic rules only. Next: customer cancellation/re-authorisation, then
 qualified extraction and human draft review. No active writer remains after
 publication; no deployment, payment, contract, private records or statutory action.
+
+## Customer scan cancellation checkpoint — 10 November 2026
+
+Implemented migration 0066, separately granted cancel_scan capability, shared
+service/strict same-origin POST and customer Cancel scan request action. Retains
+original requester and first cancellation attribution/time. Idempotent concurrent
+cancellation blocks future requested/batch worker admission; existing verdicts,
+claims and originals are preserved. Status prefers observed blocked/scanning/scanned
+states before cancelled. Current human owner/editor/scopes and optional initiating
+actor are rechecked. No direct table mutation grant or scanner credential on web.
+
+Local verification: 66 core tests (0.102s), 21 identity (0.360s), all 415 PostgreSQL
+integration tests (65.679s) on disposable PostgreSQL 16.2 passed, including four
+new cancellation cases and strengthened non-BYPASSRLS function-owner coverage.
+Python compilation, JavaScript syntax and git diff --check passed. Local Chromium
+executable is absent; the new request/cancel/reload/worker-denial browser test and
+retained daemon/browser/container/prototype suites await CI. No test removed or
+skipped. Prior batch revision 9fef785 full run 42840571777 passed.
+
+Read commercial/SCANNING.md for migration/grant and exact API/behaviour limits.
+Cancellation cannot interrupt an already admitted scan or override operator single-
+item work. Normal request retries cannot re-authorise a cancelled same-policy
+request. Next: explicit re-authorisation with preserved history, then qualified
+extraction and human draft review. Production scanner/security/restore gates remain
+open; no automatic processing, deployment, billing, contract, private data or filing.
+No active writer remains after publication; fetch/check remote before resuming.

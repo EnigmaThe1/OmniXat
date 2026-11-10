@@ -9,7 +9,7 @@ record durable scan requests; only the explicit trusted worker processes them.
 
 ## Customer read capability
 
-Apply checksum-checked migrations through **0065** with the migration owner.
+Apply checksum-checked migrations through **0066** with the migration owner.
 Create a separate non-owner, non-superuser, non-BYPASSRLS status login. Grant only:
 
 ```sql
@@ -196,3 +196,33 @@ suffix is not a successful batch. Operator retry of the same manifest reuses the
 existing durable verdicts. This is a five-item work cap, not a strict overall wall
 clock SLA: existing per-scan and database timeouts still apply. No background
 service, queue enumeration, automatic retry, cancellation or ledger effect starts.
+
+## Customer cancellation
+
+Grant the request login this additional capability only after migration 0066:
+
+```sql
+GRANT EXECUTE ON FUNCTION omnixat_evidence_requests.cancel_scan(text,text,bigint,uuid,uuid,uuid)
+  TO customer_scan_requester;
+```
+
+`POST .../evidence/{evidence}/scan-cancellations` takes the same exact `{}` body,
+scopes, current human owner/editor membership, origin and optional expected-actor
+constraint as requesting. It cancels only the operator's current policy and retains
+the original request plus first cancellation time/actor. Concurrent retries do not
+change that attribution. No direct table UPDATE grant is needed. The response is
+the original request receipt; refresh status to observe cancellation.
+
+The website offers Cancel scan request for requested items and shows cancelled
+status after refresh/reload. A cancellation prevents future --requested/batch
+admission. It cannot interrupt a scan already admitted, revoke an existing verdict
+or delete an original. Status preserves blocked, live scanning and scanned
+observations ahead of cancellation. The explicit operator single-item mode remains
+independent. Normal request retries cannot re-authorise a cancelled same-policy
+request; a new operator policy has a separate request. Re-authorisation with
+preserved history remains unfinished. This supersedes earlier cancellation-pending
+notes; automated dispatch and production scanner qualification remain open.
+
+SECURITY DEFINER/search-path semantics rechecked 10 November 2026 against
+https://www.postgresql.org/docs/current/sql-createfunction.html. Cancellation
+retains forced tenant RLS and separately revoked PUBLIC execute.

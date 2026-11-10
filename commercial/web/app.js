@@ -200,7 +200,7 @@ async function viewScanStatus(item, button, panel) {
     const result = await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/scan-status`);
     if (epoch !== state.epoch || !panel.isConnected) return;
     const labels = {upload_incomplete: 'Upload incomplete', not_configured: 'Scanning is not configured',
-      awaiting_scan: 'Awaiting a trusted scanner', requested: 'Scan requested — awaiting an operator-run worker', scanning: 'Scan in progress',
+      awaiting_scan: 'Awaiting a trusted scanner', cancelled: 'Scan request cancelled — future dispatch is stopped', requested: 'Scan requested — awaiting an operator-run worker', scanning: 'Scan in progress',
       blocked: 'Blocked by the scan policy', scanned: 'Scan completed — no detections under this policy'};
     if (!labels[result.status]) throw new RequestError(502, 'invalid_response');
     const details = [element('strong', labels[result.status])];
@@ -208,13 +208,15 @@ async function viewScanStatus(item, button, panel) {
     if (result.recorded_at) details.push(element('p', `Observation recorded: ${dateText(result.recorded_at)}`));
     details.push(element('p', 'Evidence stays in quarantine. A scan result does not validate figures, create accounting entries or approve a filing.'));
     panel.replaceChildren(...details); button.textContent = 'Refresh scan status';
-    if (state.context?.can_request_scan && result.status === 'awaiting_scan') {
-      const start = element('button', 'Request scan', 'button secondary'); start.type = 'button';
+    if (state.context?.can_request_scan && ['awaiting_scan', 'requested'].includes(result.status)) {
+      const cancelling = result.status === 'requested';
+      if (cancelling) panel.append(element('p', 'Cancellation cannot stop a scan already in progress.'));
+      const start = element('button', cancelling ? 'Cancel scan request' : 'Request scan', 'button secondary'); start.type = 'button';
       const actor = state.context.actor_id;
       start.addEventListener('click', async () => {
         start.disabled = true; clearMessage();
         try {
-          await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/scan-requests`, {
+          await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/${cancelling ? 'scan-cancellations' : 'scan-requests'}`, {
             method: 'POST', headers: {'Content-Type': 'application/json', 'X-OmniXat-Expected-Actor': actor}, body: '{}'});
           if (epoch !== state.epoch || !panel.isConnected) return;
           await viewScanStatus(item, button, panel);
