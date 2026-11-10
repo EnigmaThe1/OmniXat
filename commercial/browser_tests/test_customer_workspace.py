@@ -106,8 +106,87 @@ class CustomerWorkspaceBrowserTests(CustomerWebFixture):
         self.gateway_token = self.token(iat=self.iat-60,exp=self.iat-1)
         page.get_by_role('button',name='Create organisation',exact=True).click()
         expect(page.locator('#dialog-reauth')).to_be_visible()
-        expect(page.locator('#dialog-reauth')).to_have_attribute('href','/oauth2/start?rd=/app')
+        expect(page.locator('#dialog-reauth')).to_have_attribute('href','/oauth2/start?rd=/app/reauthenticated')
         expect(page.get_by_role('button',name='Retry save',exact=True)).to_be_visible()
         expect(page.get_by_label('Organisation name',exact=True)).to_be_disabled()
         self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.organisations WHERE tenant_id=%s AND display_name='Fictional expired-session organisation'",(self.a,)).fetchone(),(0,))
+        self.assertEqual(errors,[])
+
+    def test_chromium_new_tab_reauthentication_preserves_pending_organisation(self):
+        from playwright.sync_api import expect
+        page,errors = self.browser()
+        page.goto(self.origin+'/app')
+        page.get_by_role('button',name='+ New organisation').click()
+        page.get_by_label('Organisation name',exact=True).fill('Fictional recovered organisation')
+        self.gateway_token = self.token(iat=self.iat-60,exp=self.iat-1)
+        page.get_by_role('button',name='Create organisation',exact=True).click()
+        link = page.locator('#dialog-reauth')
+        expect(link).to_be_visible()
+        expect(link).to_have_attribute('target','_blank')
+        expect(link).to_have_attribute('rel','noopener noreferrer')
+        # Only the gateway's external login redirect is simulated. App/API/DB are real.
+        page.context.route('**/oauth2/start?rd=/app/reauthenticated',lambda route:route.fulfill(
+            status=302,headers={'Location':self.origin+'/app/reauthenticated'}))
+        self.gateway_token = self.token()
+        with page.expect_popup() as opened:
+            link.click()
+        recovery = opened.value
+        expect(recovery.locator('#recovery-ready')).to_be_visible()
+        self.assertIsNone(recovery.evaluate('window.opener'))
+        recovery.set_viewport_size({'width':390,'height':844})
+        self.assertFalse(recovery.evaluate('document.documentElement.scrollWidth > window.innerWidth'))
+        artifacts = os.environ.get('OMNIXAT_BROWSER_ARTIFACTS')
+        if artifacts:
+            Path(artifacts).mkdir(parents=True,exist_ok=True)
+            recovery.screenshot(path=str(Path(artifacts)/'customer-session-recovery-mobile.png'),full_page=True)
+        self.assertEqual(page.url,self.origin+f'/app/workspaces/{self.a}')
+        expect(page.get_by_label('Organisation name',exact=True)).to_have_value('Fictional recovered organisation')
+        expect(page.get_by_label('Organisation name',exact=True)).to_be_disabled()
+        recovery.close()
+        page.get_by_role('button',name='Retry save',exact=True).click()
+        expect(page.get_by_role('heading',name='Fictional recovered organisation',exact=True)).to_be_visible()
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.organisations WHERE tenant_id=%s AND display_name='Fictional recovered organisation'",(self.a,)).fetchone(),(1,))
+        self.assertEqual(errors,[])
+
+    def test_chromium_account_switch_preserves_pending_note_without_second_record(self):
+        from uuid import uuid4
+        from playwright.sync_api import expect
+        import httpx
+        page,errors = self.browser()
+        page.goto(self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}')
+        page.get_by_label('Note',exact=True).fill('Fictional account-bound retry')
+        original = self.client.request
+        def lost(method,url,**kwargs):
+            response = original(method,url,**kwargs)
+            if method=='POST' and str(url).endswith('/notes'):
+                return httpx.Response(503,json={'error':{'code':'service_unavailable'}})
+            return response
+        with patch.object(self.client,'request',side_effect=lost):
+            page.get_by_role('button',name='Save note',exact=True).click()
+            expect(page.get_by_role('button',name='Retry save',exact=True)).to_be_visible()
+        other = uuid4()
+        self.owner.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,'fictional-switch','human')",(other,self.issuer))
+        self.owner.execute("INSERT INTO omnixat.memberships VALUES (%s,%s,'editor',NULL)",(self.a,other))
+        self.gateway_token = self.token(sub='fictional-switch')
+        page.get_by_role('button',name='Retry save',exact=True).click()
+        expect(page.locator('#error-message')).to_contain_text('same account that started this save')
+        expect(page.get_by_label('Note',exact=True)).to_be_disabled()
+        expect(page.get_by_role('button',name='Retry save',exact=True)).to_be_visible()
+        self.gateway_token = self.token()
+        page.get_by_role('button',name='Retry save',exact=True).click()
+        expect(page.get_by_role('status').filter(has_text='Note saved.')).to_be_visible()
+        self.assertEqual(self.owner.execute("SELECT count(*) FROM omnixat.notes WHERE tenant_id=%s AND body='Fictional account-bound retry'",(self.a,)).fetchone(),(1,))
+        self.assertEqual(errors,[])
+
+    def test_chromium_recovery_does_not_claim_success_for_invalid_session(self):
+        from playwright.sync_api import expect
+        page,errors = self.browser(token=self.token(iat=self.iat-60,exp=self.iat-1))
+        page.goto(self.origin+'/app/reauthenticated')
+        expect(page.locator('#recovery-status')).to_contain_text('Your session has ended.')
+        expect(page.locator('#recovery-ready')).to_be_hidden()
+        expect(page.locator('#workspace-app')).to_be_hidden()
+        self.gateway_token = self.token()
+        page.get_by_role('button',name='Check sign-in again',exact=True).click()
+        expect(page.locator('#recovery-ready')).to_be_visible()
+        self.assertEqual(page.evaluate('Object.keys(localStorage).length + Object.keys(sessionStorage).length'),0)
         self.assertEqual(errors,[])

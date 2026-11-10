@@ -164,3 +164,31 @@ class CustomerEvidenceBrowserTests(CustomerEvidenceFixture):
         expect(page.locator('#content')).to_be_hidden()
         self.assertEqual(page.locator('.evidence-receipt').text_content(),'')
         self.assertEqual(errors,[])
+
+    def test_chromium_reauthentication_tab_keeps_selected_file_for_exact_retry(self):
+        from playwright.sync_api import expect
+        page,errors = self.browser(token=self.token(scope=SCOPES))
+        url = self.origin+f'/app/workspaces/{self.a}/organisations/{self.org}'
+        page.goto(url)
+        page.get_by_label('Document or image',exact=True).set_input_files(
+            {'name':'fictional-reauth.csv','mimeType':'text/csv','buffer':self.original})
+        self.gateway_token = self.token(scope=SCOPES,iat=self.iat-60,exp=self.iat-1)
+        page.get_by_role('button',name='Upload to quarantine',exact=True).click()
+        expect(page.locator('#reauth')).to_be_visible()
+        page.context.route('**/oauth2/start?rd=/app/reauthenticated',lambda route:route.fulfill(
+            status=302,headers={'Location':self.origin+'/app/reauthenticated'}))
+        self.gateway_token = self.token(scope=SCOPES)
+        with page.expect_popup() as opened:
+            page.locator('#reauth').click()
+        recovery = opened.value
+        expect(recovery.locator('#recovery-ready')).to_be_visible()
+        self.assertIsNone(recovery.evaluate('window.opener'))
+        self.assertEqual(page.url,url)
+        self.assertEqual(page.locator('#evidence-file').evaluate('(input) => input.files[0].name'),'fictional-reauth.csv')
+        expect(page.get_by_label('Document or image',exact=True)).to_be_disabled()
+        recovery.close()
+        page.get_by_role('button',name='Retry upload',exact=True).click()
+        expect(page.get_by_role('status').filter(has_text='Evidence stored in quarantine.')).to_be_visible()
+        self.assertEqual(self.rows('evidence_quarantine'),1)
+        self.assertEqual(self.rows('evidence_registrations'),1)
+        self.assertEqual(errors,[])

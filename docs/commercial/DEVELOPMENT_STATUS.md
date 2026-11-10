@@ -2998,3 +2998,67 @@ Chromium cases, retained prototype browser and container build; fix any actual
 failures and inspect the receipt mobile screenshot. Then qualify maintained
 login/session and connect authorised scanner/draft review to the customer journey.
 No active implementation remains after publication.
+
+## Customer session recovery continuity — implemented; CI pending (10 November 2026)
+
+Recovered clean remote `c03c05b`, zero divergence, no other local writer or checkout.
+Connected GitHub run 42748219198 passed 48 core + 21 identity + 389 integration +
+9 actual Chromium customer + 20 retained prototype tests (487 total) and container
+build. Receipt qualification is complete; screenshot inspection is recorded only
+if actually performed. Scope: keep pending files/record saves in their original tab
+while renewing sign-in in a separate noopener tab; independently verify the renewed
+session before showing return instructions. Bind browser writes to the initiating
+persisted actor so changing account during recovery cannot replay an uncertain save
+under another actor's idempotency namespace. Add database and actual-browser tests.
+No auto-save, browser draft/token storage, provider deployment, billing or filing.
+
+Implemented separate-tab sign-in recovery and a minimal return page which verifies
+the renewed signed session through the existing bounded directory service. Original
+work stays in page memory; no opener reference, token handoff, browser storage or
+automatic write is used. Pending organisation/note payloads, keys and original Files
+are retained for explicit retry. A fresh session under a different account receives
+409 session_changed and preserves pending state rather than using a different actor's
+creation-receipt namespace. The expected actor header only restricts already resolved
+authority; it cannot authenticate or grant permission. No migration/grant changes.
+
+Verification on 10 November 2026 (Python 3.12, existing pinned dependencies):
+
+- `cd commercial && python3 -m unittest discover -s tests -q`: **48 passed**.
+- `cd commercial && python3 -m unittest discover -s identity_tests -q`: **21 passed**.
+- `cd commercial && python3 -m unittest discover -s integration_tests -p 'test_customer*.py' -v`:
+  **28 passed**, including three new database/API continuity and boundary cases.
+- `cd commercial && python3 -m unittest discover -s integration_tests -v`, with
+  explicit disposable OMNIXAT_TEST_ADMIN_DSN: **392 passed in 101.894s**, PostgreSQL
+  **16.15**, UTF8 and SCRAM-required TCP authentication; **461 service tests total**.
+- `cd commercial && PYTHONPATH=.:integration_tests OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest discover -s browser_tests -v`:
+  **13 errors before page load** from the host's Chromium Unix-socket prohibition.
+  Four new retained actual-browser cases cover a separate recovery tab preserving
+  the organisation save/File, opener isolation, invalid-session recovery, and a
+  committed/lost-response note followed by account switching and same-account retry.
+  CI must qualify these; no browser success claimed for the new increment locally.
+- Unchanged `cd prototype && OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium python3 -m unittest discover -s tests -v`:
+  **19 passed, 1 failed** at the retained browser approval case (Chromium unavailable).
+- `node --check commercial/web/app.js`, Python compilation and `git diff --check`:
+  passed. Local Docker is unavailable; retain the existing CI container build.
+
+Recovered receipt CI [run 42748219198](https://github.com/EnigmaThe1/OmniXat/actions/runs/42748219198)
+passed **487 tests** (48 core, 21 identity, 389 integration, 9 customer Chromium,
+20 unchanged prototype) and container build. Logs were inspected. Its actual
+customer-receipt-mobile.png was downloaded and visually inspected: readable content,
+wrapping fingerprint/IDs and no horizontal overflow. This closes the prior receipt
+CI/screenshot checkpoint; it does not qualify this increment's new browser cases.
+
+Primary OAuth2 Proxy endpoint/redirect and browser noopener sources were checked
+on 10 November 2026 and linked in CUSTOMER_WEB.md. No dependency version or legal
+rule changed. The gateway redirect in browser fixtures is a stand-in; exact external
+provider, session-cookie renewal, key rotation, recovery and provider logout still
+require qualification. The recovery page checks a signed session, not continuing
+authority to save: every actual write independently resolves current membership.
+Closing/reloading the original tab still loses memory-only work. No deployment,
+real credentials/evidence, provider activation, billing or statutory action occurred.
+
+Next resumable step: inspect this commit's CI including all 13 actual Chromium
+customer cases, unchanged prototype and container, then inspect the recovery mobile
+screenshot and fix any failures. Qualify the exact maintained provider/gateway
+flow next, followed by authorised scanner and customer draft review. No active
+implementation remains after publication.

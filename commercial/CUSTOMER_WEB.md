@@ -233,3 +233,42 @@ extracted figure or processing instruction. The hash is private workspace metada
 not a public lookup capability. Existing no-store/CSP/referrer controls apply.
 Authority is resolved again before reading metadata; as elsewhere, a revocation
 cannot retract an already admitted transaction. No scanning or processing is started.
+
+## Recovering sign-in without losing pending work
+
+The error/dialog **Sign in again** action opens a new tab using
+`/oauth2/start?rd=/app/reauthenticated` with explicit `noopener noreferrer`.
+The original tab keeps its File, immutable request payload and creation key in
+memory. Keep it open. After the maintained gateway returns, the recovery page
+checks the signed session through the existing bounded workspace directory API;
+only a successful check shows instructions to return. It does not display records,
+automatically retry writes or communicate with the opener. Invalid/expired sessions
+show retry/sign-in controls. No token or draft is placed in URLs, browser storage,
+postMessage or a broadcast channel. The fixed redirect is not caller-selectable.
+
+The new route remains protected by the gateway's existing all-`/app` rule. Do not
+add it to skip-auth routes. Gateway redirect and browser cookie renewal still need
+qualification with the exact maintained provider; a passing app fixture is not
+provider qualification. Returning to the original tab and explicitly retrying uses
+the renewed same-origin gateway session. Closing/reloading that tab still loses
+memory-only work and requires checking saved records before creating a new save.
+
+Workspace context now includes `actor_id`, the current persisted identity UUID
+(no email, external subject, token or credential). Each browser write pins that ID
+with its pending payload and sends `X-OmniXAT-Expected-Actor`. The optional header
+is a restriction, never an identity assertion: ordinary signature, membership,
+role and scope checks run independently. Creates compare it inside the existing
+record transaction; evidence checks it at admission and each persistence unit.
+A mismatch returns `409 session_changed` without writing, so the browser preserves
+the original request/key/File and asks for the original account. This prevents a
+lost-response retry crossing the actor-scoped idempotency namespace if the user
+signs in as a different account. Malformed/duplicate headers fail with 400; reads
+reject the header. Existing API clients omitting it keep their current contract.
+Revocation still cannot retract an already admitted transaction.
+
+Primary technical references checked 10 November 2026:
+[OAuth2 Proxy endpoints](https://oauth2-proxy.github.io/oauth2-proxy/features/endpoints/),
+[login redirect integration](https://oauth2-proxy.github.io/oauth2-proxy/configuration/integrations/nginx/),
+and [browser noopener behaviour](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel/noopener).
+No dependency version or legal rule changed. Provider-wide logout is not claimed;
+OAuth2 Proxy's local sign-out alone does not necessarily end the provider session.

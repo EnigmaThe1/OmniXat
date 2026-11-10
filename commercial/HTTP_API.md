@@ -155,3 +155,15 @@ Revocation/scopes are checked on each call. Context is advisory UI metadata, nev
 permission to skip a write check. `create_app` takes an optional separate
 `directory_connection_factory`; without it the global directory route is absent.
 The bearer-only factory itself gains no cookie authentication or CORS.
+
+### Optional actor continuity on customer writes
+
+Workspace context includes the persisted `actor_id`. Organisation/note POSTs can
+send `X-OmniXAT-Expected-Actor: <canonical UUID>` to restrict a request to the
+already authenticated actor. A mismatch returns `409 session_changed` before record
+creation or receipt replay. Normal token/membership/role/scope checks still apply;
+this header grants nothing. Duplicate/noncanonical values are 400; reads reject it.
+Clients must retain the same actor/key/payload after an uncertain outcome and use
+the original account when retrying. Omitting the header preserves the existing API
+contract. The browser always includes it. See CUSTOMER_WEB.md for evidence and
+separate-tab sign-in recovery; this is not a replacement for provider sessions.

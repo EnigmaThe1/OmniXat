@@ -1031,3 +1031,26 @@ publication before claiming browser/container success. Recovered base `796de6c`
 had a successful verify check. No active writer remains after publication.
 Next: receipt CI, then maintained login/session and authorised scanning/draft review;
 retain quarantine, human approval and the remaining production qualification gates.
+
+## Latest customer session recovery checkpoint (10 November 2026)
+
+Sign-in recovery opens a separate noopener tab, verifies a renewed signed session
+and asks the user to return to the original tab. Pending Files/payloads/keys stay
+in memory for explicit retry. Browser writes pin the original persisted actor;
+409 session_changed preserves pending state if sign-in switches accounts. Normal
+identity/membership/scope checks remain required; no header grants authority.
+See CUSTOMER_WEB.md and HTTP_API.md. No migration, grant or live provider change.
+
+**48 core + 21 identity + 392 integration = 461 service tests pass** on local
+PostgreSQL 16.15 UTF8/SCRAM. All 13 real customer browser cases were attempted
+but host-blocked before page load; unchanged prototype is 19/20 locally. Four new
+browser regressions and a recovery mobile screenshot must pass CI; no skip or
+timeout/assertion weakening. The previous receipt commit c03c05b's CI run
+42748219198 actually passed all 487 tests and container build; its receipt mobile
+screenshot was visually inspected and closes that prior checkpoint.
+
+Resume with this increment's CI and recovery screenshot, then exact maintained
+gateway/provider login, cookie renewal/revocation/logout and authorised scanning/
+draft review. Stand-in gateway fixtures do not establish real provider qualification.
+Original-tab closure still loses memory-only work. No deployment, billing, filing
+or private records were introduced. No active implementation remains after publication.

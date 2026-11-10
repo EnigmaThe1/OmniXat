@@ -52,7 +52,7 @@ def create_app(*, verifier, connection_factory, directory_connection_factory, pu
         assets = {'/assets/app.js':('app.js','text/javascript'),'/assets/site.css':('site.css','text/css')}
         if scope['method'] not in ('GET','HEAD'):
             response = JSONResponse({'error':{'code':'method_not_allowed'}},status_code=405,headers={'Allow':'GET, HEAD'})
-        elif path in ('/','/app') or path.startswith('/app/workspaces/'):
+        elif path in ('/','/app','/app/reauthenticated') or path.startswith('/app/workspaces/'):
             response = FileResponse(_ASSETS/'index.html',media_type='text/html')
         elif path in assets:
             filename,media = assets[path]

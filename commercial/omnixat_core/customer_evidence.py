@@ -22,7 +22,7 @@ from .evidence_quarantine_postgres import store_quarantined_evidence
 from .identity import AuthenticationError
 from .identity_postgres import resolve_record_principal
 from .postgres import _tenant_transaction
-from .http_api import ApiError, error_response
+from .http_api import ApiError, error_response, expected_actor
 
 
 UPLOAD_TIMEOUT_SECONDS = 15
@@ -37,10 +37,12 @@ def private_spool(path):
     return directory
 
 
-def evidence_actor(connection, verifier, token, tenant, *, write=False):
+def evidence_actor(connection, verifier, token, tenant, *, write=False, expected_actor=None):
     # Record admission stays records-only. Evidence scopes cannot grant billing,
     # approval, membership administration or authority to a different actor kind.
     actor = resolve_record_principal(connection, verifier, token, tenant, write=write)
+    if expected_actor is not None and actor.user_id != expected_actor:
+        raise ApiError(409, 'session_changed')
     identity = verifier.verify(token)
     actor = replace(actor, api_scopes=identity.scopes & {'evidence:read', 'evidence:register'})
     require_tenant(actor, tenant, 'evidence:read')
@@ -55,9 +57,9 @@ class CustomerEvidence:
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
-    def authorize(self, token, tenant, organisation, *, write=False):
+    def authorize(self, token, tenant, organisation, *, write=False, expected_actor=None):
         with self.connections() as connection:
-            actor = evidence_actor(connection, self.verifier, token, tenant, write=write)
+            actor = evidence_actor(connection, self.verifier, token, tenant, write=write, expected_actor=expected_actor)
             with _tenant_transaction(connection, UUID(tenant), tables_required=('organisations',)):
                 if connection.execute('SELECT 1 FROM omnixat.organisations WHERE tenant_id=%s AND id=%s',
                                       (tenant, organisation)).fetchone() is None:
@@ -102,17 +104,17 @@ class CustomerEvidence:
         return {key: value.isoformat() if hasattr(value, 'isoformat') else
                 str(value) if isinstance(value, UUID) else value for key, value in row.items()}
 
-    def persist(self, token, tenant, organisation, source, media_type, size):
+    def persist(self, token, tenant, organisation, source, media_type, size, expected=None):
         source.seek(0)
         with stage_evidence(source, media_type=media_type, quarantine_dir=self.directory,
                             expected_size=size) as staged:
             with self.connections() as connection:
-                actor = evidence_actor(connection, self.verifier, token, tenant, write=True)
+                actor = evidence_actor(connection, self.verifier, token, tenant, write=True, expected_actor=expected)
                 registration = register_evidence(connection, actor, tenant, organisation,
                     content_sha256=staged.content_sha256, media_type=media_type, byte_size=staged.byte_size)
                 # Registry and payload have separate transactions. A retry can finish
                 # an interrupted registration, and must recheck current authority.
-                actor = evidence_actor(connection, self.verifier, token, tenant, write=True)
+                actor = evidence_actor(connection, self.verifier, token, tenant, write=True, expected_actor=expected)
                 receipt = store_quarantined_evidence(connection, actor, tenant, organisation, registration.id, staged)
         return {'id':str(receipt.evidence_id), 'stored_at':receipt.stored_at.isoformat(),
                 'registered_at':registration.registered_at.isoformat(), 'media_type':media_type, 'byte_size':size}
@@ -134,6 +136,7 @@ class CustomerEvidence:
                 evidence = str(UUID(request.path_params['evidence_id'])) if 'evidence_id' in request.path_params else None
             except ValueError:
                 raise ApiError(400, 'invalid_identifier') from None
+            initiating_actor = expected_actor(request, writing=request.method == 'POST')
             if request.headers.getlist('idempotency-key'):
                 raise ApiError(400, 'unsupported_parameter')
             if request.method in ('GET', 'HEAD'):
@@ -169,7 +172,7 @@ class CustomerEvidence:
             expected = int(lengths[0]) if lengths else None
             if expected is not None and not 1 <= expected <= MAX_EVIDENCE_BYTES:
                 raise ApiError(413, 'body_too_large')
-            await run_in_threadpool(self.authorize, token, tenant, organisation, write=True)
+            await run_in_threadpool(self.authorize, token, tenant, organisation, write=True, expected_actor=initiating_actor)
             if not self.admission.acquire(blocking=False):
                 raise ApiError(503, 'service_unavailable')
             try:
@@ -188,7 +191,7 @@ class CustomerEvidence:
                         raise ApiError(408, 'request_timeout') from None
                     if not size or expected is not None and size != expected:
                         raise ApiError(400, 'incomplete_upload')
-                    result = await run_in_threadpool(self.persist, token, tenant, organisation, source, media_types[0], size)
+                    result = await run_in_threadpool(self.persist, token, tenant, organisation, source, media_types[0], size, initiating_actor)
             finally:
                 self.admission.release()
             return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=201)

@@ -225,3 +225,41 @@ class CustomerWebTests(CustomerWebFixture):
                 records.chmod(0o644)
                 with self.assertRaises(ValueError):
                     create_configured_app()
+
+    def test_actor_bound_retry_cannot_cross_account_idempotency_namespace(self):
+        context = self.client.get(self.base+'/context',headers=self.headers()).json()['data']
+        self.assertEqual(context['actor_id'],str(self.user))
+        headers = self.headers() | {'Idempotency-Key':'fictional-recovered-save',
+                                   'X-OmniXAT-Expected-Actor':context['actor_id']}
+        payload = {'body':'Fictional actor-bound note'}
+        url = self.base+f'/organisations/{self.org}/notes'
+        first = self.client.post(url,headers=headers,json=payload)
+        self.assertEqual(first.status_code,201,first.text)
+        other = uuid4()
+        self.owner.execute("INSERT INTO omnixat.identities(id,issuer,subject,actor_kind) VALUES (%s,%s,'fictional-other-login','human')",(other,self.issuer))
+        self.owner.execute("INSERT INTO omnixat.memberships VALUES (%s,%s,'editor',NULL)",(self.a,other))
+        changed = headers | self.headers(sub='fictional-other-login')
+        response = self.client.post(url,headers=changed,json=payload)
+        self.assertEqual(response.status_code,409,response.text)
+        self.assertEqual(response.json()['error']['code'],'session_changed')
+        self.assertNotIn(str(other),response.text)
+        retry = self.client.post(url,headers=headers,json=payload)
+        self.assertEqual(retry.json()['data'],first.json()['data'])
+        self.assertEqual(self.owner.execute('SELECT count(*) FROM omnixat.notes WHERE tenant_id=%s AND body=%s',(self.a,payload['body'])).fetchone(),(1,))
+        # Matching the declared actor never substitutes for current write authority.
+        self.owner.execute("UPDATE omnixat.memberships SET role='viewer' WHERE user_id=%s",(self.user,))
+        self.assertEqual(self.client.post(url,headers=headers,json=payload).status_code,403)
+
+    def test_continuity_header_validation_and_recovery_page_boundary(self):
+        url = self.base+'/organisations'
+        for value in ('bad',uuid4().hex,'',str(uuid4()).upper()):
+            response = self.client.post(url,headers=self.headers() | {'X-OmniXAT-Expected-Actor':value},json={'display_name':'Denied'})
+            self.assertEqual(response.status_code,400,response.text)
+        headers = list(self.headers().items())+[('X-OmniXAT-Expected-Actor',str(self.user))]*2
+        self.assertEqual(self.client.post(url,headers=headers,json={'display_name':'Denied'}).status_code,400)
+        self.assertEqual(self.client.get(url,headers=self.headers() | {'X-OmniXAT-Expected-Actor':str(self.user)}).status_code,400)
+        response = self.client.get('/app/reauthenticated')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.headers['cache-control'],'no-store')
+        self.assertIn("script-src 'self'",response.headers['content-security-policy'])
+        self.assertEqual(self.client.post('/app/reauthenticated').status_code,405)

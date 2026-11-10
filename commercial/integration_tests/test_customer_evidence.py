@@ -343,3 +343,21 @@ class CustomerEvidenceTests(CustomerEvidenceFixture):
             directory_connection_factory=self.directory_factory,public_origin=self.origin)
         with TestClient(disabled,base_url=self.origin) as client:
             self.assertEqual(client.get(url,headers=self.headers()).status_code,404)
+
+    def test_actor_bound_upload_denies_account_change_without_intake(self):
+        wrong = self.headers() | {'X-OmniXAT-Expected-Actor':str(uuid4())}
+        response = self.upload(headers=wrong)
+        self.assertEqual(response.status_code,409,response.text)
+        self.assertEqual(response.json()['error']['code'],'session_changed')
+        self.assertEqual(self.rows('evidence_registrations'),0)
+        self.assertEqual(self.rows('evidence_quarantine'),0)
+        self.assertEqual(list(Path(self.spool.name).iterdir()),[])
+        headers = self.headers() | {'X-OmniXAT-Expected-Actor':str(self.user)}
+        first = self.upload(headers=headers)
+        self.assertEqual(first.status_code,201,first.text)
+        self.assertEqual(self.upload(headers=headers).json()['data'],first.json()['data'])
+        self.assertEqual(self.client.get(self.url,headers=headers).status_code,400)
+        self.assertEqual(self.upload(headers={'X-OmniXAT-Expected-Actor':'bad'}).status_code,400)
+        duplicates = list(self.headers().items())+[('Content-Type','text/csv')]+[('X-OmniXAT-Expected-Actor',str(self.user))]*2
+        self.assertEqual(self.client.post(self.url,content=self.original,headers=duplicates).status_code,400)
+        self.assertEqual(self.rows('evidence_quarantine'),1)

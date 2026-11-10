@@ -15,12 +15,16 @@ function element(tag, text, className) {
   return node;
 }
 class RequestError extends Error {
-  constructor(status, code) { super(code); this.status = status; }
+  constructor(status, code) { super(code); this.status = status; this.code = code; }
 }
 async function request(url, options = {}) {
   const response = await fetch(url, {credentials: 'same-origin', redirect: 'error',
     signal: AbortSignal.timeout(15000), ...options});
-  if (!response.ok) throw new RequestError(response.status, 'request_failed');
+  if (!response.ok) {
+    let code = 'request_failed';
+    try { if ((await response.json()).error?.code === 'session_changed') code = 'session_changed'; } catch (_) { /* Generic error on invalid responses. */ }
+    throw new RequestError(response.status, code);
+  }
   const document = await response.json();
   if (!document || !('data' in document)) throw new RequestError(502, 'invalid_response');
   return document.data;
@@ -28,6 +32,7 @@ async function request(url, options = {}) {
 function clearMessage() { show('error', false); show('notice', false); }
 function tell(text) { $('notice').textContent = text; show('notice', true); }
 function errorMessage(error) {
+  if (error.code === 'session_changed') return 'Sign in with the same account that started this save, then retry. Your pending work is still in this tab.';
   if (error.status === 401) return 'Your session has ended. Sign in again to continue.';
   if (error.status === 403) return 'Your access has changed, or this action is not permitted. Sign in again or contact your workspace owner.';
   if (error.status === 404) return 'This record is unavailable in this workspace.';
@@ -223,12 +228,12 @@ async function loadMore(kind, button) {
 async function save(kind, url, payload, input, button) {
   if (state.saving) return;
   if (Object.keys(state.pending).some(key => key !== kind)) { tell('Confirm the pending save before starting another.'); return; }
-  const pending = state.pending[kind] || {url, payload, key: crypto.randomUUID()};
+  const pending = state.pending[kind] || {url, payload, key: crypto.randomUUID(), actor: state.context.actor_id};
   state.pending[kind] = pending; state.saving = true;
   input.disabled = true; button.disabled = true; clearMessage(); show('dialog-error', false); show('dialog-reauth', false);
   try {
     const record = await request(pending.url, {method: 'POST', headers: {'Content-Type': 'application/json',
-      'Idempotency-Key': pending.key}, body: JSON.stringify(pending.payload)});
+      'Idempotency-Key': pending.key, 'X-OmniXAT-Expected-Actor': pending.actor}, body: JSON.stringify(pending.payload)});
     delete state.pending[kind]; input.value = ''; input.disabled = false;
     if (kind === 'organisation') {
       $('organisation-dialog').close(); state.saving = false;
@@ -238,11 +243,11 @@ async function save(kind, url, payload, input, button) {
       renderNotes(); tell('Note saved.');
     }
   } catch (error) {
-    const definiteRejection = [400,403,404,409,413,415,422].includes(error.status);
+    const definiteRejection = error.code !== 'session_changed' && [400,403,404,409,413,415,422].includes(error.status);
     if (definiteRejection) { delete state.pending[kind]; input.disabled = false; }
     const message = errorMessage(error) + (definiteRejection ? '' : ' Use Retry save to confirm this same request before editing.');
-    if (kind === 'organisation') { $('dialog-error').textContent = message; show('dialog-error', true); show('dialog-reauth', error.status === 401); }
-    else { $('error-message').textContent = message; show('error', true); show('retry', false); show('reauth', error.status === 401); }
+    if (kind === 'organisation') { $('dialog-error').textContent = message; show('dialog-error', true); show('dialog-reauth', error.status === 401 || error.code === 'session_changed'); }
+    else { $('error-message').textContent = message; show('error', true); show('retry', false); show('reauth', error.status === 401 || error.code === 'session_changed'); }
     if (error.status === 403) fail(error);
   } finally {
     state.saving = false; button.disabled = false;
@@ -285,14 +290,14 @@ $('evidence-form').addEventListener('submit', async event => {
   if (state.saving || Object.keys(state.pending).some(key => key !== 'evidence')) return;
   const input = $('evidence-file'), format = $('evidence-type'), button = $('upload-evidence');
   const pending = state.pending.evidence || {file:input.files[0], media:format.value,
-    url:`${apiBase()}/organisations/${state.org}/evidence`};
+    url:`${apiBase()}/organisations/${state.org}/evidence`, actor:state.context.actor_id};
   if (!pending.file || !pending.file.size || pending.file.size > 20 * 1024 * 1024) {
     tell('Choose a non-empty file no larger than 20 MiB.'); return;
   }
   state.pending.evidence = pending; state.saving = true;
   input.disabled = true; format.disabled = true; $('clear-evidence').disabled = true; button.disabled = true; clearMessage();
   try {
-    const receipt = await request(pending.url, {method:'POST', headers:{'Content-Type':pending.media},
+    const receipt = await request(pending.url, {method:'POST', headers:{'Content-Type':pending.media, 'X-OmniXAT-Expected-Actor':pending.actor},
       body:pending.file, signal:AbortSignal.timeout(30000)});
     delete state.pending.evidence; input.value = ''; format.value = '';
     const item = receipt;
@@ -300,14 +305,14 @@ $('evidence-form').addEventListener('submit', async event => {
     if (old >= 0) state.evidence[old] = {...state.evidence[old], ...item}; else state.evidence.unshift(item);
     renderEvidence(); tell('Evidence stored in quarantine. Processing is not enabled here.');
   } catch (error) {
-    const definite = [400,403,404,409,413,415,422].includes(error.status);
+    const definite = error.code !== 'session_changed' && [400,403,404,409,413,415,422].includes(error.status);
     if (definite) delete state.pending.evidence;
-    const uploadMessage = error.status === 413 ? 'The upload exceeds the server size limit. Choose a file no larger than 20 MiB.'
+    const uploadMessage = error.code === 'session_changed' ? errorMessage(error) : error.status === 413 ? 'The upload exceeds the server size limit. Choose a file no larger than 20 MiB.'
       : error.status === 415 ? 'Choose PDF, JPEG, PNG or CSV and select the matching document format.'
       : error.status === 409 ? 'This upload conflicts with an existing evidence record. Check the format and saved evidence before trying again.'
       : errorMessage(error);
     $('error-message').textContent = uploadMessage + (definite ? '' : ' Use Retry upload to confirm the same file.');
-    show('error',true); show('retry',false); show('reauth',error.status===401);
+    show('error',true); show('retry',false); show('reauth',error.status===401 || error.code === 'session_changed');
     if (error.status===403) fail(error);
   } finally {
     state.saving = false; button.disabled = false;
@@ -334,5 +339,22 @@ async function boot() {
   try { await directory(); await loadRoute(); }
   catch (error) { show('loading', false); fail(error); }
 }
-if (location.pathname === '/') { show('welcome', true); document.querySelector('.skip').href = '#welcome-main'; }
+async function checkRecoveredSession() {
+  show('recovery-ready', false); show('recovery-actions', false); $('recovery-check').disabled = true;
+  $('recovery-status').textContent = 'Checking your sign-in…';
+  try {
+    await request('/v1/workspaces?limit=1');
+    $('recovery-status').textContent = 'Sign-in checked. Return to your original tab.';
+    show('recovery-ready', true);
+  } catch (error) {
+    $('recovery-status').textContent = errorMessage(error);
+    show('recovery-actions', true);
+  } finally { $('recovery-check').disabled = false; }
+}
+$('recovery-check').addEventListener('click', checkRecoveredSession);
+if (location.pathname === '/app/reauthenticated') {
+  document.title = 'Return to your work · OmniXAT';
+  document.querySelector('.skip').href = '#recovery-main'; show('session-recovery', true); checkRecoveredSession();
+}
+else if (location.pathname === '/') { show('welcome', true); document.querySelector('.skip').href = '#welcome-main'; }
 else { show('workspace-app', true); boot(); }

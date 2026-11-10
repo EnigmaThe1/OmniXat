@@ -31,6 +31,21 @@ class ApiError(Exception):
         self.status, self.code = status, code
 
 
+def expected_actor(request, *, writing):
+    """Optional continuity constraint; it can restrict but never grant authority."""
+    values = request.headers.getlist('x-omnixat-expected-actor')
+    if not values:
+        return None
+    if not writing:
+        raise ApiError(400, 'unsupported_parameter')
+    try:
+        if len(values) != 1 or str(UUID(values[0])) != values[0]:
+            raise ValueError()
+    except ValueError:
+        raise ApiError(400, 'invalid_expected_actor') from None
+    return values[0]
+
+
 def error_response(scope, status, code):
     headers = {'WWW-Authenticate': 'Bearer'} if status == 401 else None
     return JSONResponse({'error': {'code': code}, 'request_id': scope['request_id']},
@@ -131,7 +146,7 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
     if not callable(connection_factory):
         raise ValueError('Server-owned connection factory required')
 
-    def operate(token, tenant, action, object_id, value, key, page):
+    def operate(token, tenant, action, object_id, value, key, page, expected):
         try:
             if action == 'list_workspaces':
                 from .workspace_directory_postgres import list_workspaces
@@ -140,8 +155,11 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
             with connection_factory() as connection:
                 with authenticated_records(connection, verifier, token, tenant,
                                            write=action.startswith('create')) as records:
+                    if expected is not None and records._actor.user_id != expected:
+                        raise ApiError(409, 'session_changed')
                     if action == 'workspace_context':
                         context = records.workspace_context()
+                        context['actor_id'] = records._actor.user_id
                         scopes = verifier.verify(token).scopes
                         context['evidence_access'] = evidence_quarantine_dir is not None and 'evidence:read' in scopes
                         context['can_upload_evidence'] = (context['evidence_access'] and context['can_write']
@@ -183,6 +201,7 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
             except AuthenticationError:
                 raise ApiError(401, 'invalid_token') from None
             action = request.scope['endpoint'].action
+            expected = expected_actor(request, writing=action.startswith('create'))
             page = {}
             if action.startswith('list_'):
                 pairs = list(request.query_params.multi_items())
@@ -221,7 +240,7 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
                 value = await _payload(request, 'display_name', 200)
             elif action == 'create_note':
                 value = await _payload(request, 'body', 10000)
-            result = await run_in_threadpool(operate, token, tenant, action, object_id, value, key, page)
+            result = await run_in_threadpool(operate, token, tenant, action, object_id, value, key, page, expected)
             def serialise(value):
                 if isinstance(value,UUID):
                     return str(value)
