@@ -4632,3 +4632,16 @@ saved-snapshot binding. Final package approval, production security/restore/prov
 qualification, operator settings/labels, full accounting, image/document AI workflows,
 posting, billing and qualified bank/statutory adapters remain unfinished. No active
 competing writer observed; fetch/checkpoint/diff before resuming.
+
+### Browser error-code follow-up — 11 November 2026
+
+First 094f542 CI 42993497202 passed core 71, identity 21, PostgreSQL 514, provider 5,
+provider-browser 2, gateway 5, scanner 5 and retained prototype 20. Customer browser
+suite ran 53 cases with two failures: the request helper's allowlist omitted the new
+bookkeeping_observation_conflict and journal_snapshot_changed codes, so protected
+409 responses displayed generic conflict guidance instead of the required focused
+messages. Lost receipt/account-switch and pending-expiry browser cases passed. Added
+only those two known codes to the existing allowlist. No arbitrary server error text
+is exposed, permission/storage guards changed, assertion removed or timeout relaxed.
+JavaScript syntax/diff checks passed. Successor full CI must qualify all four new
+browser cases and the container; the first run is not a green full suite.

@@ -24,7 +24,7 @@ async function request(url, options = {}) {
     let code = 'request_failed';
     try {
       const received = (await response.json()).error?.code;
-      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict', 'extraction_request_conflict', 'extraction_cancellation_unavailable', 'extraction_reauthorisation_unavailable', 'expense_preparation_conflict', 'funding_conflict'].includes(received)) code = received;
+      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict', 'extraction_request_conflict', 'extraction_cancellation_unavailable', 'extraction_reauthorisation_unavailable', 'expense_preparation_conflict', 'funding_conflict', 'bookkeeping_observation_conflict', 'journal_snapshot_changed'].includes(received)) code = received;
     } catch (_) { /* Generic error on invalid responses. */ }
     throw new RequestError(response.status, code);
   }

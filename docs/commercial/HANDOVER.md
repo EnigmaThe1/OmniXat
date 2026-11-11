@@ -2148,3 +2148,11 @@ Next: qualify CI then focused correction reasons/questions and retained correcti
 inspection, exact-snapshot-bound through separate grants. Broad commercial/production/
 OCR-model/accounting/operator/billing/qualified-adapter work remains unfinished.
 No active writer after publication; fetch/checkpoint/diff before resuming.
+
+Browser follow-up: 094f542 / 42993497202 passed all service/provider/scanner and retained
+prototype suites. Two of 53 customer browser tests caught an application wiring bug:
+the request helper omitted the two new known conflict/snapshot codes and displayed
+generic conflict guidance. Storage/permission gates held; lost-receipt/account-switch
+and pending-expiry cases passed. Added only bookkeeping_observation_conflict and
+journal_snapshot_changed to the existing code allowlist. Assertions/guards/timeouts
+unchanged; verify successor full CI and container before claiming full green.
