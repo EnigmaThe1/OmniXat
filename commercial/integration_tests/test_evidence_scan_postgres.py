@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Barrier, Event
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 from psycopg import sql
@@ -833,7 +833,15 @@ class EvidenceScanTests(PostgresFixture):
         self.assertEqual(tuple(prompt.cell for prompt in result.clarifications), selections[1:])
         self.assertEqual([prompt.reason for prompt in result.clarifications], ["blank", "ambiguous", "missing"])
         self.assertTrue(all(prompt.question.endswith("?") for prompt in result.clarifications))
-        self.assertNotIn("1e2", repr(result))
+        # Scope UUIDs legitimately contain arbitrary hex, including "1e2".
+        # Check candidate/prompt privacy independently of those identifiers.
+        from dataclasses import replace
+        scoped = replace(result, evidence_id=UUID('00000000-0000-0000-0000-0000000001e2'))
+        self.assertIn('1e2', repr(scoped))
+        self.assertIsNone(scoped.amounts[2].amount)
+        self.assertNotIn("1e2", repr(scoped.amounts))
+        self.assertNotIn("1e2", repr(scoped.clarifications))
+        self.assertNotIn('Decimal(', repr(scoped.amounts))
         self.set_active_policy("fictional-v2")
         with self.assertRaises(EvidenceNotEligible):
             read_csv_extraction_review(review, actor, self.a, self.org, self.registration.id, job)

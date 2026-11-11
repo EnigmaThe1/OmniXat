@@ -480,7 +480,7 @@ function expensePreparationForm(item, options, pending = null) {
   const form = element('form', undefined, 'form-panel expense-preparation');
   form.setAttribute('aria-label', 'Prepare source-backed expense draft');
   form.append(element('h3', 'Prepare expense draft'), element('p',
-    'Choose the source, bookkeeping period, expense account and accounting date explicitly. The amount comes from recorded evidence or clarification. This saves a preparation only; it does not post or approve anything.'));
+    'GBP preparation only: confirm the source currency before saving. Choose the source, bookkeeping period, expense account and accounting date explicitly. The amount comes from recorded evidence or clarification. This saves a preparation only; it does not post or approve anything.'));
   const inputs = {};
   for (const [key, labelText, values] of [
     ['source', 'Source cell', options.sources.map(v => [JSON.stringify(v), `${v.field_name} · row ${v.row}, column ${v.column}`])],

@@ -4378,3 +4378,19 @@ persisted context and fresh authority; final human exact-package approval stays
 separate. Production security/restore/OCR/model/scanner and quotas remain open.
 No active writer after publication; fetch/check remote/checkpoint/diff before resume.
 No deployment, billing activation, paid contract, private records or statutory action.
+
+## CI recovery — deterministic CSV privacy assertion — 11 November 2026
+
+Published b200be9 workflow 42947080288 failed one existing integration assertion:
+raw text '1e2' was searched across the whole CSVExtractionReview repr, and the random
+evidence UUID contained that hex sequence. All new preparation cases passed; the
+retained prototype 20 passed, but later provider/scanner/customer/build stages did
+not run after the service failure. This is not a green full checkpoint.
+
+The test now deterministically includes that sequence in a scope UUID, while asserting
+that ambiguous raw text is absent from candidate and prompt reprs, the ambiguous
+amount stays None, and Decimal values stay hidden. No privacy guard or test is
+removed/skipped. Targeted regression passed on PostgreSQL 16.2 (1 test, 0.646s),
+including the fixed collision; JS syntax/diff checks passed. The form now explicitly
+states GBP-only support before saving, with a browser assertion and documentation.
+Full CI rerun is required for this follow-up; preparation SQL/services are unchanged.

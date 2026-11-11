@@ -1999,3 +1999,16 @@ Final human exact-package approval and production security/restore/OCR/model/sca
 quotas remain open. No active writer after publication; fetch/check current remote,
 dirty state and divergence before continuing. No deployment, billing activation,
 paid contract, private-record publication or statutory submission occurred.
+
+## CI recovery for preparation — 11 November 2026
+
+b200be9 CI 42947080288 failed an existing whole-repr privacy assertion because a
+random evidence UUID contained '1e2'. New preparation cases passed, but the full
+workflow was not green; later provider/scanner/customer/build stages were not run.
+Replaced the random collision with a deterministic scope UUID regression and scoped
+privacy assertions to candidates/prompts, retaining None/hidden-Decimal checks.
+Targeted PostgreSQL regression passed (1 test, 0.646s), syntax/diff checks passed.
+Also made GBP-only preparation explicit in the form and browser assertion/docs.
+SQL/services and next-step scope are unchanged. Verify the new head's full CI before
+claiming qualification; no test was removed/skipped. No active writer after final
+publication; fetch/inspect remote and dirty/divergence before resuming.

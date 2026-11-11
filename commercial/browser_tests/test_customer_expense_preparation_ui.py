@@ -15,6 +15,7 @@ class ExpensePreparationBrowserTests(ExpensePreparationFixture):
         page.get_by_role('button',name='Inspect CSV candidates',exact=True).click()
         page.get_by_role('button',name='Prepare expense draft',exact=True).click()
         form=page.get_by_role('form',name='Prepare source-backed expense draft',exact=True)
+        expect(form).to_contain_text('GBP preparation only')
         expect(form.get_by_label('Source cell',exact=True)).to_have_value('')
         expect(form.get_by_label('Bookkeeping period',exact=True)).to_have_value('')
         expect(form.get_by_label('Accounting date',exact=True)).to_have_value('')

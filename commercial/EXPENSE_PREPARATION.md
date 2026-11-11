@@ -76,7 +76,9 @@ privileges; runtime roles must remain separate.
 From Inspect CSV candidates, an editor can select Prepare expense draft, explicitly
 choose a resolved source cell, configured period/account and accounting date, then
 Save expense draft. There is no entered amount and no default date/account/period.
-The existing saved-draft view can inspect the resulting exact amount and provenance.
+The form explicitly states GBP-only support and asks the user to confirm the source
+currency before saving; no currency is inferred from the numeric CSV cell. The
+existing saved-draft view can inspect the resulting exact amount and provenance.
 This does not record a review/approval decision or create a final filing package.
 
 An uncertain save freezes the original payload and initiating actor for Retry expense
