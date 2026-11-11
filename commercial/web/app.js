@@ -52,7 +52,7 @@ function errorMessage(error) {
 function fail(error) {
   $('error-message').textContent = errorMessage(error); show('error', true);
   const denied = error.status === 401 || error.status === 403;
-  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer || state.pending.csvRequest || state.pending.csvCancellation || state.pending.expenseDraft || state.pending.expenseFunding));
+  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer || state.pending.csvRequest || state.pending.csvCancellation || state.pending.expenseDraft || state.pending.expenseFunding || state.pending.expenseJournal));
   if (denied) { show('content', false); $('organisation-dialog').close(); state.context = null; }
 }
 function dateText(value) {
@@ -79,7 +79,7 @@ function navigate(path) {
   if (state.saving || Object.keys(state.pending).length) {
     tell('Please confirm the pending save before changing records.'); workspaceOptions(); return;
   }
-  if (document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
+  if (document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
   if (state.org && ($('note-body').value.trim() || $('evidence-file').files.length)) {
     tell('Save or clear the note, selected file or answer before leaving this organisation.'); workspaceOptions(); return;
   }
@@ -201,7 +201,9 @@ function renderEvidence() {
       inspect.setAttribute('aria-controls', panel.id); inspect.setAttribute('aria-expanded', 'false');
       inspect.addEventListener('click', () => viewExpenseDrafts(item, inspect, panel));
       row.append(inspect, panel);
-      if (state.pending.expenseFunding?.evidence === item.id) queueMicrotask(() => viewExpenseDrafts(item,inspect,panel,state.pending.expenseFunding.draft));
+      for (const pending of [state.pending.expenseFunding,state.pending.expenseJournal]) {
+        if (pending?.evidence === item.id) queueMicrotask(() => viewExpenseDrafts(item,inspect,panel,pending.draft));
+      }
     }
     if (state.context.csv_request_status_access && item.media_type === 'text/csv') {
       const inspect = element('button', 'Inspect extraction requests', 'button secondary'); inspect.type = 'button';
@@ -356,7 +358,7 @@ function csvRequestForm(item) {
   return form;
 }
 async function viewCSVCandidates(item, button, panel) {
-  if (panel.querySelector('.csv-answer[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"]') && !state.pending.csvAnswer && !state.pending.expenseDraft) { tell('Save or clear the answer before refreshing candidates.'); return; }
+  if (panel.querySelector('.csv-answer[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') && !state.pending.csvAnswer && !state.pending.expenseDraft) { tell('Save or clear the answer before refreshing candidates.'); return; }
   const epoch = state.epoch;
   panel.hidden = false; panel.replaceChildren(element('p', 'Loading CSV candidates…'));
   panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
@@ -386,7 +388,7 @@ async function viewCSVCandidates(item, button, panel) {
       details.push(csvAnswerForm(item, pending.payload.job_id, pending.question, button, panel, pending));
     }
     if (state.pending.expenseDraft?.evidence === item.id) {
-      details.push(expensePreparationForm(item, state.pending.expenseDraft.options, state.pending.expenseDraft || state.pending.expenseFunding));
+      details.push(expensePreparationForm(item, state.pending.expenseDraft.options, state.pending.expenseDraft));
     } else if (state.context?.can_prepare_expense && !Object.keys(state.pending).length) {
       const prepare = element('button', 'Prepare expense draft', 'button secondary'); prepare.type = 'button';
       prepare.addEventListener('click', () => loadExpensePreparation(item, result, prepare, panel)); details.push(prepare);
@@ -401,7 +403,7 @@ async function viewCSVCandidates(item, button, panel) {
       panel.append(csvAnswerForm(item, pending.payload.job_id, pending.question, button, panel, pending));
     }
     if (error.status === 404 && state.pending.expenseDraft?.evidence === item.id) {
-      panel.append(expensePreparationForm(item,state.pending.expenseDraft.options,state.pending.expenseDraft || state.pending.expenseFunding));
+      panel.append(expensePreparationForm(item,state.pending.expenseDraft.options,state.pending.expenseDraft));
     }
     if (error.status === 401 || error.status === 403) { panel.replaceChildren(); fail(error); }
   } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; }
@@ -541,7 +543,7 @@ function expensePreparationForm(item, options, pending = null) {
   return form;
 }
 async function viewExpenseDrafts(item, button, panel, draft = null) {
-  if (panel.querySelector('.funding-selection[data-dirty="true"]') && !state.pending.expenseFunding) { tell('Save or clear the funding selection before refreshing.'); return; }
+  if (panel.querySelector('.funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') && !state.pending.expenseFunding && !state.pending.expenseJournal) { tell('Save or clear the funding selection before refreshing.'); return; }
   const epoch = state.epoch;
   panel.hidden = false; panel.replaceChildren(element('p', 'Checking saved expense drafts…'));
   panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
@@ -575,6 +577,15 @@ async function viewExpenseDrafts(item, button, panel, draft = null) {
           article.append(inspect,funding);
           if (state.pending.expenseFunding?.draft === value.id) queueMicrotask(() => viewExpenseFunding(item,value.id,inspect,funding,panel));
         }
+        if (state.context?.journal_access) {
+          const inspect=element('button','Inspect journal draft','button secondary'); inspect.type='button';
+          const journal=element('div',undefined,'evidence-receipt');journal.hidden=true;
+          journal.id=`journal-${value.id}`;journal.setAttribute('role','region');journal.setAttribute('aria-label',`Expense journal ${value.id}`);
+          inspect.setAttribute('aria-controls',journal.id);inspect.setAttribute('aria-expanded','false');
+          inspect.addEventListener('click',()=>viewExpenseJournal(item,value.id,inspect,journal,panel));
+          article.append(inspect,journal);
+          if(state.pending.expenseJournal?.draft===value.id) queueMicrotask(()=>viewExpenseJournal(item,value.id,inspect,journal,panel));
+        }
       } else {
         const open = element('button', `Inspect expense draft ${value.id}`, 'button secondary'); open.type = 'button';
         open.addEventListener('click', () => viewExpenseDrafts(item, button, panel, value.id)); article.append(open);
@@ -589,7 +600,7 @@ async function viewExpenseDrafts(item, button, panel, draft = null) {
   } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; button.textContent = 'Refresh saved expense drafts'; }
 }
 async function viewExpenseFunding(item, draft, button, panel, container) {
-  if (panel.querySelector('.funding-selection[data-dirty="true"]') && !state.pending.expenseFunding) { tell('Save or clear the funding selection before refreshing.'); return; }
+  if (panel.querySelector('.funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') && !state.pending.expenseFunding && !state.pending.expenseJournal) { tell('Save or clear the funding selection before refreshing.'); return; }
   const epoch = state.epoch;
   panel.hidden = false; panel.replaceChildren(element('p','Checking expense funding…'));
   button.disabled = true; button.setAttribute('aria-expanded','true'); panel.setAttribute('aria-busy','true');
@@ -661,6 +672,94 @@ function expenseFundingForm(item,draft,choices,button,panel,container,pending = 
       if([401,403].includes(error.status)) { container.replaceChildren();fail(error); }
       else if(error.code==='session_changed') { fail(error);show('reauth',true); }
     } finally { state.saving=false;$('workspace-select').disabled=Boolean(Object.keys(state.pending).length); }
+  });
+  return form;
+}
+function journalDetails(value) {
+  const box=element('div');const lines=element('dl');
+  for(const line of value.lines) lines.append(element('dt',`${line.side === 'debit' ? 'Debit' : 'Credit'} · account ${line.account_id}`),element('dd',`${value.currency} ${line.amount}`));
+  const source=value.source;
+  for(const [label,text] of [['Accounting date',value.accounting_date],['Period reference',value.period_id],
+    ['Funding source reference',value.funding_source_id],['Evidence reference',source.evidence_id],['Extraction job',source.job_id],
+    ['Source cell',`${source.field_name} · row ${source.row}, column ${source.column}`],['Scan policy',source.policy_version],
+    ['Evidence fingerprint',source.content_sha256]]) lines.append(element('dt',label),element('dd',text));
+  box.append(lines);return box;
+}
+async function viewExpenseJournal(item,draft,button,panel,container) {
+  if(panel.querySelector('.journal-preparation[data-dirty="true"]')&&!state.pending.expenseJournal) { tell('Save or clear the journal preview before refreshing.');return; }
+  const epoch=state.epoch;button.disabled=true;button.setAttribute('aria-expanded','true');panel.hidden=false;panel.setAttribute('aria-busy','true');
+  panel.replaceChildren(element('p','Checking journal draft…'));
+  try {
+    const result=await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/expense-drafts/${draft}/journal`);
+    if(epoch!==state.epoch||!panel.isConnected)return;
+    panel.replaceChildren(element('h4','Expense journal preparation'),element('p','Draft preparation only. Saving does not record a review decision, post a journal or approve a filing.'));
+    if(result.journal) {
+      const value=result.journal;
+      panel.append(element('strong',`Saved journal draft ${value.id}`),element('p',`Created ${dateText(value.created_at)} by ${value.created_by}`),
+        journalDetails(value),element('p',`Saved snapshot fingerprint ${value.snapshot_sha256}`));
+    } else if(result.saved_unavailable) panel.append(element('p','A saved journal exists but its current source or accounting eligibility prevents inspection. Ask your workspace operator to reconcile retained records.'));
+    else panel.append(element('p','No saved journal draft. Record funding first, then explicitly select a configured counterpart account to preview.'));
+    const pending=state.pending.expenseJournal;
+    if(pending?.draft===draft) panel.append(expenseJournalForm(item,draft,pending.choices,button,panel,container,pending));
+    else if(!result.journal&&!result.saved_unavailable&&state.context?.can_prepare_journal&&!Object.keys(state.pending).length) {
+      panel.append(expenseJournalForm(item,draft,result.choices,button,panel,container));
+    }
+    if(result.has_more)panel.append(element('p','Only the first 20 eligible counterpart accounts are shown. Older-account navigation is not available here yet.'));
+  } catch(error) {
+    if(epoch!==state.epoch||!panel.isConnected)return;
+    panel.replaceChildren(element('p',errorMessage(error)));
+    if([401,403,404].includes(error.status)) { container.replaceChildren();if(error.status===404)container.append(element('p','Current expense context is unavailable. Refresh saved drafts.'));else fail(error); }
+  } finally {button.disabled=false;button.textContent='Refresh journal draft';panel.setAttribute('aria-busy','false');}
+}
+function expenseJournalForm(item,draft,choices,button,panel,container,pending=null) {
+  const form=element('form',undefined,'form-panel journal-preparation');form.setAttribute('aria-label',`Prepare expense journal ${draft}`);
+  const label=element('label','Counterpart account');label.htmlFor=`journal-account-${draft}`;
+  const select=element('select');select.id=label.htmlFor;select.required=true;
+  const blank=element('option','Choose explicitly');blank.value='';select.append(blank);
+  for(const choice of choices) {const option=element('option',`Account ${choice.account_id}`);option.value=choice.account_id;select.append(option);}
+  const previewButton=element('button','Preview balanced journal','button secondary');previewButton.type='submit';
+  const save=element('button',pending?'Retry journal draft save':'Save journal draft','button secondary');save.type='button';
+  const clear=element('button','Clear journal preparation','button secondary');clear.type='button';
+  const output=element('div');const status=element('p');status.setAttribute('role','status');
+  let preview=pending?.preview||null;
+  if(pending) {select.value=pending.payload.counterpart_account_id;output.append(journalDetails(preview));}
+  function controls(locked) { select.disabled=locked;previewButton.disabled=locked||!choices.length;clear.disabled=locked;save.disabled=!preview; }
+  function reset() {preview=null;output.replaceChildren();save.disabled=true;}
+  select.addEventListener('input',()=>{reset();form.dataset.dirty='true';});
+  clear.addEventListener('click',()=>{reset();select.value='';delete form.dataset.dirty;status.textContent='';});
+  controls(Boolean(pending));form.append(label,select,previewButton,clear,output,save,status);
+  if(!choices.length)form.append(element('p','No eligible counterpart accounts are configured for the recorded funding. Ask your workspace operator to configure one.'));
+  const url=`${apiBase()}/organisations/${state.org}/evidence/${item.id}/expense-drafts/${draft}/journal`;
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();if(state.saving||Object.keys(state.pending).length)return;
+    const epoch=state.epoch;const account=select.value;const actor=state.context.actor_id;
+    state.saving=true;controls(true);save.disabled=true;status.textContent='Checking current balanced preview…';
+    try {
+      const value=await request(url+'-preview',{method:'POST',headers:{'Content-Type':'application/json','X-OmniXat-Expected-Actor':actor},body:JSON.stringify({counterpart_account_id:account})});
+      if(epoch!==state.epoch||!form.isConnected)return;
+      preview=value;preview.actor=actor;output.replaceChildren(journalDetails(preview));form.dataset.dirty='true';status.textContent='Balanced preview ready. Check both lines before saving the draft.';
+    } catch(error) {if(epoch!==state.epoch||!form.isConnected)return;reset();status.textContent=errorMessage(error);if([401,403].includes(error.status)){container.replaceChildren();fail(error);}}
+    finally {state.saving=false;controls(false);}
+  });
+  save.addEventListener('click',async()=>{
+    if(state.saving||!preview||Object.keys(state.pending).some(key=>key!=='expenseJournal'))return;
+    const operation=state.pending.expenseJournal||{evidence:item.id,draft,choices,preview,actor:preview.actor,url,
+      payload:{counterpart_account_id:select.value,preview_sha256:preview.preview_sha256}};
+    state.pending.expenseJournal=operation;state.saving=true;controls(true);save.disabled=true;const epoch=state.epoch;
+    try {
+      await request(operation.url,{method:'POST',headers:{'Content-Type':'application/json','X-OmniXat-Expected-Actor':operation.actor},body:JSON.stringify(operation.payload)});
+      delete state.pending.expenseJournal;delete form.dataset.dirty;
+      if(epoch!==state.epoch||!form.isConnected)return;
+      tell('Journal draft saved. No review decision, posting or filing approval was recorded.');await viewExpenseJournal(item,draft,button,panel,container);
+    } catch(error) {
+      if(epoch!==state.epoch||!form.isConnected)return;
+      const rejected=error.code!=='session_changed'&&[400,403,404,409,413,415,422].includes(error.status);
+      if(rejected) {delete state.pending.expenseJournal;reset();delete form.dataset.dirty;}
+      status.textContent=errorMessage(error)+(rejected?' Inspect retained records and prepare a fresh preview.':' Retry the same draft save to confirm its receipt.');
+      controls(!rejected);save.disabled=rejected;save.textContent='Retry journal draft save';
+      if([401,403].includes(error.status)){container.replaceChildren();fail(error);}
+      else if(error.code==='session_changed'){fail(error);show('reauth',true);}
+    } finally {state.saving=false;$('workspace-select').disabled=Boolean(Object.keys(state.pending).length);}
   });
   return form;
 }
@@ -860,12 +959,12 @@ document.addEventListener('click', event => {
   if (link && !event.ctrlKey && !event.metaKey && event.button === 0) { event.preventDefault(); navigate(link.getAttribute('href')); }
 });
 window.addEventListener('popstate', () => {
-  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
+  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
     history.pushState({}, '', tenantPath(state.tenant) + (state.org ? `/organisations/${state.org}` : ''));
     tell('Save or clear the note, selected file or answer before leaving this organisation.');
   } else loadRoute();
 });
-window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
 async function boot() {
   clearMessage(); show('loading', true); show('content', false);
   try { await directory(); await loadRoute(); }

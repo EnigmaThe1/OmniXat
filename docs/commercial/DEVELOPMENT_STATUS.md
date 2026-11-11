@@ -4454,3 +4454,54 @@ saved draft. Empty results are not proof of no commit; reconcile retained record
 before replacing uncertain work. No active writer after publication; fetch/check
 remote/checkpoint/diff before resuming. No deployment, billing activation, paid
 contract, private records or statutory submission occurred.
+
+## In progress — customer expense journal preparation — 11 November 2026
+
+Recovered a5b931d clean, zero divergence, no active recorded writer; latest full CI
+42951041175 passed 663 tests/build. Scope: separate customer journal read/preview/write
+capabilities using persisted expense/funding/counterpart configuration, explicit
+selection, shared balanced preview and immutable saved journal inspection. Bind saves
+to the exact preview hash and initiating actor; never strip bearer scopes. Connect
+web/API and same-attempt recovery. No posting, review decision, correction or statutory
+approval route. Next after qualification: journal review decisions/corrections.
+
+## Customer journal preparation implemented — 11 November 2026
+
+Scope above implemented in migration 0076, customer_expense_journals, shared API,
+configured web server and customer website. Saved expense inspection now offers
+journal inspection, explicit configured counterpart choice, balanced source-backed
+preview, exact-preview draft save and saved attribution/snapshot inspection. Separate
+read/preview/write roles recheck current human identity/membership/scopes; saves lock
+identity plus the existing source/scan/funding/accounting gates. Changed digest rolls
+back the entire insert. Exact concurrent retries reconcile a stable receipt. No
+posting, review decision, correction, statutory approval or submission was added.
+
+Verification in this environment: 71 core + 21 identity tests passed; full disposable
+PostgreSQL 16.2 integration suite **501 passed** (71.215s), including ten new journal
+cases. These cover changed accounting context/digest rollback, current source/account
+binding, tenant/org/evidence/draft binding, no funding/wrong funding mapping, mixed
+capability denial/context cleanup, fresh human authority, stable concurrent receipts,
+non-BYPASSRLS definer chain and lock retention through commit. JavaScript syntax,
+Python compileall and git diff --check passed. The ten journal tests were repeated
+after native UUID normalization. Three new real Chromium tests are included and
+mandatory in existing full CI. Local browser launch fails before page creation:
+/usr/bin/chromium socket() Operation not permitted; no browser pass or skipped green
+suite is claimed here. Publish and inspect the resulting full GitHub CI, including
+existing fictional-demo browser approval, before treating browser qualification as
+complete. No dependencies, workflow skips or legal rules changed.
+
+Operational setup, strict endpoint contracts, grants, official PostgreSQL references,
+recovery and limits: commercial/EXPENSE_JOURNALS.md. Optional private DSNs are
+OMNIXAT_EXPENSE_JOURNAL_{READ,PREVIEW,WRITE}_DSN_FILE. No live grants/configuration were
+activated. Account choices use opaque configured references, not invented accounting
+classification. Uncertain saves retain exact preview/payload/actor in the tab and
+recover after sign-in; reload loses local pending state. A retained but currently
+ineligible journal is explicitly distinguished from no saved journal. Inspect and
+reconcile retained records before replacing uncertain work.
+
+Next resumable increment: qualify the published CI, then connect saved journal review
+observations/correction journeys using separate narrow grants and exact saved snapshot
+binding. These remain historical bookkeeping observations, never statutory approval.
+The wider production PostgreSQL/identity deployment, operator chart/settings, pricing/
+billing, document/image AI evidence workflow, posting and qualified adapters remain
+unfinished. No active competing writer observed; fetch/checkpoint/diff before resuming.

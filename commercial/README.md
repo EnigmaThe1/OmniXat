@@ -174,3 +174,7 @@ come from recorded evidence or clarification; posting and approval remain separa
 [Customer expense funding context](EXPENSE_FUNDING.md) connects explicit configured
 business/personal payer choices to retained, attributed funding declarations with
 separate readers/writers and stable retries. It does not move money or post journals.
+
+[Customer expense journals](EXPENSE_JOURNALS.md) connects saved expense/funding
+context to explicit balanced previews, exact-preview draft saves and saved inspection
+through separate read/preview/write capabilities. It records no posting or approval.

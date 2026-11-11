@@ -53,7 +53,7 @@ def evidence_actor(connection, verifier, token, tenant, *, write=False, expected
 
 
 class CustomerEvidence:
-    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None, csv_request_status_connections=None, expense_draft_connections=None, expense_preparation_connections=None, expense_funding_read_connections=None, expense_funding_write_connections=None):
+    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None, csv_request_status_connections=None, expense_draft_connections=None, expense_preparation_connections=None, expense_funding_read_connections=None, expense_funding_write_connections=None, expense_journal_read_connections=None, expense_journal_preview_connections=None, expense_journal_write_connections=None):
         self.verifier, self.connections = verifier, connection_factory
         if status_connections is not None and not callable(status_connections):
             raise ValueError('Server-owned status connection factory required')
@@ -84,6 +84,10 @@ class CustomerEvidence:
                 raise ValueError('Server-owned funding connection factories required')
         self.expense_funding_read_connections = expense_funding_read_connections
         self.expense_funding_write_connections = expense_funding_write_connections
+        self.journal_connections = {'inspect':expense_journal_read_connections,
+            'preview':expense_journal_preview_connections,'create':expense_journal_write_connections}
+        if any(factory is not None and not callable(factory) for factory in self.journal_connections.values()):
+            raise ValueError('Server-owned journal connection factories required')
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
@@ -145,6 +149,20 @@ class CustomerEvidence:
         from .customer_csv_review import read_latest_csv
         with self.review_connections() as connection:
             return read_latest_csv(connection,self.verifier,token,tenant,organisation,evidence)
+
+    def journal(self,token,tenant,organisation,evidence,draft,operation='inspect',document=None,expected=None):
+        self.authorize(token,tenant,organisation,expected_actor=expected)
+        from .customer_expense_journals import inspect_journal, preview_journal, create_journal, JournalActorChanged, JournalConflict, JournalPreviewChanged
+        functions={'inspect':inspect_journal,'preview':preview_journal,'create':create_journal}
+        try:
+            with self.journal_connections[operation]() as connection:
+                args=() if operation=='inspect' else (document,)
+                return functions[operation](connection,self.verifier,token,tenant,organisation,evidence,draft,*args,
+                    **({} if operation=='inspect' else {'expected_actor':expected}))
+        except ValueError: raise ApiError(422,'invalid_journal_preparation') from None
+        except JournalActorChanged: raise ApiError(409,'session_changed') from None
+        except JournalConflict: raise ApiError(409,'journal_conflict') from None
+        except JournalPreviewChanged: raise ApiError(409,'journal_preview_changed') from None
 
     def expense_funding(self,token,tenant,organisation,evidence,draft):
         self.authorize(token,tenant,organisation)
@@ -306,7 +324,9 @@ class CustomerEvidence:
                     if request.query_params:
                         raise ApiError(400, 'unsupported_parameter')
                     operation = self.csv_review if request.url.path.endswith('/csv-review') else self.scan_status if request.url.path.endswith('/scan-status') else self.receipt
-                    if request.url.path.endswith('/funding'):
+                    if request.url.path.endswith('/journal'):
+                        result=await run_in_threadpool(self.journal,token,tenant,organisation,evidence,draft)
+                    elif request.url.path.endswith('/funding'):
                         result=await run_in_threadpool(self.expense_funding,token,tenant,organisation,evidence,draft)
                     elif request.url.path.endswith('/expense-choices'):
                         result=await run_in_threadpool(self.expense_choices,token,tenant,organisation,evidence)
@@ -334,8 +354,9 @@ class CustomerEvidence:
                 return JSONResponse({'data':result,'request_id':request.scope['request_id']})
             if request.query_params:
                 raise ApiError(400, 'unsupported_parameter')
-            if (request.url.path.endswith(('/csv-answers','/csv-requests','/expense-drafts','/funding'))
+            if (request.url.path.endswith(('/csv-answers','/csv-requests','/expense-drafts','/funding','/journal','/journal-preview'))
                     or '/csv-requests/' in request.url.path and request.url.path.endswith('/reauthorisations')):
+                journal=request.url.path.endswith(('/journal','/journal-preview'))
                 funding=request.url.path.endswith('/funding')
                 preparation=request.url.path.endswith('/expense-drafts')
                 renewal=request.url.path.endswith('/reauthorisations')
@@ -361,7 +382,10 @@ class CustomerEvidence:
                     raise ApiError(408,'request_timeout') from None
                 except (ValueError,UnicodeDecodeError,RecursionError):
                     raise ApiError(400,'invalid_json') from None
-                if funding:
+                if journal:
+                    result=await run_in_threadpool(self.journal,token,tenant,organisation,evidence,draft,
+                        'preview' if request.url.path.endswith('/journal-preview') else 'create',document,initiating_actor)
+                elif funding:
                     result=await run_in_threadpool(self.record_funding,token,tenant,organisation,evidence,draft,document,initiating_actor)
                 elif preparation:
                     result=await run_in_threadpool(self.create_expense,token,tenant,organisation,evidence,document,initiating_actor)
@@ -369,7 +393,7 @@ class CustomerEvidence:
                     result=await run_in_threadpool(self.reauthorise_csv_request,token,tenant,organisation,evidence,job,document,initiating_actor)
                 else:
                     result=await run_in_threadpool(self.csv_request if extraction else self.csv_answer,token,tenant,organisation,evidence,document,initiating_actor)
-                return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=201 if preparation else 202 if extraction or renewal else 200)
+                return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=201 if preparation or journal and request.url.path.endswith('/journal') else 202 if extraction or renewal else 200)
             if evidence is not None:
                 # This action has no customer-selectable policy, verdict or payload.
                 # Read at most the fixed empty JSON document, with a bounded wait.
@@ -486,6 +510,10 @@ class CustomerEvidence:
         if self.expense_preparation_connections is not None:
             routes.extend([Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-choices',self.endpoint,methods=['GET']),
                 Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts',self.endpoint,methods=['POST'])])
+        journal_path='/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts/{draft_id}/journal'
+        for operation,method,suffix in [('inspect','GET',''),('preview','POST','-preview'),('create','POST','')]:
+            if self.journal_connections[operation] is not None:
+                routes.append(Route(journal_path+suffix,self.endpoint,methods=[method]))
         funding_path='/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts/{draft_id}/funding'
         if self.expense_funding_read_connections is not None:
             routes.append(Route(funding_path,self.endpoint,methods=['GET']))

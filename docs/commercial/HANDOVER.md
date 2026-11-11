@@ -2045,3 +2045,35 @@ uncertain work. Production security/restore/OCR/model/scanner, bank arrangement 
 quotas remain unfinished. No active writer after publication; fetch/check remote,
 dirty state and divergence before continuing. No deployment, billing activation,
 contract, private-record publication or statutory submission occurred.
+
+## Customer journal preview and draft save — 11 November 2026
+
+Recovered remote a5b931d clean/zero divergence; no active recorded writer. Added
+migration 0076 and optional customer journal read/preview/write capabilities across
+shared API/configured server/web. From a saved expense with recorded funding, choose
+an enabled mapped counterpart explicitly, inspect equal debit/credit source-backed
+lines, save the exact preview and inspect the stable saved draft/creator/snapshot.
+Digest changes roll back storage; concurrent same-attempt retries reuse one receipt.
+Fresh human membership/scopes and initiating actor remain mandatory; no scope stripping,
+posting, review decision or statutory approval route. Existing core interactive guards
+are unchanged. Reader/preview/writer grants are separate; underlying shared writers
+retain their source/scan/funding/accounting locks. A retained but ineligible saved
+journal is marked unavailable, never silently treated as missing/replaced.
+
+Local verification: 71 core, 21 identity and full 501 PostgreSQL 16.2 integration tests
+passed; ten new journal tests also rerun after UUID normalization. JS syntax,
+compileall and diff checks passed. Three new real Chromium browser cases remain
+mandatory in full CI, alongside the existing fictional-demo approval browser test.
+Local Chromium cannot launch (socket() Operation not permitted); verify the published
+head's GitHub Actions before claiming full browser qualification. Do not skip/remove
+that test to obtain green. No live service/deployment/billing/paid contract/statutory
+submission occurred; public tests use fictional data only.
+
+See commercial/EXPENSE_JOURNALS.md for separate grants, optional private DSNs, endpoint
+contracts, recovery/limits and verified official PostgreSQL references. Pending saves
+preserve exact preview/payload/actor only in the current tab; expiry clears source
+panels and reauthentication can retry the same attempt. Reload loses pending state;
+inspect/reconcile retained records before replacement. Fetch latest remote and run
+scripts/development_checkpoint.py before any next edits. Next: qualify CI and then
+journal review observations/corrections with exact snapshot binding, not statutory
+approval. Broad SaaS production/operator/document/billing/qualified-adapter work remains.
