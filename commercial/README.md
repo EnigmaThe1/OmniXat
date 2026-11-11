@@ -170,3 +170,7 @@ scan and accounting checks. It does not create, correct, post or approve drafts.
 [Customer CSV expense preparation](EXPENSE_PREPARATION.md) connects explicit
 source/accounting choices to atomic saved preparations and stable retries. Amounts
 come from recorded evidence or clarification; posting and approval remain separate.
+
+[Customer expense funding context](EXPENSE_FUNDING.md) connects explicit configured
+business/personal payer choices to retained, attributed funding declarations with
+separate readers/writers and stable retries. It does not move money or post journals.

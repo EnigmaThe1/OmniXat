@@ -24,7 +24,7 @@ async function request(url, options = {}) {
     let code = 'request_failed';
     try {
       const received = (await response.json()).error?.code;
-      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict', 'extraction_request_conflict', 'extraction_cancellation_unavailable', 'extraction_reauthorisation_unavailable', 'expense_preparation_conflict'].includes(received)) code = received;
+      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict', 'extraction_request_conflict', 'extraction_cancellation_unavailable', 'extraction_reauthorisation_unavailable', 'expense_preparation_conflict', 'funding_conflict'].includes(received)) code = received;
     } catch (_) { /* Generic error on invalid responses. */ }
     throw new RequestError(response.status, code);
   }
@@ -52,7 +52,7 @@ function errorMessage(error) {
 function fail(error) {
   $('error-message').textContent = errorMessage(error); show('error', true);
   const denied = error.status === 401 || error.status === 403;
-  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer || state.pending.csvRequest || state.pending.csvCancellation || state.pending.expenseDraft));
+  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer || state.pending.csvRequest || state.pending.csvCancellation || state.pending.expenseDraft || state.pending.expenseFunding));
   if (denied) { show('content', false); $('organisation-dialog').close(); state.context = null; }
 }
 function dateText(value) {
@@ -79,7 +79,7 @@ function navigate(path) {
   if (state.saving || Object.keys(state.pending).length) {
     tell('Please confirm the pending save before changing records.'); workspaceOptions(); return;
   }
-  if (document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
+  if (document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
   if (state.org && ($('note-body').value.trim() || $('evidence-file').files.length)) {
     tell('Save or clear the note, selected file or answer before leaving this organisation.'); workspaceOptions(); return;
   }
@@ -201,6 +201,7 @@ function renderEvidence() {
       inspect.setAttribute('aria-controls', panel.id); inspect.setAttribute('aria-expanded', 'false');
       inspect.addEventListener('click', () => viewExpenseDrafts(item, inspect, panel));
       row.append(inspect, panel);
+      if (state.pending.expenseFunding?.evidence === item.id) queueMicrotask(() => viewExpenseDrafts(item,inspect,panel,state.pending.expenseFunding.draft));
     }
     if (state.context.csv_request_status_access && item.media_type === 'text/csv') {
       const inspect = element('button', 'Inspect extraction requests', 'button secondary'); inspect.type = 'button';
@@ -355,7 +356,7 @@ function csvRequestForm(item) {
   return form;
 }
 async function viewCSVCandidates(item, button, panel) {
-  if (panel.querySelector('.csv-answer[data-dirty="true"], .expense-preparation[data-dirty="true"]') && !state.pending.csvAnswer && !state.pending.expenseDraft) { tell('Save or clear the answer before refreshing candidates.'); return; }
+  if (panel.querySelector('.csv-answer[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"]') && !state.pending.csvAnswer && !state.pending.expenseDraft) { tell('Save or clear the answer before refreshing candidates.'); return; }
   const epoch = state.epoch;
   panel.hidden = false; panel.replaceChildren(element('p', 'Loading CSV candidates…'));
   panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
@@ -385,7 +386,7 @@ async function viewCSVCandidates(item, button, panel) {
       details.push(csvAnswerForm(item, pending.payload.job_id, pending.question, button, panel, pending));
     }
     if (state.pending.expenseDraft?.evidence === item.id) {
-      details.push(expensePreparationForm(item, state.pending.expenseDraft.options, state.pending.expenseDraft));
+      details.push(expensePreparationForm(item, state.pending.expenseDraft.options, state.pending.expenseDraft || state.pending.expenseFunding));
     } else if (state.context?.can_prepare_expense && !Object.keys(state.pending).length) {
       const prepare = element('button', 'Prepare expense draft', 'button secondary'); prepare.type = 'button';
       prepare.addEventListener('click', () => loadExpensePreparation(item, result, prepare, panel)); details.push(prepare);
@@ -400,7 +401,7 @@ async function viewCSVCandidates(item, button, panel) {
       panel.append(csvAnswerForm(item, pending.payload.job_id, pending.question, button, panel, pending));
     }
     if (error.status === 404 && state.pending.expenseDraft?.evidence === item.id) {
-      panel.append(expensePreparationForm(item,state.pending.expenseDraft.options,state.pending.expenseDraft));
+      panel.append(expensePreparationForm(item,state.pending.expenseDraft.options,state.pending.expenseDraft || state.pending.expenseFunding));
     }
     if (error.status === 401 || error.status === 403) { panel.replaceChildren(); fail(error); }
   } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; }
@@ -540,6 +541,7 @@ function expensePreparationForm(item, options, pending = null) {
   return form;
 }
 async function viewExpenseDrafts(item, button, panel, draft = null) {
+  if (panel.querySelector('.funding-selection[data-dirty="true"]') && !state.pending.expenseFunding) { tell('Save or clear the funding selection before refreshing.'); return; }
   const epoch = state.epoch;
   panel.hidden = false; panel.replaceChildren(element('p', 'Checking saved expense drafts…'));
   panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
@@ -564,6 +566,15 @@ async function viewExpenseDrafts(item, button, panel, draft = null) {
           ['Scan policy', source.policy_version], ['Evidence fingerprint', source.content_sha256]
         ]) fields.append(element('dt', label), element('dd', text));
         article.append(fields);
+        if (state.context?.funding_access) {
+          const inspect = element('button', 'Inspect funding', 'button secondary'); inspect.type = 'button';
+          const funding = element('div', undefined, 'evidence-receipt'); funding.hidden = true;
+          funding.id = `funding-${value.id}`; funding.setAttribute('role','region'); funding.setAttribute('aria-label',`Expense funding ${value.id}`);
+          inspect.setAttribute('aria-controls',funding.id); inspect.setAttribute('aria-expanded','false');
+          inspect.addEventListener('click', () => viewExpenseFunding(item,value.id,inspect,funding,panel));
+          article.append(inspect,funding);
+          if (state.pending.expenseFunding?.draft === value.id) queueMicrotask(() => viewExpenseFunding(item,value.id,inspect,funding,panel));
+        }
       } else {
         const open = element('button', `Inspect expense draft ${value.id}`, 'button secondary'); open.type = 'button';
         open.addEventListener('click', () => viewExpenseDrafts(item, button, panel, value.id)); article.append(open);
@@ -576,6 +587,82 @@ async function viewExpenseDrafts(item, button, panel, draft = null) {
     panel.replaceChildren(element('p', error.status === 404 ? 'No eligible saved expense draft is available. Refresh the list to check current records.' : errorMessage(error)));
     if (error.status === 401 || error.status === 403) { panel.replaceChildren(); fail(error); }
   } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; button.textContent = 'Refresh saved expense drafts'; }
+}
+async function viewExpenseFunding(item, draft, button, panel, container) {
+  if (panel.querySelector('.funding-selection[data-dirty="true"]') && !state.pending.expenseFunding) { tell('Save or clear the funding selection before refreshing.'); return; }
+  const epoch = state.epoch;
+  panel.hidden = false; panel.replaceChildren(element('p','Checking expense funding…'));
+  button.disabled = true; button.setAttribute('aria-expanded','true'); panel.setAttribute('aria-busy','true');
+  try {
+    const result = await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/expense-drafts/${draft}/funding`);
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    panel.replaceChildren(element('h4','Declared expense funding'),element('p','This records context only. It does not move money, verify payer ownership or post a journal.'));
+    if (result.funding) {
+      const value = result.funding; const fields = element('dl');
+      for (const [label,text] of [['Funding type',value.funding_kind === 'personal_funds' ? 'Personal funds' : 'Business funds'],
+        ['Payer reference',value.payer_id],['Funding source reference',value.funding_source_id],
+        ['Recorded',`${dateText(value.recorded_at)} by ${value.recorded_by}`],
+        ['Source availability',value.source_eligible ? 'Eligible for draft preparation' : 'No longer eligible for draft preparation']]) {
+        fields.append(element('dt',label),element('dd',text));
+      }
+      panel.append(fields);
+    } else panel.append(element('p','Who funded this expense? Select the configured payer and source explicitly.'));
+    const pending = state.pending.expenseFunding;
+    if (pending?.draft === draft) panel.append(expenseFundingForm(item,draft,pending.choices,button,panel,container,pending));
+    else if (!result.funding && state.context?.can_record_funding && !Object.keys(state.pending).length) {
+      panel.append(expenseFundingForm(item,draft,result.choices,button,panel,container));
+    }
+    if (result.has_more) panel.append(element('p','Only the first 20 eligible sources are shown. Older-source navigation is not available here yet.'));
+  } catch (error) {
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    panel.replaceChildren(element('p',errorMessage(error)));
+    if ([401,403,404].includes(error.status)) { container.replaceChildren(); if (error.status === 404) container.append(element('p','The expense draft is no longer available for funding inspection. Refresh saved drafts.')); else fail(error); }
+  } finally { panel.setAttribute('aria-busy','false'); button.disabled = false; button.textContent = 'Refresh funding'; }
+}
+function expenseFundingForm(item,draft,choices,button,panel,container,pending = null) {
+  const form = element('form',undefined,'form-panel funding-selection'); form.setAttribute('aria-label',`Select expense funding ${draft}`);
+  const label = element('label','Payer and funding source'); label.htmlFor = `funding-choice-${draft}`;
+  const select = element('select'); select.id = label.htmlFor; select.required = true;
+  const blank = element('option','Choose explicitly'); blank.value = ''; select.append(blank);
+  for (const value of choices) {
+    const option = element('option',`${value.funding_kind === 'personal_funds' ? 'Personal funds' : 'Business funds'} · payer ${value.payer_id} · source ${value.id}`);
+    option.value = value.id; select.append(option);
+  }
+  if (pending) select.value = pending.payload.funding_source_id;
+  select.addEventListener('input',()=>{form.dataset.dirty='true';});
+  const save = element('button',pending ? 'Retry funding selection' : 'Record funding selection','button secondary'); save.type='submit';
+  const clear = element('button','Clear funding selection','button secondary'); clear.type='button';
+  clear.addEventListener('click',()=>{select.value='';delete form.dataset.dirty;});
+  const status=element('p');status.setAttribute('role','status');
+  if (!choices.length) { form.append(element('p','No eligible funding sources are configured. Ask your workspace operator to configure a source.')); save.disabled=!pending; }
+  function controls(locked) { select.disabled=locked;clear.disabled=locked; }
+  controls(Boolean(pending));form.append(label,select,save,clear,status);
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();if(state.saving)return;
+    if(Object.keys(state.pending).some(key=>key!=='expenseFunding')) { tell('Confirm the pending save first.');return; }
+    const selected=choices.find(value=>value.id===select.value);
+    const operation=state.pending.expenseFunding||{evidence:item.id,draft,choices,actor:state.context.actor_id,
+      url:`${apiBase()}/organisations/${state.org}/evidence/${item.id}/expense-drafts/${draft}/funding`,
+      payload:{funding_source_id:selected.id,payer_id:selected.payer_id}};
+    state.pending.expenseFunding=operation;state.saving=true;controls(true);save.disabled=true;clearMessage();
+    const epoch=state.epoch;
+    try {
+      await request(operation.url,{method:'POST',headers:{'Content-Type':'application/json','X-OmniXat-Expected-Actor':operation.actor},body:JSON.stringify(operation.payload)});
+      delete state.pending.expenseFunding;delete form.dataset.dirty;
+      if(epoch!==state.epoch||!panel.isConnected)return;
+      tell('Funding selection recorded. No funds moved and no journal was posted.');
+      await viewExpenseFunding(item,draft,button,panel,container);
+    } catch(error) {
+      if(epoch!==state.epoch||!form.isConnected)return;
+      const rejected=error.code!=='session_changed'&&[400,403,404,409,413,415,422].includes(error.status);
+      if(rejected)delete state.pending.expenseFunding;
+      status.textContent=errorMessage(error)+(rejected?' Refresh funding to inspect retained records.':' Retry the same selection to confirm its receipt.');
+      controls(!rejected);save.disabled=false;save.textContent=rejected?'Record funding selection':'Retry funding selection';
+      if([401,403].includes(error.status)) { container.replaceChildren();fail(error); }
+      else if(error.code==='session_changed') { fail(error);show('reauth',true); }
+    } finally { state.saving=false;$('workspace-select').disabled=Boolean(Object.keys(state.pending).length); }
+  });
+  return form;
 }
 async function viewScanStatus(item, button, panel) {
   const epoch = state.epoch;
@@ -773,12 +860,12 @@ document.addEventListener('click', event => {
   if (link && !event.ctrlKey && !event.metaKey && event.button === 0) { event.preventDefault(); navigate(link.getAttribute('href')); }
 });
 window.addEventListener('popstate', () => {
-  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
+  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
     history.pushState({}, '', tenantPath(state.tenant) + (state.org ? `/organisations/${state.org}` : ''));
     tell('Save or clear the note, selected file or answer before leaving this organisation.');
   } else loadRoute();
 });
-window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
 async function boot() {
   clearMessage(); show('loading', true); show('content', false);
   try { await directory(); await loadRoute(); }

@@ -54,6 +54,10 @@ def create_configured_app():
     draft_dsn = _file(draft_path,secret=True) if draft_path else None
     preparation_path = os.environ.get('OMNIXAT_EXPENSE_PREPARATION_DSN_FILE')
     preparation_dsn = _file(preparation_path,secret=True) if preparation_path else None
+    funding_read_path = os.environ.get('OMNIXAT_EXPENSE_FUNDING_READ_DSN_FILE')
+    funding_read_dsn = _file(funding_read_path,secret=True) if funding_read_path else None
+    funding_write_path = os.environ.get('OMNIXAT_EXPENSE_FUNDING_WRITE_DSN_FILE')
+    funding_write_dsn = _file(funding_write_path,secret=True) if funding_write_path else None
     admission = BoundedSemaphore(16)
     def factory(dsn):
         @contextmanager
@@ -77,4 +81,6 @@ def create_configured_app():
                       csv_request_connection_factory=factory(csv_request_dsn) if csv_request_dsn else None,
                       csv_request_status_connection_factory=factory(csv_status_dsn) if csv_status_dsn else None,
                       expense_draft_connection_factory=factory(draft_dsn) if draft_dsn else None,
-                      expense_preparation_connection_factory=factory(preparation_dsn) if preparation_dsn else None)
+                      expense_preparation_connection_factory=factory(preparation_dsn) if preparation_dsn else None,
+                      expense_funding_read_connection_factory=factory(funding_read_dsn) if funding_read_dsn else None,
+                      expense_funding_write_connection_factory=factory(funding_write_dsn) if funding_write_dsn else None)

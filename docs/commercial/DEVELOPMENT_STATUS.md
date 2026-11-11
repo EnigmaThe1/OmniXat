@@ -4394,3 +4394,63 @@ removed/skipped. Targeted regression passed on PostgreSQL 16.2 (1 test, 0.646s),
 including the fixed collision; JS syntax/diff checks passed. The form now explicitly
 states GBP-only support before saving, with a browser assertion and documentation.
 Full CI rerun is required for this follow-up; preparation SQL/services are unchanged.
+
+## In progress — customer expense funding context — 11 November 2026
+
+Recovered 4cebc1e clean, zero divergence, no active recorded writer; full CI
+42947740931 passed 651 tests/build. Scope: optional separate funding reader/writer,
+bounded server-owned payer/source choices and explicit immutable funding selection
+from an eligible saved expense draft. Reuse existing funding/source validation,
+recheck persisted human membership and hold write eligibility gates through commit.
+Connect API/web inspection, same-attempt retry and attribution. No money movement,
+bank connection, journal/posting/correction or statutory approval. Next: journal review.
+
+## Customer expense funding context implemented — 11 November 2026
+
+Migration 0075 adds separate read/write funding functions. Shared bearer-aware
+services and optional API/server factories connect saved-draft detail to explicit
+configured payer/source selection, retained funding type/actor/time and disabled-
+source history. The SQL writer independently checks current human editor/owner,
+cutoff/revocation and expected actor, and holds draft/policy/accounting/quarantine/
+identity/source locks until commit. Existing record/read_expense_funding_context
+validators remain the shared contract. Exact actor/pair retries reconcile immutable
+receipts; changed choices conflict. Read-only viewers cannot write or select new
+sources. No bearer scopes are stripped or approval principal constructed.
+
+The website keeps uncertain selections frozen, preserves same-tab actor/pair across
+expiry recovery and displays fresh retained context after success. Expiry clears
+parent draft/source details; source availability is separate from recorded history.
+No payer/type is inferred from amounts, and no money movement, bank connection,
+journal effect, correction, approval or statutory action is added. See commercial/
+EXPENSE_FUNDING.md for explicit grants/configuration/API/recovery and limits.
+
+Validation passed: PYTHONPATH=commercial python -m unittest discover -s commercial/
+tests -q: 71 (0.104s); identity_tests: 21 (0.331s). Disposable PostgreSQL 16.2:
+OMNIXAT_TEST_ADMIN_DSN=<local disposable cluster> PYTHONPATH=commercial:commercial/
+integration_tests python -m unittest discover -s commercial/integration_tests -q:
+491 tests (66.610s), including nine new funding cases. Initial eight-case targeted
+run passed (2.108s). Cases cover pair/source/tenant/draft binding, fresh authority,
+concurrent retries/conflicts, history after disable, bounded choices/separate grants,
+transaction cleanup, full non-BYPASSRLS function-owner chain, and write locks blocking
+revocation/policy/accounting/source changes and a new blocked verdict until commit.
+Compilation, JS syntax and git diff --check passed. Technical PostgreSQL 16 CREATE
+FUNCTION/explicit locking sources rechecked 11 November 2026; no dependency/legal rule
+or statutory amount changes. Existing Starlette deprecation warnings remain.
+
+Three new Chromium cases cover explicit personal-funds selection/mobile/viewer
+history, lost receipt with account switch, and expiry clearing/same-pair recovery.
+They await full CI because local Chromium is blocked by the known socket restriction.
+No tests removed/skipped or timeouts relaxed. Full provider/gateway/scanner/customer/
+retained fictional-demo browser/container checks must verify the new head. New UI
+fixtures use the gateway stand-in; independent provider checks do not establish a
+complete provider-driven funding journey or production qualification.
+
+Next: customer journal preparation/review/corrections from explicit persisted funding
+and counterpart configuration; inspect existing shared journal services and preserve
+human approval boundaries. Funding correction, full source pagination/settings/labels,
+production security/restore/OCR/model/scanner, bank consent and quotas remain open.
+Pending memory is tab-only; current source/context eligibility can withhold an earlier
+saved draft. Empty results are not proof of no commit; reconcile retained records
+before replacing uncertain work. No active writer after publication; fetch/check
+remote/checkpoint/diff before resuming. No deployment, billing activation, paid
+contract, private records or statutory submission occurred.

@@ -2012,3 +2012,36 @@ Also made GBP-only preparation explicit in the form and browser assertion/docs.
 SQL/services and next-step scope are unchanged. Verify the new head's full CI before
 claiming qualification; no test was removed/skipped. No active writer after final
 publication; fetch/inspect remote and dirty/divergence before resuming.
+
+## Customer expense funding context — 11 November 2026
+
+Recovered 4cebc1e clean, zero divergence, full CI 42947740931 passed 651 tests/build,
+closing the earlier privacy assertion failure. Added migration 0075, separate reader/
+writer capabilities, optional API/server DSNs and saved-draft funding inspection/
+selection UI. Explicit configured payer/source pairs determine declared business or
+personal funding; actor/time come from current SQL authority. Existing funding
+validators handle immutable retries/conflicts. Writer holds identity/draft/policy/
+accounting/quarantine/source gates through commit; no scopes stripped into approval.
+See commercial/EXPENSE_FUNDING.md for grants, API, recovery and boundaries.
+
+Local 71 core (0.104s), 21 identity (0.331s), all 491 PostgreSQL 16.2 integration
+cases (66.610s) passed, including nine funding cases; initial eight-case run passed
+(2.108s). Full non-BYPASSRLS read/write chain, separate grants, concurrent retries,
+current authority/source and hold-until-commit gates are covered. Compilation, JS
+syntax and diff checks passed. Three new Chromium cases cover personal selection/
+mobile/viewer disabled-source history, committed lost receipt/account switch, and
+expiry clearing/same-pair recovery. Local browser launch remains blocked by known
+socket restrictions: verify this head's full CI before claiming provider/gateway/
+scanner/customer/prototype/browser/container checks passed. None removed/skipped.
+
+Next: shared customer journal preparation/review/corrections, using explicit funding
+and configured counterpart choices. Read actual journal services first. Funding
+correction, source pagination/settings/labels and final human exact-package approval
+remain separate. Funding records are declarations, not proof of ownership or bank
+consent; no money movement, bank connection, posting, correction or approval is added.
+Current eligibility may withhold prior saved drafts; empty inspection is not proof of
+no commit. Pending attempts are tab-only; reconcile retained records before replacing
+uncertain work. Production security/restore/OCR/model/scanner, bank arrangement and
+quotas remain unfinished. No active writer after publication; fetch/check remote,
+dirty state and divergence before continuing. No deployment, billing activation,
+contract, private-record publication or statutory submission occurred.
