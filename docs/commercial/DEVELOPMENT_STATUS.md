@@ -4318,3 +4318,63 @@ separate unfinished journeys; this read view cannot approve/post/submit. Older-p
 UI, quotas, production scanner/security/restore/OCR/model also remain open. No active
 writer after publication; fetch/check checkpoint/diff before resuming. No deployment,
 billing activation, paid contract, private-record publication or statutory action.
+
+## In progress — customer CSV expense draft preparation — 11 November 2026
+
+Recovered 01ab4f2 clean, zero divergence, no active recorded writer; full CI
+42944498776 passed (640 tests and container build). Scope: server-owned bounded
+accounting choices, explicit source/date/period/account selection, atomic saved
+amount+expense draft through fresh persisted human editor authority and existing SQL
+validators. Connect optional shared API/web services and same-attempt browser retry.
+Never strip bearer scopes or accept an entered amount. No posting/correction/approval
+or statutory route. Test atomic failures, concurrency, attribution and browser recovery.
+
+## Customer CSV expense preparation implemented — 11 November 2026
+
+Migration 0074 and a separate execute-only capability expose bounded server-owned
+period/account choices and atomic preparation from an explicit inspected source.
+Persisted human editor/owner identity, cutoff, revocation and initiating actor are
+checked inside SQL, with identity/membership row locks held through commit. The
+existing create_csv_draft_amount/create_csv_expense_draft validators derive the exact
+extracted/clarified amount and check source/policy/context. Rejected attempts roll
+back both writes; exact actor/source/context retries reconcile the original receipt.
+No amount/currency/actor/approval field is accepted. Optional API/server configuration
+and website selection form preserve frozen same-tab attempts on uncertain saves and
+session recovery. No scopes are stripped into an interactive or approval principal.
+
+Initial non-BYPASSRLS qualification exposed missing UPDATE visibility for row locks.
+Added filtered identity/membership locking policies with WITH CHECK(false), without
+runtime UPDATE grants. Final tests prove the full write chain under a non-bypass
+function owner and reject actual identity/membership updates even with table grants.
+The original failure is resolved; no checks/timeouts were relaxed. See commercial/
+EXPENSE_PREPARATION.md for grants, contracts, recovery and limits.
+
+Validation passed: PYTHONPATH=commercial python -m unittest discover -s commercial/
+tests -q: 71 (0.114s); identity_tests: 21 (0.300s). Disposable PostgreSQL 16.2:
+OMNIXAT_TEST_ADMIN_DSN=<local disposable cluster> PYTHONPATH=commercial:commercial/
+integration_tests python -m unittest discover -s commercial/integration_tests -q:
+482 tests (61.588s), including eight new preparation cases. Final targeted eight
+passed (1.706s), expanding the extracted-source case with prior fictional clarified
+source/scale preservation and confirming mutation denial. Python compilation,
+JavaScript syntax and git diff --check passed. PostgreSQL 16 CREATE FUNCTION,
+CREATE POLICY and explicit-locking documentation rechecked 11 November 2026.
+No dependency version, legal rule or statutory amount changes.
+
+Three new Chromium cases cover explicit choices/mobile/saved inspection, committed
+but lost receipt plus wrong-account retry, and expiry clearing/recovery. Local
+Chromium remains unavailable due the socket restriction observed during recovery;
+full CI must verify these and all retained provider/gateway/scanner/customer and
+fictional-demo browser/build checks after publication. No tests removed/skipped.
+New UI fixtures use the gateway stand-in; independent provider tests do not imply a
+complete provider-driven preparation journey or production qualification.
+
+Limits: first 20 choices/type, reference IDs rather than account labels, no settings
+editor, no economic deduplication across different extraction jobs, no preview/review
+decision or corrections/posting/filing effect. Pending memory is tab-only. Current
+reader gates can withhold an earlier saved preparation after eligibility changes;
+an empty list is not proof of no commit. Reconcile retained records before replacing
+uncertain work. Next: customer funding/journal review and correction journey using
+persisted context and fresh authority; final human exact-package approval stays
+separate. Production security/restore/OCR/model/scanner and quotas remain open.
+No active writer after publication; fetch/check remote/checkpoint/diff before resume.
+No deployment, billing activation, paid contract, private records or statutory action.

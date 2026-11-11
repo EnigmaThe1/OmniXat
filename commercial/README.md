@@ -166,3 +166,7 @@ and stops on revoked/cancelled/stale requests. No automatic queue or posting sta
 [Customer saved expense draft inspection](EXPENSE_DRAFT_REVIEW.md) adds an optional
 read-only view of persisted source-backed preparations, with fresh membership,
 scan and accounting checks. It does not create, correct, post or approve drafts.
+
+[Customer CSV expense preparation](EXPENSE_PREPARATION.md) connects explicit
+source/accounting choices to atomic saved preparations and stable retries. Amounts
+come from recorded evidence or clarification; posting and approval remain separate.

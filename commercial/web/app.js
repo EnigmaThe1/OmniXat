@@ -24,7 +24,7 @@ async function request(url, options = {}) {
     let code = 'request_failed';
     try {
       const received = (await response.json()).error?.code;
-      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict', 'extraction_request_conflict', 'extraction_cancellation_unavailable', 'extraction_reauthorisation_unavailable'].includes(received)) code = received;
+      if (['session_changed', 'scan_request_unavailable', 'scan_reauthorisation_unavailable', 'answer_conflict', 'extraction_request_conflict', 'extraction_cancellation_unavailable', 'extraction_reauthorisation_unavailable', 'expense_preparation_conflict'].includes(received)) code = received;
     } catch (_) { /* Generic error on invalid responses. */ }
     throw new RequestError(response.status, code);
   }
@@ -52,7 +52,7 @@ function errorMessage(error) {
 function fail(error) {
   $('error-message').textContent = errorMessage(error); show('error', true);
   const denied = error.status === 401 || error.status === 403;
-  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer || state.pending.csvRequest || state.pending.csvCancellation));
+  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer || state.pending.csvRequest || state.pending.csvCancellation || state.pending.expenseDraft));
   if (denied) { show('content', false); $('organisation-dialog').close(); state.context = null; }
 }
 function dateText(value) {
@@ -79,7 +79,7 @@ function navigate(path) {
   if (state.saving || Object.keys(state.pending).length) {
     tell('Please confirm the pending save before changing records.'); workspaceOptions(); return;
   }
-  if (document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
+  if (document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
   if (state.org && ($('note-body').value.trim() || $('evidence-file').files.length)) {
     tell('Save or clear the note, selected file or answer before leaving this organisation.'); workspaceOptions(); return;
   }
@@ -190,7 +190,7 @@ function renderEvidence() {
       reviewPanel.setAttribute('aria-label', `CSV candidates ${item.id}`);
       reviewButton.setAttribute('aria-controls', reviewPanel.id); reviewButton.setAttribute('aria-expanded', 'false');
       reviewButton.addEventListener('click', () => viewCSVCandidates(item, reviewButton, reviewPanel));
-      if (state.pending.csvAnswer?.evidence === item.id) queueMicrotask(() => viewCSVCandidates(item, reviewButton, reviewPanel));
+      if (state.pending.csvAnswer?.evidence === item.id || state.pending.expenseDraft?.evidence === item.id) queueMicrotask(() => viewCSVCandidates(item, reviewButton, reviewPanel));
       row.append(reviewButton, reviewPanel);
     }
     if (state.context.expense_draft_access && item.media_type === 'text/csv') {
@@ -355,7 +355,7 @@ function csvRequestForm(item) {
   return form;
 }
 async function viewCSVCandidates(item, button, panel) {
-  if (panel.querySelector('.csv-answer[data-dirty="true"]') && !state.pending.csvAnswer) { tell('Save or clear the answer before refreshing candidates.'); return; }
+  if (panel.querySelector('.csv-answer[data-dirty="true"], .expense-preparation[data-dirty="true"]') && !state.pending.csvAnswer && !state.pending.expenseDraft) { tell('Save or clear the answer before refreshing candidates.'); return; }
   const epoch = state.epoch;
   panel.hidden = false; panel.replaceChildren(element('p', 'Loading CSV candidates…'));
   panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
@@ -384,6 +384,12 @@ async function viewCSVCandidates(item, button, panel) {
       details.push(element('p', 'Confirm the pending answer for extraction ' + pending.payload.job_id + '.'));
       details.push(csvAnswerForm(item, pending.payload.job_id, pending.question, button, panel, pending));
     }
+    if (state.pending.expenseDraft?.evidence === item.id) {
+      details.push(expensePreparationForm(item, state.pending.expenseDraft.options, state.pending.expenseDraft));
+    } else if (state.context?.can_prepare_expense && !Object.keys(state.pending).length) {
+      const prepare = element('button', 'Prepare expense draft', 'button secondary'); prepare.type = 'button';
+      prepare.addEventListener('click', () => loadExpensePreparation(item, result, prepare, panel)); details.push(prepare);
+    }
     panel.replaceChildren(...details); button.textContent = 'Refresh CSV candidates';
   } catch (error) {
     if (epoch !== state.epoch || !panel.isConnected) return;
@@ -392,6 +398,9 @@ async function viewCSVCandidates(item, button, panel) {
     if (error.status === 404 && state.pending.csvAnswer?.evidence === item.id) {
       const pending = state.pending.csvAnswer;
       panel.append(csvAnswerForm(item, pending.payload.job_id, pending.question, button, panel, pending));
+    }
+    if (error.status === 404 && state.pending.expenseDraft?.evidence === item.id) {
+      panel.append(expensePreparationForm(item,state.pending.expenseDraft.options,state.pending.expenseDraft));
     }
     if (error.status === 401 || error.status === 403) { panel.replaceChildren(); fail(error); }
   } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; }
@@ -447,6 +456,86 @@ function csvAnswerForm(item, job, question, reviewButton, panel, pending = null)
       state.saving = false; save.disabled = false;
       $('workspace-select').disabled = Boolean(Object.keys(state.pending).length);
     }
+  });
+  return form;
+}
+async function loadExpensePreparation(item, review, button, panel) {
+  if (state.saving || Object.keys(state.pending).length || panel.querySelector('.expense-preparation')) return;
+  const epoch = state.epoch; button.disabled = true;
+  try {
+    const options = await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/expense-choices`);
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    options.job = review.job_id;
+    options.sources = review.amounts.filter(value => value.amount !== null || review.answers.some(answer =>
+      answer.field_name === value.field_name && answer.row === value.row && answer.column === value.column && answer.amount !== null))
+      .map(value => ({field_name: value.field_name, row: value.row, column: value.column}));
+    panel.append(expensePreparationForm(item, options)); button.remove();
+  } catch (error) {
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    tell(errorMessage(error));
+    if ([401,403].includes(error.status)) { panel.replaceChildren(); fail(error); }
+  } finally { button.disabled = false; }
+}
+function expensePreparationForm(item, options, pending = null) {
+  const form = element('form', undefined, 'form-panel expense-preparation');
+  form.setAttribute('aria-label', 'Prepare source-backed expense draft');
+  form.append(element('h3', 'Prepare expense draft'), element('p',
+    'Choose the source, bookkeeping period, expense account and accounting date explicitly. The amount comes from recorded evidence or clarification. This saves a preparation only; it does not post or approve anything.'));
+  const inputs = {};
+  for (const [key, labelText, values] of [
+    ['source', 'Source cell', options.sources.map(v => [JSON.stringify(v), `${v.field_name} · row ${v.row}, column ${v.column}`])],
+    ['period_id', 'Bookkeeping period', options.periods.map(v => [v.id, `${v.starts_on} to ${v.ends_on} · ${v.id}`])],
+    ['expense_account_id', 'Expense account', options.accounts.map(v => [v.id, `Account reference ${v.id}`])]
+  ]) {
+    const id = `prepare-${item.id}-${key}`; const label = element('label', labelText); label.htmlFor = id;
+    const select = element('select'); select.id = id; select.required = true;
+    const blank = element('option', 'Choose explicitly'); blank.value = ''; select.append(blank);
+    for (const [value, text] of values) { const option = element('option', text); option.value = value; select.append(option); }
+    if (pending) select.value = key === 'source' ? JSON.stringify({field_name:pending.payload.field_name,
+      row:pending.payload.row,column:pending.payload.column}) : pending.payload[key];
+    inputs[key] = select; form.append(label, select);
+  }
+  const dateLabel = element('label', 'Accounting date'); dateLabel.htmlFor = `prepare-${item.id}-date`;
+  const date = element('input'); date.id = dateLabel.htmlFor; date.type = 'date'; date.required = true;
+  if (pending) date.value = pending.payload.accounting_date;
+  inputs.accounting_date = date; form.append(dateLabel, date);
+  const save = element('button', pending ? 'Retry expense preparation' : 'Save expense draft', 'button secondary'); save.type = 'submit';
+  const clear = element('button', 'Clear expense selection', 'button secondary'); clear.type = 'button';
+  const status = element('p'); status.setAttribute('role', 'status');
+  function controls(locked) { for (const input of Object.values(inputs)) input.disabled = locked; clear.disabled = locked; }
+  for (const input of Object.values(inputs)) input.addEventListener('input', () => { form.dataset.dirty = 'true'; });
+  clear.addEventListener('click', () => { for (const input of Object.values(inputs)) input.value = ''; delete form.dataset.dirty; });
+  if (!options.sources.length || !options.periods.length || !options.accounts.length) {
+    form.append(element('p', 'A resolved source and configured open period and expense account are required. Ask your workspace operator to configure missing bookkeeping choices.'));
+    save.disabled = !pending;
+  }
+  if (options.has_more_periods || options.has_more_accounts) form.append(element('p', 'Only 20 choices per type are shown. Older-choice navigation is not available here yet.'));
+  controls(Boolean(pending)); form.append(save, clear, status);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (state.saving) return;
+    if (Object.keys(state.pending).some(key => key !== 'expenseDraft')) { tell('Confirm the pending save first.'); return; }
+    const operation = state.pending.expenseDraft || {evidence:item.id,actor:state.context.actor_id,options,
+      url:`${apiBase()}/organisations/${state.org}/evidence/${item.id}/expense-drafts`,
+      payload:{job_id:options.job,...JSON.parse(inputs.source.value),period_id:inputs.period_id.value,
+        expense_account_id:inputs.expense_account_id.value,accounting_date:date.value}};
+    state.pending.expenseDraft = operation; state.saving = true; controls(true); save.disabled = true;
+    const epoch = state.epoch; clearMessage();
+    try {
+      const receipt = await request(operation.url,{method:'POST',headers:{'Content-Type':'application/json',
+        'X-OmniXat-Expected-Actor':operation.actor},body:JSON.stringify(operation.payload)});
+      delete state.pending.expenseDraft; delete form.dataset.dirty;
+      if (epoch !== state.epoch || !form.isConnected) return;
+      form.replaceChildren(element('p', `Expense draft ${receipt.id} saved ${dateText(receipt.created_at)}. Inspect saved expense drafts to review it. Nothing was posted or approved.`));
+    } catch (error) {
+      if (epoch !== state.epoch || !form.isConnected) return;
+      const rejected = error.code !== 'session_changed' && [400,403,404,409,413,415,422].includes(error.status);
+      if (rejected) delete state.pending.expenseDraft;
+      status.textContent = errorMessage(error) + (rejected ? '' : ' Retry the same preparation to confirm its receipt.');
+      controls(!rejected); save.disabled = false; save.textContent = rejected ? 'Save expense draft' : 'Retry expense preparation';
+      if ([401,403].includes(error.status)) { form.closest('[role="region"]')?.replaceChildren(); fail(error); }
+      else if (error.code === 'session_changed') { fail(error); show('reauth', true); }
+    } finally { state.saving = false; $('workspace-select').disabled = Boolean(Object.keys(state.pending).length); }
   });
   return form;
 }
@@ -684,12 +773,12 @@ document.addEventListener('click', event => {
   if (link && !event.ctrlKey && !event.metaKey && event.button === 0) { event.preventDefault(); navigate(link.getAttribute('href')); }
 });
 window.addEventListener('popstate', () => {
-  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
+  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
     history.pushState({}, '', tenantPath(state.tenant) + (state.org ? `/organisations/${state.org}` : ''));
     tell('Save or clear the note, selected file or answer before leaving this organisation.');
   } else loadRoute();
 });
-window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
 async function boot() {
   clearMessage(); show('loading', true); show('content', false);
   try { await directory(); await loadRoute(); }

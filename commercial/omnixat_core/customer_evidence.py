@@ -53,7 +53,7 @@ def evidence_actor(connection, verifier, token, tenant, *, write=False, expected
 
 
 class CustomerEvidence:
-    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None, csv_request_status_connections=None, expense_draft_connections=None):
+    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None, csv_request_status_connections=None, expense_draft_connections=None, expense_preparation_connections=None):
         self.verifier, self.connections = verifier, connection_factory
         if status_connections is not None and not callable(status_connections):
             raise ValueError('Server-owned status connection factory required')
@@ -76,6 +76,9 @@ class CustomerEvidence:
         if expense_draft_connections is not None and not callable(expense_draft_connections):
             raise ValueError('Server-owned draft reader connection factory required')
         self.expense_draft_connections = expense_draft_connections
+        if expense_preparation_connections is not None and not callable(expense_preparation_connections):
+            raise ValueError('Server-owned preparation connection factory required')
+        self.expense_preparation_connections = expense_preparation_connections
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
@@ -137,6 +140,22 @@ class CustomerEvidence:
         from .customer_csv_review import read_latest_csv
         with self.review_connections() as connection:
             return read_latest_csv(connection,self.verifier,token,tenant,organisation,evidence)
+
+    def expense_choices(self,token,tenant,organisation,evidence):
+        self.authorize(token,tenant,organisation)
+        from .customer_expense_preparation import expense_choices
+        with self.expense_preparation_connections() as connection:
+            return expense_choices(connection,self.verifier,token,tenant,organisation,evidence)
+
+    def create_expense(self,token,tenant,organisation,evidence,document,expected):
+        self.authorize(token,tenant,organisation,expected_actor=expected)
+        from .customer_expense_preparation import create_expense, PreparationActorChanged, PreparationConflict
+        try:
+            with self.expense_preparation_connections() as connection:
+                return create_expense(connection,self.verifier,token,tenant,organisation,evidence,document,expected_actor=expected)
+        except ValueError: raise ApiError(422,'invalid_expense_preparation') from None
+        except PreparationActorChanged: raise ApiError(409,'session_changed') from None
+        except PreparationConflict: raise ApiError(409,'expense_preparation_conflict') from None
 
     def expense_drafts(self,token,tenant,organisation,evidence,draft=None):
         self.authorize(token,tenant,organisation)
@@ -266,7 +285,9 @@ class CustomerEvidence:
                     if request.query_params:
                         raise ApiError(400, 'unsupported_parameter')
                     operation = self.csv_review if request.url.path.endswith('/csv-review') else self.scan_status if request.url.path.endswith('/scan-status') else self.receipt
-                    if '/expense-drafts' in request.url.path:
+                    if request.url.path.endswith('/expense-choices'):
+                        result=await run_in_threadpool(self.expense_choices,token,tenant,organisation,evidence)
+                    elif '/expense-drafts' in request.url.path:
                         result=await run_in_threadpool(self.expense_drafts,token,tenant,organisation,evidence,draft)
                     elif '/csv-requests' in request.url.path:
                         result=await run_in_threadpool(self.csv_requests,token,tenant,organisation,evidence,job)
@@ -290,8 +311,9 @@ class CustomerEvidence:
                 return JSONResponse({'data':result,'request_id':request.scope['request_id']})
             if request.query_params:
                 raise ApiError(400, 'unsupported_parameter')
-            if (request.url.path.endswith(('/csv-answers','/csv-requests'))
+            if (request.url.path.endswith(('/csv-answers','/csv-requests','/expense-drafts'))
                     or '/csv-requests/' in request.url.path and request.url.path.endswith('/reauthorisations')):
+                preparation=request.url.path.endswith('/expense-drafts')
                 renewal=request.url.path.endswith('/reauthorisations')
                 extraction=request.url.path.endswith('/csv-requests')
                 body_limit=8192 if extraction else 2048
@@ -315,11 +337,13 @@ class CustomerEvidence:
                     raise ApiError(408,'request_timeout') from None
                 except (ValueError,UnicodeDecodeError,RecursionError):
                     raise ApiError(400,'invalid_json') from None
-                if renewal:
+                if preparation:
+                    result=await run_in_threadpool(self.create_expense,token,tenant,organisation,evidence,document,initiating_actor)
+                elif renewal:
                     result=await run_in_threadpool(self.reauthorise_csv_request,token,tenant,organisation,evidence,job,document,initiating_actor)
                 else:
                     result=await run_in_threadpool(self.csv_request if extraction else self.csv_answer,token,tenant,organisation,evidence,document,initiating_actor)
-                return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=202 if extraction or renewal else 200)
+                return JSONResponse({'data':result,'request_id':request.scope['request_id']},status_code=201 if preparation else 202 if extraction or renewal else 200)
             if evidence is not None:
                 # This action has no customer-selectable policy, verdict or payload.
                 # Read at most the fixed empty JSON document, with a bounded wait.
@@ -433,4 +457,7 @@ class CustomerEvidence:
         if self.expense_draft_connections is not None:
             routes.extend([Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts',self.endpoint,methods=['GET']),
                 Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts/{draft_id}',self.endpoint,methods=['GET'])])
+        if self.expense_preparation_connections is not None:
+            routes.extend([Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-choices',self.endpoint,methods=['GET']),
+                Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts',self.endpoint,methods=['POST'])])
         return routes

@@ -52,6 +52,8 @@ def create_configured_app():
     csv_status_dsn = _file(csv_status_path,secret=True) if csv_status_path else None
     draft_path = os.environ.get('OMNIXAT_EXPENSE_DRAFT_REVIEW_DSN_FILE')
     draft_dsn = _file(draft_path,secret=True) if draft_path else None
+    preparation_path = os.environ.get('OMNIXAT_EXPENSE_PREPARATION_DSN_FILE')
+    preparation_dsn = _file(preparation_path,secret=True) if preparation_path else None
     admission = BoundedSemaphore(16)
     def factory(dsn):
         @contextmanager
@@ -74,4 +76,5 @@ def create_configured_app():
                       csv_answer_connection_factory=factory(answer_dsn) if answer_dsn else None,
                       csv_request_connection_factory=factory(csv_request_dsn) if csv_request_dsn else None,
                       csv_request_status_connection_factory=factory(csv_status_dsn) if csv_status_dsn else None,
-                      expense_draft_connection_factory=factory(draft_dsn) if draft_dsn else None)
+                      expense_draft_connection_factory=factory(draft_dsn) if draft_dsn else None,
+                      expense_preparation_connection_factory=factory(preparation_dsn) if preparation_dsn else None)

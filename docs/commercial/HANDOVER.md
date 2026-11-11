@@ -1963,3 +1963,39 @@ human exact-package workflow. Older-page navigation, funding/journal/correction
 lineage, quotas, production security/restore/OCR/model/scanner remain unfinished.
 No active writer after publication; fetch/check remote and dirty/divergence first.
 No deployment, billing activation, contract, private records or statutory action.
+
+## Customer CSV expense preparation — 11 November 2026
+
+Recovered 01ab4f2 clean, zero divergence, full CI 42944498776 passed 640 tests and
+container build; no commercial-head PR or active recorded writer. Added migration
+0074, optional dedicated preparation DSN/factories, bounded accounting choices and
+POST /expense-drafts through shared fresh bearer-aware services. Website explicit
+source/period/account/date choices create atomic source+expense preparations with
+exact receipt retries. Amounts come from recorded extraction/clarification, never a
+form amount. Internal interactive/approval guards remain; scopes are not stripped.
+See commercial/EXPENSE_PREPARATION.md for grants/configuration and limitations.
+
+Initial non-bypass function-owner test found row-lock visibility denied by RLS.
+Filtered UPDATE visibility policies now allow current identity/membership locks,
+with WITH CHECK(false) prohibiting actual mutations and no runtime UPDATE grants.
+The full chain now passes non-BYPASSRLS qualification; mutation-denial tests pass.
+Local 71 core (0.114s), 21 identity (0.300s), all 482 PostgreSQL 16.2 integration
+cases (61.588s) passed. Final eight-case targeted run passed (1.706s), including
+clarified source/scale and negative identity-update checks. Compilation, JS syntax
+and diff checks passed. Three new Chromium cases cover create/inspect/mobile, lost
+receipt/account switch, and expiry/recovery. Local browser launch is blocked by the
+known socket restriction: check the new revision's full CI before treating browser/
+provider/gateway/scanner/prototype/container checks as verified. None removed/skipped.
+
+Next: customer funding/journal review and correction journey; inspect actual stored
+expense/funding/journal/correction services first. No correction/approval/posting
+capability is exposed here. Server-owned choices are bounded to 20/type with IDs,
+without a settings editor or older-choice navigation. Same-tab pending attempts retain
+actor/body; close/reload loses that memory. A stale/ineligible saved draft can be
+withheld from current inspection; empty results do not prove no earlier commit.
+Operator reconciliation may be required before replacing uncertain work. Different
+extraction jobs are not economically deduplicated by this preparation key.
+Final human exact-package approval and production security/restore/OCR/model/scanner/
+quotas remain open. No active writer after publication; fetch/check current remote,
+dirty state and divergence before continuing. No deployment, billing activation,
+paid contract, private-record publication or statutory submission occurred.
