@@ -237,6 +237,11 @@ def read_csv_expense_draft(
             cursor.execute("SELECT * FROM omnixat_extraction.read_csv_expense_draft(%s,%s)",
                            (organisation, draft))
             row = cursor.fetchone()
+    return _read_expense_draft(row)
+
+
+def _read_expense_draft(row) -> ExpenseDraftReview:
+    """Shared decoding/invariants after separately authorised database reads."""
     if row is None:
         raise EvidenceNotEligible("Expense draft is unavailable")
     cell = AmountCell(row["field_name"], row["source_row"], row["source_column"])

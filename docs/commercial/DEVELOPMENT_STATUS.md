@@ -4266,3 +4266,55 @@ lineage/older-page UI, production scanner/security/restore/OCR/model and human f
 package approval remain unfinished. No active writer after publication; recover by
 fetching current remote and inspecting checkpoint/diff. No deployment, billing
 activation, paid contract, private records or statutory submission occurred.
+
+## In progress — customer saved expense draft inspection — 11 November 2026
+
+Recovered 3622d90 clean, zero divergence, no active recorded writer; latest full CI
+42937933916 passed (629 tests and container build). Scope: optional read-only saved
+CSV expense draft inspection through dedicated bearer-aware PostgreSQL function,
+shared validated decoding, API and website. Recheck persisted human membership,
+source/scan eligibility and accounting policy on every read. Preserve interactive
+internal draft/approval guards; never strip bearer scopes. Bounded evidence-scoped
+listing and exact draft inspection, no creation/correction/posting/approval route.
+Add database/API/browser coverage; next increment remains draft creation/corrections.
+
+## Customer saved expense draft inspection implemented — 11 November 2026
+
+Migration 0073 adds a separate read-only bearer-aware function and evidence/latest
+index. Fresh persisted human identity, token cutoff and membership checks feed the
+existing read_csv_expense_draft source/scan/accounting eligibility function. Shared
+Python decoding retains exact amounts/pence checks. Internal interactive-only draft
+and approval boundaries are unchanged; no bearer scopes are stripped. Optional
+server DSN/factories, bounded list/exact API routes and website inspection show saved
+attribution, source cell, amount/date and period/account references. Refresh/stale/
+expiry paths clear old details. See commercial/EXPENSE_DRAFT_REVIEW.md for grants,
+configuration, response contract and limits. No new write/approval/posting route.
+
+Validation passed: PYTHONPATH=commercial python -m unittest discover -s commercial/
+tests -q: 71 (0.106s); identity_tests: 21 (0.372s). Disposable PostgreSQL 16.2:
+OMNIXAT_TEST_ADMIN_DSN=<local disposable cluster> PYTHONPATH=commercial:commercial/
+integration_tests python -m unittest discover -s commercial/integration_tests -q:
+474 tests (60.971s), including eight new cases. Initial targeted eight passed
+(2.650s). Coverage includes fresh scope/identity/tenant/source/accounting checks,
+separate grants/context cleanup, latest-20/older exact reads and the entire read
+function chain under a non-BYPASSRLS owner. Python compilation, JavaScript syntax
+and git diff --check passed. No dependencies or legal rules changed. Rechecked
+PostgreSQL 16 CREATE FUNCTION security-definer guidance on 11 November 2026.
+
+Three new Chromium cases cover persisted viewer inspection/reload/mobile, blocked
+source between list/detail, and expiry/reauthenticated reload. Local launch with
+OMNIXAT_CHROMIUM_PATH=/usr/bin/chromium failed before page execution: this environment
+blocks process-singleton socket creation (Operation not permitted). All three launch
+errors are prerequisite failures, not passed browser results. Full CI must verify
+them and all retained browser/provider/gateway/scanner/prototype/build checks after
+publication; no test was removed/skipped. Existing Starlette deprecation warnings
+remain; no production browser/identity/restore qualification is claimed.
+
+Next: connect customer expense draft preparation/corrections through fresh
+bearer-aware services, including server-owned accounting choices, focused questions
+and immutable attribution. Do not wrap internal interactive services by stripping
+scopes. Funding/journal/correction lineage and final-package human approval remain
+separate unfinished journeys; this read view cannot approve/post/submit. Older-page
+UI, quotas, production scanner/security/restore/OCR/model also remain open. No active
+writer after publication; fetch/check checkpoint/diff before resuming. No deployment,
+billing activation, paid contract, private-record publication or statutory action.

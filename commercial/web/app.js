@@ -193,6 +193,15 @@ function renderEvidence() {
       if (state.pending.csvAnswer?.evidence === item.id) queueMicrotask(() => viewCSVCandidates(item, reviewButton, reviewPanel));
       row.append(reviewButton, reviewPanel);
     }
+    if (state.context.expense_draft_access && item.media_type === 'text/csv') {
+      const inspect = element('button', 'Inspect saved expense drafts', 'button secondary'); inspect.type = 'button';
+      const panel = element('div', undefined, 'evidence-receipt'); panel.hidden = true;
+      panel.id = `expense-drafts-${item.id}`; panel.setAttribute('role', 'region');
+      panel.setAttribute('aria-label', `Saved expense drafts ${item.id}`);
+      inspect.setAttribute('aria-controls', panel.id); inspect.setAttribute('aria-expanded', 'false');
+      inspect.addEventListener('click', () => viewExpenseDrafts(item, inspect, panel));
+      row.append(inspect, panel);
+    }
     if (state.context.csv_request_status_access && item.media_type === 'text/csv') {
       const inspect = element('button', 'Inspect extraction requests', 'button secondary'); inspect.type = 'button';
       const requests = element('div', undefined, 'evidence-receipt'); requests.hidden = true;
@@ -440,6 +449,44 @@ function csvAnswerForm(item, job, question, reviewButton, panel, pending = null)
     }
   });
   return form;
+}
+async function viewExpenseDrafts(item, button, panel, draft = null) {
+  const epoch = state.epoch;
+  panel.hidden = false; panel.replaceChildren(element('p', 'Checking saved expense drafts…'));
+  panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
+  try {
+    const base = `${apiBase()}/organisations/${state.org}/evidence/${item.id}/expense-drafts`;
+    const result = await request(base + (draft ? `/${draft}` : ''));
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    panel.replaceChildren(element('h3', 'Saved expense drafts'),
+      element('p', 'Preparation records only. This view does not approve, post or submit anything. Source and accounting eligibility are checked again on every read.'));
+    if (!result.items.length) panel.append(element('p', 'No eligible saved expense drafts are available for this evidence.'));
+    for (const value of result.items) {
+      const article = element('article');
+      article.append(element('strong', `Expense draft ${value.id}`), element('p', `Created ${dateText(value.created_at)} by ${value.created_by}`));
+      if (draft) {
+        const fields = element('dl'); const source = value.source;
+        for (const [label, text] of [
+          ['Amount', `${value.currency} ${value.amount}`], ['Accounting date', value.accounting_date],
+          ['Accounting period reference', value.period_id], ['Expense account reference', value.expense_account_id],
+          ['Evidence reference', source.evidence_id], ['Extraction job', source.job_id],
+          ['Source cell', `${source.field_name} · row ${source.row}, column ${source.column}`],
+          ['Amount source', source.kind], ['Source recorded', `${dateText(source.created_at)} by ${source.created_by}`],
+          ['Scan policy', source.policy_version], ['Evidence fingerprint', source.content_sha256]
+        ]) fields.append(element('dt', label), element('dd', text));
+        article.append(fields);
+      } else {
+        const open = element('button', `Inspect expense draft ${value.id}`, 'button secondary'); open.type = 'button';
+        open.addEventListener('click', () => viewExpenseDrafts(item, button, panel, value.id)); article.append(open);
+      }
+      panel.append(article);
+    }
+    if (result.has_more) panel.append(element('p', 'Showing the latest 20 eligible drafts. Older draft navigation is not available here yet.'));
+  } catch (error) {
+    if (epoch !== state.epoch || !panel.isConnected) return;
+    panel.replaceChildren(element('p', error.status === 404 ? 'No eligible saved expense draft is available. Refresh the list to check current records.' : errorMessage(error)));
+    if (error.status === 401 || error.status === 403) { panel.replaceChildren(); fail(error); }
+  } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; button.textContent = 'Refresh saved expense drafts'; }
 }
 async function viewScanStatus(item, button, panel) {
   const epoch = state.epoch;

@@ -162,3 +162,7 @@ retained; exact stale retries cannot restart a later cancelled replacement.
 processes an explicit private manifest of up to five recorded plans through the
 existing customer-request checks. It retains stable receipts across partial failure
 and stops on revoked/cancelled/stale requests. No automatic queue or posting starts.
+
+[Customer saved expense draft inspection](EXPENSE_DRAFT_REVIEW.md) adds an optional
+read-only view of persisted source-backed preparations, with fresh membership,
+scan and accounting checks. It does not create, correct, post or approve drafts.

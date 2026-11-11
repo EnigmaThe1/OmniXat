@@ -53,7 +53,7 @@ def evidence_actor(connection, verifier, token, tenant, *, write=False, expected
 
 
 class CustomerEvidence:
-    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None, csv_request_status_connections=None):
+    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None, csv_request_status_connections=None, expense_draft_connections=None):
         self.verifier, self.connections = verifier, connection_factory
         if status_connections is not None and not callable(status_connections):
             raise ValueError('Server-owned status connection factory required')
@@ -73,6 +73,9 @@ class CustomerEvidence:
         if csv_request_status_connections is not None and not callable(csv_request_status_connections):
             raise ValueError('Server-owned request-status connection factory required')
         self.csv_request_status_connections = csv_request_status_connections
+        if expense_draft_connections is not None and not callable(expense_draft_connections):
+            raise ValueError('Server-owned draft reader connection factory required')
+        self.expense_draft_connections = expense_draft_connections
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
@@ -134,6 +137,12 @@ class CustomerEvidence:
         from .customer_csv_review import read_latest_csv
         with self.review_connections() as connection:
             return read_latest_csv(connection,self.verifier,token,tenant,organisation,evidence)
+
+    def expense_drafts(self,token,tenant,organisation,evidence,draft=None):
+        self.authorize(token,tenant,organisation)
+        from .customer_expense_drafts import read_expense_drafts
+        with self.expense_draft_connections() as connection:
+            return read_expense_drafts(connection,self.verifier,token,tenant,organisation,evidence,draft)
 
     def csv_requests(self,token,tenant,organisation,evidence,job=None):
         self.authorize(token,tenant,organisation)
@@ -237,6 +246,7 @@ class CustomerEvidence:
                 tenant = str(UUID(request.path_params['tenant']))
                 organisation = str(UUID(request.path_params['object_id']))
                 evidence = str(UUID(request.path_params['evidence_id'])) if 'evidence_id' in request.path_params else None
+                draft = str(UUID(request.path_params['draft_id'])) if 'draft_id' in request.path_params else None
                 job = str(UUID(request.path_params['job_id'])) if 'job_id' in request.path_params else None
             except ValueError:
                 raise ApiError(400, 'invalid_identifier') from None
@@ -256,7 +266,9 @@ class CustomerEvidence:
                     if request.query_params:
                         raise ApiError(400, 'unsupported_parameter')
                     operation = self.csv_review if request.url.path.endswith('/csv-review') else self.scan_status if request.url.path.endswith('/scan-status') else self.receipt
-                    if '/csv-requests' in request.url.path:
+                    if '/expense-drafts' in request.url.path:
+                        result=await run_in_threadpool(self.expense_drafts,token,tenant,organisation,evidence,draft)
+                    elif '/csv-requests' in request.url.path:
                         result=await run_in_threadpool(self.csv_requests,token,tenant,organisation,evidence,job)
                     else:
                         result = await run_in_threadpool(operation, token, tenant, organisation, evidence)
@@ -418,4 +430,7 @@ class CustomerEvidence:
         if self.csv_request_status_connections is not None:
             routes.extend([Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests',self.endpoint,methods=['GET']),
                 Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/csv-requests/{job_id}',self.endpoint,methods=['GET'])])
+        if self.expense_draft_connections is not None:
+            routes.extend([Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts',self.endpoint,methods=['GET']),
+                Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts/{draft_id}',self.endpoint,methods=['GET'])])
         return routes

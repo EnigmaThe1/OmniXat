@@ -1931,3 +1931,35 @@ contract. Existing security/restore/OCR/model/quotas/lineage limitations remain.
 No active writer after publication; fetch remote and inspect dirty/divergence before
 resuming. A failed/hidden receipt must be reconciled with the same authorised plans,
 not replaced blindly with new jobs.
+
+## Customer saved expense draft inspection — 11 November 2026
+
+Recovered 3622d90 clean, zero divergence, latest full CI 42937933916 passed 629 tests
+and container build. Added migration 0073, dedicated bearer-aware read-only service,
+optional server configuration, evidence-scoped latest-20/exact API and website
+inspection. Reuses persisted source/scan/accounting eligibility and shared exact
+amount decoding; fresh human identity/membership/cutoff checked inside SQL. Internal
+interactive draft/approval guards remain; scopes are never stripped. The complete
+read chain is tested under a non-BYPASSRLS function owner. See commercial/
+EXPENSE_DRAFT_REVIEW.md for grants/configuration and limitations.
+
+Local 71 core (0.106s), 21 identity (0.372s), all 474 PostgreSQL 16.2 integration
+cases (60.971s) passed, including eight new database/API cases. Initial targeted
+eight passed (2.650s); compilation, JavaScript syntax and diff checks passed. Three
+new Chromium cases cover persisted viewer read/reload/mobile, blocked detail and
+expiry/recovery. Local Chromium launch failed on denied socket creation before page
+execution; these are not green browser tests. Verify this revision's full CI after
+publication, including all retained provider/gateway/scanner/browser/prototype/build
+checks. No test removed/skipped. New UI fixtures use the gateway stand-in; independent
+provider/gateway suites do not imply a complete provider-driven draft journey.
+
+Next: shared customer expense draft preparation/corrections with explicit server-
+owned accounting choices and fresh bearer-aware authority. Inspect existing
+prepare/create/read_csv_expense_draft, expense context and journal services first;
+they currently reject bearer principals. Never remove api_scopes to call an
+interactive-only draft or approval function. This view reads existing preparations
+and cannot create/correct/post/approve. Final statutory approval remains a separate
+human exact-package workflow. Older-page navigation, funding/journal/correction
+lineage, quotas, production security/restore/OCR/model/scanner remain unfinished.
+No active writer after publication; fetch/check remote and dirty/divergence first.
+No deployment, billing activation, contract, private records or statutory action.
