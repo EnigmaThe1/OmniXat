@@ -53,7 +53,7 @@ def evidence_actor(connection, verifier, token, tenant, *, write=False, expected
 
 
 class CustomerEvidence:
-    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None, csv_request_status_connections=None, expense_draft_connections=None, expense_preparation_connections=None, expense_funding_read_connections=None, expense_funding_write_connections=None, expense_journal_read_connections=None, expense_journal_preview_connections=None, expense_journal_write_connections=None):
+    def __init__(self, verifier, connection_factory, quarantine_dir, *, status_connections=None, request_connections=None, review_connections=None, answer_connections=None, csv_request_connections=None, csv_request_status_connections=None, expense_draft_connections=None, expense_preparation_connections=None, expense_funding_read_connections=None, expense_funding_write_connections=None, expense_journal_read_connections=None, expense_journal_preview_connections=None, expense_journal_write_connections=None, journal_observation_connections=None):
         self.verifier, self.connections = verifier, connection_factory
         if status_connections is not None and not callable(status_connections):
             raise ValueError('Server-owned status connection factory required')
@@ -88,6 +88,9 @@ class CustomerEvidence:
             'preview':expense_journal_preview_connections,'create':expense_journal_write_connections}
         if any(factory is not None and not callable(factory) for factory in self.journal_connections.values()):
             raise ValueError('Server-owned journal connection factories required')
+        if journal_observation_connections is not None and not callable(journal_observation_connections):
+            raise ValueError('Server-owned observation reader required')
+        self.journal_observation_connections=journal_observation_connections
         self.directory = private_spool(quarantine_dir)
         self.admission = BoundedSemaphore(4)
 
@@ -149,6 +152,16 @@ class CustomerEvidence:
         from .customer_csv_review import read_latest_csv
         with self.review_connections() as connection:
             return read_latest_csv(connection,self.verifier,token,tenant,organisation,evidence)
+
+    def journal_observations(self,token,tenant,organisation,evidence,draft,snapshot,after):
+        self.authorize(token,tenant,organisation)
+        from .customer_journal_observations import read_observations, JournalSnapshotChanged
+        try:
+            with self.journal_observation_connections() as connection:
+                return read_observations(connection,self.verifier,token,tenant,organisation,evidence,draft,
+                    snapshot_sha256=snapshot,after_reviewer=after)
+        except ValueError: raise ApiError(400,'invalid_observation_page') from None
+        except JournalSnapshotChanged: raise ApiError(409,'journal_snapshot_changed') from None
 
     def journal(self,token,tenant,organisation,evidence,draft,operation='inspect',document=None,expected=None):
         self.authorize(token,tenant,organisation,expected_actor=expected)
@@ -321,6 +334,13 @@ class CustomerEvidence:
                 raise ApiError(400, 'unsupported_parameter')
             if request.method in ('GET', 'HEAD'):
                 if evidence is not None:
+                    if request.url.path.endswith('/journal-observations'):
+                        pairs=list(request.query_params.multi_items())
+                        if any(k not in ('snapshot_sha256','after_reviewer') for k,v in pairs) or len(dict(pairs))!=len(pairs):
+                            raise ApiError(400,'unsupported_parameter')
+                        result=await run_in_threadpool(self.journal_observations,token,tenant,organisation,evidence,draft,
+                            request.query_params.get('snapshot_sha256'),request.query_params.get('after_reviewer'))
+                        return JSONResponse({'data':result,'request_id':request.scope['request_id']})
                     if request.query_params:
                         raise ApiError(400, 'unsupported_parameter')
                     operation = self.csv_review if request.url.path.endswith('/csv-review') else self.scan_status if request.url.path.endswith('/scan-status') else self.receipt
@@ -510,6 +530,8 @@ class CustomerEvidence:
         if self.expense_preparation_connections is not None:
             routes.extend([Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-choices',self.endpoint,methods=['GET']),
                 Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts',self.endpoint,methods=['POST'])])
+        if self.journal_observation_connections is not None:
+            routes.append(Route('/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts/{draft_id}/journal-observations',self.endpoint,methods=['GET']))
         journal_path='/v1/workspaces/{tenant}/organisations/{object_id}/evidence/{evidence_id}/expense-drafts/{draft_id}/journal'
         for operation,method,suffix in [('inspect','GET',''),('preview','POST','-preview'),('create','POST','')]:
             if self.journal_connections[operation] is not None:

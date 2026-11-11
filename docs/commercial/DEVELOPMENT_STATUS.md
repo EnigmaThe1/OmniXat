@@ -4505,3 +4505,55 @@ binding. These remain historical bookkeeping observations, never statutory appro
 The wider production PostgreSQL/identity deployment, operator chart/settings, pricing/
 billing, document/image AI evidence workflow, posting and qualified adapters remain
 unfinished. No active competing writer observed; fetch/checkpoint/diff before resuming.
+
+## In progress — customer journal review observation inspection — 11 November 2026
+
+Recovered 5910c5c clean/zero divergence, no active recorded writer. Verified full CI
+42958313979 passed all steps (676 tests and container build), including three journal
+Chromium tests and retained fictional-demo approval. Scope: optional separate reader
+for current-snapshot journal review observations, bounded cursor pagination, shared
+API and customer saved-journal UI. Fresh human identity/membership, evidence/draft
+binding and exact snapshot revalidation on each page. Read only; no decision writes,
+corrections, posting or statutory approval. Next: record human observations and connect
+corrections through separately authorised narrow capabilities.
+
+## Customer journal review observation inspection implemented — 11 November 2026
+
+Migration 0077 and customer_journal_observations add a separate optional read-only
+capability. The shared API and saved-journal website show current-snapshot historical
+reviewed/changes_requested observations, reviewer/time, 20-item cursor pages and empty
+history only for an eligible unchanged journal. Current identity/membership/scopes and
+tenant/org/evidence/draft/saved-journal binding are rechecked on every page. A changed
+snapshot returns 409; unavailable context returns 404. The UI clears stale journal
+history and requires fresh inspection; expiry clears the containing source panel.
+Refresh supersedes older page responses. No decision-writing/approval principal is
+constructed, no scopes are stripped, and internal interactive guards remain unchanged.
+
+Exact verification:
+- PYTHONPATH=commercial python -m unittest discover -s commercial/tests -q: 71 passed.
+- PYTHONPATH=commercial python -m unittest discover -s commercial/identity_tests -q: 21 passed.
+- Disposable PostgreSQL 16.2, PYTHONPATH=commercial:commercial/integration_tests,
+  python -m unittest test_customer_journal_observations -v: six passed (2.274s).
+- Same disposable cluster, python -m unittest discover -s commercial/integration_tests -q:
+  full **507 passed** (68.860s), including new observation cases and existing migrations.
+- node --check commercial/web/app.js, compileall and git diff --check passed.
+- Three new browser cases included, none skipped/removed. Local /usr/bin/chromium
+  launch fails before page creation with socket() Operation not permitted. Full GitHub
+  CI must qualify Chromium pagination/mobile/viewer, stale-snapshot clearing and expiry
+  recovery, plus retained fictional-demo browser approval and container build.
+
+Operational grants/private DSN/endpoint contract/official PostgreSQL references and
+limits: commercial/JOURNAL_OBSERVATIONS.md. Optional private mode-0600
+OMNIXAT_JOURNAL_OBSERVATION_DSN_FILE shares the existing 16-lease bound. No live grants,
+services or configuration activated. No dependencies/legal rules changed. Public
+fixtures are fictional. Observation pages are live, not a frozen manifest: new earlier
+reviewer IDs can require refresh, so end-of-pages is no completeness/approval proof.
+Corrections/reasons/answers/replaced-journal selection are not included yet.
+
+Next: qualify published full CI, then connect authorised human bookkeeping observation
+writes and correction journeys, exact saved-snapshot-bound and separate from final
+statutory approval. Production identity/security/restore qualification, chart/settings,
+complete accounting, document/image AI workflows, posting, billing and qualified
+bank/statutory adapters remain unfinished. No active competing writer observed;
+fetch/checkpoint/diff before continuing. No deployment, paid contract, billing activation,
+private-record publication or statutory submission occurred.

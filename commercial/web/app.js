@@ -697,6 +697,14 @@ async function viewExpenseJournal(item,draft,button,panel,container) {
       const value=result.journal;
       panel.append(element('strong',`Saved journal draft ${value.id}`),element('p',`Created ${dateText(value.created_at)} by ${value.created_by}`),
         journalDetails(value),element('p',`Saved snapshot fingerprint ${value.snapshot_sha256}`));
+      if(state.context?.journal_observation_access) {
+        const inspect=element('button','Inspect review observations','button secondary');inspect.type='button';
+        const history=element('div',undefined,'evidence-receipt');history.hidden=true;history.id=`journal-observations-${draft}`;
+        history.setAttribute('role','region');history.setAttribute('aria-label',`Journal review observations ${value.id}`);
+        inspect.setAttribute('aria-controls',history.id);inspect.setAttribute('aria-expanded','false');
+        inspect.addEventListener('click',()=>viewJournalObservations(item,draft,value,inspect,history,panel,container));
+        panel.append(inspect,history);
+      }
     } else if(result.saved_unavailable) panel.append(element('p','A saved journal exists but its current source or accounting eligibility prevents inspection. Ask your workspace operator to reconcile retained records.'));
     else panel.append(element('p','No saved journal draft. Record funding first, then explicitly select a configured counterpart account to preview.'));
     const pending=state.pending.expenseJournal;
@@ -710,6 +718,33 @@ async function viewExpenseJournal(item,draft,button,panel,container) {
     panel.replaceChildren(element('p',errorMessage(error)));
     if([401,403,404].includes(error.status)) { container.replaceChildren();if(error.status===404)container.append(element('p','Current expense context is unavailable. Refresh saved drafts.'));else fail(error); }
   } finally {button.disabled=false;button.textContent='Refresh journal draft';panel.setAttribute('aria-busy','false');}
+}
+async function viewJournalObservations(item,draft,journal,button,panel,journalPanel,container,after=null) {
+  if(!after)panel.dataset.reviewGeneration=String(Number(panel.dataset.reviewGeneration||0)+1);
+  const generation=panel.dataset.reviewGeneration;
+  const epoch=state.epoch;button.disabled=true;button.setAttribute('aria-expanded','true');panel.hidden=false;panel.setAttribute('aria-busy','true');
+  if(!after)panel.replaceChildren(element('p','Checking saved review observations…'));
+  try {
+    const query=new URLSearchParams({snapshot_sha256:journal.snapshot_sha256});if(after)query.set('after_reviewer',after);
+    const result=await request(`${apiBase()}/organisations/${state.org}/evidence/${item.id}/expense-drafts/${draft}/journal-observations?${query}`);
+    if(epoch!==state.epoch||!panel.isConnected||generation!==panel.dataset.reviewGeneration)return;
+    if(!after)panel.replaceChildren(element('h5','Recorded review observations'),element('p','Historical bookkeeping observations only. These are not posting instructions, correction records or statutory filing approvals.'));
+    if(!result.items.length&&!after)panel.append(element('p','No review observations are recorded for this saved snapshot.'));
+    const oldMore=panel.querySelector('[data-review-more]');if(oldMore)oldMore.remove();
+    for(const value of result.items) {
+      const article=element('article');article.append(element('strong',value.decision==='reviewed'?'Reviewed':'Changes requested'),
+        element('p',`Recorded ${dateText(value.recorded_at)} by ${value.reviewer_id}`));panel.append(article);
+    }
+    if(result.has_more) {
+      const more=element('button','Load more review observations','button secondary');more.type='button';more.dataset.reviewMore='true';
+      more.addEventListener('click',()=>viewJournalObservations(item,draft,journal,more,panel,journalPanel,container,result.next_after_reviewer));panel.append(more);
+    }
+  } catch(error) {
+    if(epoch!==state.epoch||!panel.isConnected||generation!==panel.dataset.reviewGeneration)return;
+    if([401,403].includes(error.status)) {container.replaceChildren();fail(error);}
+    else if([404,409].includes(error.status)) {journalPanel.replaceChildren(element('p','The saved journal or its snapshot is no longer available for this inspection. Refresh the journal draft before reading review observations.'));}
+    else {if(!after)panel.replaceChildren();panel.append(element('p',errorMessage(error)));}
+  } finally {button.disabled=false;if(generation===panel.dataset.reviewGeneration)panel.setAttribute('aria-busy','false');}
 }
 function expenseJournalForm(item,draft,choices,button,panel,container,pending=null) {
   const form=element('form',undefined,'form-panel journal-preparation');form.setAttribute('aria-label',`Prepare expense journal ${draft}`);

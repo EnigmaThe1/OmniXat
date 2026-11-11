@@ -2077,3 +2077,32 @@ inspect/reconcile retained records before replacement. Fetch latest remote and r
 scripts/development_checkpoint.py before any next edits. Next: qualify CI and then
 journal review observations/corrections with exact snapshot binding, not statutory
 approval. Broad SaaS production/operator/document/billing/qualified-adapter work remains.
+
+## Customer journal review observations inspected — 11 November 2026
+
+Recovered 5910c5c clean/zero divergence. Verified its CI 42958313979: 676 tests and
+container build passed, including new journal Chromium and retained approval cases.
+Added migration 0077, optional separate reader, shared API and saved-journal website
+inspection of historical reviewed/changes_requested observations. Exact saved snapshot
+and fresh human authority/source/context are revalidated on every 20-item cursor page.
+Changed snapshot 409/unavailable context 404 clear old journal history, not an empty
+success. Attribution/time and explicit non-approval boundaries are shown. Refresh
+supersedes older pages; expiry clears containing source details before sign-in recovery.
+
+Local: 71 core + 21 identity passed, full disposable PostgreSQL 16.2 integration suite
+507 passed (68.860s), six focused new cases passed (2.274s), JS syntax/compileall/diff
+checks passed. Three real Chromium cases remain mandatory, alongside retained demo
+browser approval. Local Chromium launch blocked by socket() Operation not permitted;
+verify the published head's full GitHub CI before claiming browser qualification.
+No tests removed/skipped or dependencies/legal rules changed. No live deployment,
+billing, contract, private records or statutory submission occurred.
+
+Read commercial/JOURNAL_OBSERVATIONS.md for optional private DSN/grants, strict GET
+contract, RLS qualification and limits. The UI cannot record a decision/correction,
+post, approve or submit. Internal interactive-only services retain their guards;
+bearer scopes are not stripped. Pages are live reads, not a frozen observation
+manifest: refresh to discover later-inserted earlier reviewer IDs. Corrections,
+reasons/answers and replaced-journal selection remain unwired. Next: qualify CI then
+separately authorised human bookkeeping observation writes/corrections with exact
+snapshot binding, never statutory approval. Broad SaaS work remains unfinished.
+No active writer recorded after publication; fetch/checkpoint/diff before resuming.

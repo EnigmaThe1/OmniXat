@@ -9,7 +9,7 @@ _CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 's
         "img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 
 
-def create_app(*, verifier, connection_factory, directory_connection_factory, public_origin, evidence_quarantine_dir=None, scan_status_connection_factory=None, scan_request_connection_factory=None, csv_review_connection_factory=None, csv_answer_connection_factory=None, csv_request_connection_factory=None, csv_request_status_connection_factory=None, expense_draft_connection_factory=None, expense_preparation_connection_factory=None, expense_funding_read_connection_factory=None, expense_funding_write_connection_factory=None, expense_journal_read_connection_factory=None, expense_journal_preview_connection_factory=None, expense_journal_write_connection_factory=None):
+def create_app(*, verifier, connection_factory, directory_connection_factory, public_origin, evidence_quarantine_dir=None, scan_status_connection_factory=None, scan_request_connection_factory=None, csv_review_connection_factory=None, csv_answer_connection_factory=None, csv_request_connection_factory=None, csv_request_status_connection_factory=None, expense_draft_connection_factory=None, expense_preparation_connection_factory=None, expense_funding_read_connection_factory=None, expense_funding_write_connection_factory=None, expense_journal_read_connection_factory=None, expense_journal_preview_connection_factory=None, expense_journal_write_connection_factory=None, journal_observation_connection_factory=None):
     origin = urlsplit(public_origin)
     if (origin.scheme != 'https' or not origin.hostname or origin.username or origin.password
             or origin.path or origin.query or origin.fragment or origin.port not in (None,443)
@@ -30,7 +30,8 @@ def create_app(*, verifier, connection_factory, directory_connection_factory, pu
                              expense_funding_write_connection_factory=expense_funding_write_connection_factory,
                              expense_journal_read_connection_factory=expense_journal_read_connection_factory,
                              expense_journal_preview_connection_factory=expense_journal_preview_connection_factory,
-                             expense_journal_write_connection_factory=expense_journal_write_connection_factory)
+                             expense_journal_write_connection_factory=expense_journal_write_connection_factory,
+                             journal_observation_connection_factory=journal_observation_connection_factory)
 
     async def application(scope, receive, send):
         if scope['type'] != 'http':

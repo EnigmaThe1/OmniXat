@@ -178,3 +178,7 @@ separate readers/writers and stable retries. It does not move money or post jour
 [Customer expense journals](EXPENSE_JOURNALS.md) connects saved expense/funding
 context to explicit balanced previews, exact-preview draft saves and saved inspection
 through separate read/preview/write capabilities. It records no posting or approval.
+
+[Journal review observation inspection](JOURNAL_OBSERVATIONS.md) adds optional
+read-only, snapshot-bound historical bookkeeping observations, with bounded pagination
+in the API and website. It creates no decisions, corrections or approval authority.
