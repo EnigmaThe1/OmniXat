@@ -84,3 +84,45 @@ No dependency, legal rule or financial amount was changed by this worker.
 `--requested` execution path with separate narrower grants and fresh request/source
 checks before reading and storing. The ordinary operator path above is unchanged;
 it is not the credential/path for customer request dispatch. No daemon starts.
+
+## Bounded dispatch of customer-requested plans
+
+From `commercial`, operators can explicitly dispatch a private JSON array of one to
+five complete plans using the **dedicated requested-worker DSN/grants** in
+[CSV_REQUESTS.md](CSV_REQUESTS.md):
+
+```bash
+python -m omnixat_core.csv_extract_worker --requested --batch-file /private/extraction-batch.json
+```
+
+Each array element has the exact single-plan shape above and must match an already
+persisted customer request. Use inspected request metadata to construct private
+plans; the worker neither discovers a queue nor creates requests. A cancelled plan
+requires a deliberate fresh linked request through the existing customer journey.
+
+The entire manifest must fit the existing 64 KiB private-file limit. All plans are
+validated before connecting: canonical IDs, one tenant/organisation, distinct stable
+job IDs, and shared bounded cell selection rules. Multiple jobs may refer to the
+same evidence. Unknown/duplicate keys, deep malformed JSON and any invalid later
+plan prevent all dispatch. `--batch-file` requires `--requested` and cannot accompany
+`--plan-file`; ordinary operator credentials cannot bypass recorded request checks.
+
+Processing is sequential and fails at the first unavailable request. Each item
+independently rechecks persisted human authority, cancellation and current source/
+scan policy through the existing service at admission and storage. A manifest does
+not reserve future authority. Revocation, cancellation, blocking or policy changes
+can stop remaining work. Later items are left unprocessed; earlier results remain
+committed. This is **not an atomic batch** and adds no exactly-once ledger guarantee.
+
+Stdout contains one flushed JSON receipt per completed item in manifest order, with
+only job ID, evidence ID and stored timestamp. A nonzero exit and generic stderr
+can accompany an already committed prefix. An output/connection failure may hide a
+committed receipt: inspect persisted request history and retry only the same exact
+authorised manifest to reconcile stable results. Existing eligibility checks still
+apply to retries; never allocate new jobs merely to replace uncertain receipts.
+No source bytes, extracted figures or credentials are printed.
+
+This bounded manual dispatch completes the request-to-candidate processing path;
+it does not add automatic polling/scheduling, quotas, OCR/model adapters, ledger
+posting, draft approval or production qualification. No dependency or legal rule
+changes are part of this increment.

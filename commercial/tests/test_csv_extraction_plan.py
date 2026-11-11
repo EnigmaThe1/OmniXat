@@ -1,6 +1,6 @@
 import unittest
 from uuid import uuid4
-from omnixat_core.csv_extraction_plan import validate_extraction_plan
+from omnixat_core.csv_extraction_plan import validate_extraction_plan, validate_extraction_batch
 from omnixat_core.evidence_csv import AmountCell
 
 
@@ -36,3 +36,19 @@ class CSVExtractionPlanTests(unittest.TestCase):
         for count in [0,2,33]:
             plan=self.plan(); plan['selections']*=count
             with self.subTest(count=count),self.assertRaises(ValueError): validate_extraction_plan(plan)
+
+    def test_batch_bounds_scope_jobs_and_complete_snapshot(self):
+        first=self.plan()
+        second=first|{'job':str(uuid4())}
+        for plans in [None,{},[],[first]*6,[first,first],
+                      [first,second|{'tenant':str(uuid4())}],
+                      [first,second|{'organisation':str(uuid4())}],
+                      [first,second|{'selections':[]}]]:
+            with self.subTest(plans=plans),self.assertRaises(ValueError):
+                validate_extraction_batch(plans)
+        plans=[first|{'job':str(uuid4())} for _ in range(5)]
+        result=validate_extraction_batch(plans)
+        self.assertEqual(len(result),5)
+        self.assertEqual([plan[3] for plan in result],[plan['job'] for plan in plans])
+        first['selections'][0]['row']=4
+        self.assertTrue(all(plan[4][0].row==2 for plan in result))

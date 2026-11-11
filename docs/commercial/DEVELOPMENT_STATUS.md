@@ -4222,3 +4222,47 @@ prior documentation-head failure is not silently ignored. No active writer remai
 after publication. Fetch/check current remote, dirty state and divergence before
 resuming. No deployment, billing activation, paid contract, private-record publication
 or statutory submission occurred.
+
+## In progress — bounded requested CSV dispatch — 11 November 2026
+
+Recovered remote f47e89b with clean checkout, zero divergence and no active recorded
+writer; both latest CI runs succeeded. Scope: explicit private manifest of one to
+five plans within one tenant/organisation, validated completely before connecting;
+dedicated requested-worker services recheck each recorded request and authority.
+Fail fast with committed-prefix receipts and stable retries; connect tests through
+customer request and candidate-review services. No automatic polling, daemon,
+ledger effect, new grants, billing or statutory approval. Next after this increment:
+shared customer draft review/corrections. Validation/results pending.
+
+## Bounded requested CSV dispatch implemented — 11 November 2026
+
+Added --requested --batch-file to the existing extraction CLI and a shared strict
+manifest validator. One to five complete plans must share tenant/organisation and
+use distinct jobs; the entire private JSON file is bounded and validated before
+connection. Per-item processing reuses extract_requested_csv with existing narrow
+grants, admission/store identity/source/policy/cancellation checks. Sequential receipts
+are flushed without amounts/bytes/credentials; failure leaves a committed prefix
+and unprocessed suffix. Exact authorised retries retain original receipts. No new
+schema, dependency, grants, legal rule, ledger effect, daemon or approval route.
+Operator instructions/partial-outcome recovery are in CSV_EXTRACTION_WORKER.md.
+
+Validation passed: PYTHONPATH=commercial python -m unittest discover -s commercial/
+tests -q: 71 tests (0.142s); identity_tests: 21 (0.286s). Disposable PostgreSQL 16.2:
+OMNIXAT_TEST_ADMIN_DSN=<local disposable cluster> PYTHONPATH=commercial:commercial/
+integration_tests python -m unittest discover -s commercial/integration_tests -q:
+466 tests (83.298s), including eight new batch cases. Cases cover multi-source
+customer requests/candidate review, exact retries, committed-prefix recovery,
+whole-manifest validation/snapshot, cancelled/revoked requests, policy movement and
+mixed/overprivileged logins. Initial six-case targeted run passed (1.679s).
+Python compilation, JavaScript syntax and git diff --check passed. Local Chromium
+is absent; full provider/gateway/scanner/customer and retained fictional-demo browser
+checks remain required in CI for this revision. None removed or skipped. Existing
+Starlette deprecation/resource warnings remain; no dependency migration is claimed.
+
+Next resumable increment: shared customer draft review/corrections, starting from
+actual persisted draft services and current UI/API gaps. Dispatch remains manually
+invoked with private manifests, not an autonomous production queue. Quotas, full
+lineage/older-page UI, production scanner/security/restore/OCR/model and human final
+package approval remain unfinished. No active writer after publication; recover by
+fetching current remote and inspecting checkpoint/diff. No deployment, billing
+activation, paid contract, private records or statutory submission occurred.

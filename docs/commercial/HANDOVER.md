@@ -1905,3 +1905,29 @@ prior documentation-head failure is not silently ignored. No active writer remai
 after publication. Fetch/check current remote, dirty state and divergence before
 resuming. No deployment, billing activation, paid contract, private-record publication
 or statutory submission occurred.
+
+## Bounded requested CSV dispatch — 11 November 2026
+
+Recovered f47e89b clean, zero divergence, both latest remote CI runs successful;
+no commercial-head PR or active recorded writer. Added an explicit private manifest
+path (--requested --batch-file) for one to five recorded CSV plans in one tenant/
+organisation. Full validation precedes connection. Dedicated requested-worker gates
+remain per item at admission/store; no new schema/grants/dependency. Partial failures
+preserve committed receipts and stop later work; stable retries reconcile results.
+See commercial/CSV_EXTRACTION_WORKER.md for private configuration and recovery.
+
+Local checks passed: 71 core (0.142s), 21 identity (0.286s), all 466 PostgreSQL 16.2
+integration cases (83.298s), including eight new batch cases through actual CLI and
+customer API/review services. Covers malformed/mixed manifests, snapshots, multiple
+sources, partial results/retries, cancellation, revocation, policy movement and
+restricted grants. Compilation, JS syntax and diff checks passed. Local Chromium
+absent: check the new revision's full CI before treating browser/provider/scanner/
+container/retained prototype checks as verified. No tests removed/skipped.
+
+Next: shared customer draft review/corrections; inspect actual persisted draft
+services and UI/API gaps first. No automatic dispatch, exactly-once ledger effect,
+statutory approval, production qualification, billing activation, deployment or paid
+contract. Existing security/restore/OCR/model/quotas/lineage limitations remain.
+No active writer after publication; fetch remote and inspect dirty/divergence before
+resuming. A failed/hidden receipt must be reconciled with the same authorised plans,
+not replaced blindly with new jobs.

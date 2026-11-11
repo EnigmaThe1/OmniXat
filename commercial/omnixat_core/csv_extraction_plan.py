@@ -21,3 +21,15 @@ def validate_extraction_plan(plan):
             raise ValueError('Explicit source coordinates required')
         selections.append(AmountCell(**cell))
     return (*identifiers,validate_amount_cells(tuple(selections)))
+
+
+def validate_extraction_batch(plans):
+    """Snapshot the entire finite manifest before any database work."""
+    if not isinstance(plans,list) or not 1<=len(plans)<=5:
+        raise ValueError('One to five explicit extraction plans required')
+    validated=tuple(validate_extraction_plan(plan) for plan in plans)
+    if len({plan[:2] for plan in validated})!=1:
+        raise ValueError('One tenant and organisation required')
+    if len({plan[3] for plan in validated})!=len(validated):
+        raise ValueError('Distinct job IDs required')
+    return validated

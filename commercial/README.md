@@ -157,3 +157,8 @@ results cannot be undone by this action. No background processor or approval is 
 [CSV re-authorisation](CSV_REAUTHORISATION.md) connects Request extraction again to
 a fresh linked plan with current authority/source checks. Old cancellations remain
 retained; exact stale retries cannot restart a later cancelled replacement.
+
+[Bounded requested CSV dispatch](CSV_EXTRACTION_WORKER.md#bounded-dispatch-of-customer-requested-plans)
+processes an explicit private manifest of up to five recorded plans through the
+existing customer-request checks. It retains stable receipts across partial failure
+and stops on revoked/cancelled/stale requests. No automatic queue or posting starts.
