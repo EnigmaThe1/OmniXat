@@ -1,6 +1,7 @@
 """Fictional, human bookkeeping observations. Never statutory approval."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import datetime
 from uuid import UUID, uuid4
 import psycopg
 from psycopg import sql
@@ -59,7 +60,11 @@ class CustomerBookkeepingObservationTests(BookkeepingObservationFixture):
         receipt=result.json()['data'];self.assertEqual(receipt['reviewer_id'],str(self.user));self.assertEqual(receipt['decision'],'changes_requested')
         self.assertEqual(receipt['snapshot_sha256'],self.snapshot);self.assertEqual(receipt['journal_id'],self.journal['id'])
         self.assertEqual(self.record_observation().json()['data'],receipt)
-        self.assertEqual(self.observations().json()['data']['items'][0],{k:receipt[k] for k in ('reviewer_id','decision','recorded_at')})
+        observed=self.observations().json()['data']['items'][0]
+        self.assertEqual({k:observed[k] for k in ('reviewer_id','decision')},{k:receipt[k] for k in ('reviewer_id','decision')})
+        # PostgreSQL JSON trims fractional trailing zeros; compare the exact instant,
+        # retaining microsecond/timezone precision, while exact retry text stays above.
+        self.assertEqual(datetime.fromisoformat(observed['recorded_at']),datetime.fromisoformat(receipt['recorded_at']))
         conflict=self.record_observation(self.document|{'decision':'reviewed'});self.assertEqual(conflict.status_code,409,conflict.text)
         self.assertEqual(conflict.json()['error']['code'],'bookkeeping_observation_conflict')
         self.assertEqual(self.rows('expense_journal_review_decisions'),1);self.assertEqual(self.rows('expense_journal_drafts'),1)

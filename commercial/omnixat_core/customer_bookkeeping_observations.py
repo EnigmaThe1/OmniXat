@@ -28,7 +28,7 @@ def record_observation(connection,verifier,token,tenant,organisation,evidence,dr
                   OR has_schema_privilege('omnixat_extraction','USAGE,CREATE')
                   OR has_schema_privilege('omnixat_customer_journal_decisions','CREATE')
                   OR EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                    WHERE n.nspname IN ('omnixat_customer_journals','omnixat_customer_journal_reviews')
+                    WHERE n.nspname IN ('omnixat_customer_journals','omnixat_customer_journal_reviews','omnixat_customer_corrections')
                       AND has_function_privilege(p.oid,'EXECUTE')) AS mixed""")
                 if cursor.fetchone()['mixed']: raise PermissionError('Dedicated observation writer required')
                 cursor.execute('SELECT * FROM omnixat_customer_journal_decisions.record_observation(%s,%s,%s,%s,%s,%s,%s,%s,%s)',

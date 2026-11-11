@@ -86,8 +86,9 @@ choice/mobile/viewer/conflict, committed lost receipt/account switching, pending
 expiry recovery, and changed-snapshot fresh inspection. Existing retained fictional
 browser approval remains mandatory. No tests are removed or skipped to claim green.
 
-Next: focused correction reasons/questions and retained correction inspection, then
-supported correction execution. These remain separate from human approval of an exact
+The optional [correction workflow](CORRECTION_REASONS.md) now connects focused reason
+requests and retained inspection. Next: clarification answers/evidence and supported
+correction execution. These remain separate from human approval of an exact
 final statutory package. Production security/restore/provider qualification, OCR/model
 workflows, posting, billing and qualified bank/statutory adapters remain unfinished.
 

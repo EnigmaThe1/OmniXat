@@ -186,3 +186,8 @@ in the API and website. It creates no decisions, corrections or approval authori
 [Explicit bookkeeping observations](BOOKKEEPING_OBSERVATIONS.md) connect human
 Reviewed/Changes requested choices to exact saved journal snapshots, immutable
 receipts and history through a separate writer. They do not post or approve filings.
+
+[Correction reasons and focused inspection](CORRECTION_REASONS.md) attach explicit
+reasons to the caller's prior Changes requested observation, preserve immutable
+receipts and show paginated requests with answer-aware focused questions. They do
+not apply corrections, post entries or approve filings.

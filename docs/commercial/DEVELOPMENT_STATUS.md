@@ -4645,3 +4645,72 @@ only those two known codes to the existing allowlist. No arbitrary server error 
 is exposed, permission/storage guards changed, assertion removed or timeout relaxed.
 JavaScript syntax/diff checks passed. Successor full CI must qualify all four new
 browser cases and the container; the first run is not a green full suite.
+
+## In progress — correction reasons and focused inspection — 11 November 2026
+
+Recovered d9e5dbc clean/zero divergence, no active recorded writer. Verified latest
+CI 42994552228 passed 696 tests/build. Scope: separate customer correction reader and
+writer, explicit reason attached only to the current human reviewer's prior exact-
+snapshot changes_requested observation, immutable retries, paginated reason inspection
+and shared focused questions only for reasons without recorded clarification. Reuse
+existing validated correction store and strong observation gate locks. Connect web/API
+and same-attempt recovery; no new observation implied by requesting a reason, no figure
+correction, posting or statutory approval. Next: clarification answers/supporting evidence.
+
+## Correction reasons and focused inspection implemented — 11 November 2026
+
+Migration 0079, customer_correction_reasons and optional separate reader/writer now
+connect explicit reason selection and paginated retained inspection through the shared
+API/customer website. A reason requires the caller's own prior changes_requested
+observation for the exact saved journal snapshot. The existing observation boundary
+is retried only after that row is found and locked; it retains current identity,
+source/scan/funding/accounting/snapshot gates through correction commit. No observation
+is implicitly created. Existing validated correction storage preserves immutable same-
+reason receipts and rejects a different reason. Readers bind tenant/org/evidence/
+expense/journal, fingerprint, own prerequisite and page in one statement snapshot.
+
+Focused questions use the existing journal_correction_questions service, deduplicate
+by reason and suppress questions with a recorded clarification for that same snapshot.
+Answer bodies/evidence links are not disclosed by this inspector. Own prerequisite is
+read independently of the 20-item pages. Viewer/read-only tokens receive no choices.
+The UI has no default reason, shows retained reviewer/time and focused questions,
+protects dirty selection and preserves exact pending payload/snapshot/actor across
+uncertain outcomes/sign-in recovery. Expiry clears source panels; actor switches
+cannot reattribute a retry. Known rejection requires fresh inspection. These requests
+never change figures, apply corrections, post, approve or submit.
+
+Exact local verification:
+- PYTHONPATH=commercial python -m unittest discover -s commercial/tests -q: 71 passed.
+- PYTHONPATH=commercial python -m unittest discover -s commercial/identity_tests -q: 21 passed.
+- Disposable PostgreSQL 16.2; PYTHONPATH=commercial:commercial/integration_tests;
+  python -m unittest test_customer_correction_reasons -v: seven passed (3.624s).
+- Full python -m unittest discover -s commercial/integration_tests -q initially ran
+  521 with one existing timestamp-string comparison failure: PostgreSQL JSON trimmed
+  a fractional trailing zero while Python isoformat retained it. Updated that assertion
+  to compare parsed exact instants (microsecond/timezone precision retained); reviewer/
+  decision and exact retry receipt-string assertions remain. No application behavior,
+  precision, timeout, test or permission guard was removed/relaxed.
+- Full integration rerun **521 passed** (83.659s).
+- node --check commercial/web/app.js, Python compileall and git diff --check passed.
+- Four new real Chromium cases remain mandatory: explicit reason/question/viewer/mobile,
+  committed lost receipt/account switch, pending expiry recovery, and reason conflict/
+  pagination/question deduplication. Local Chromium fails before page creation with
+  socket() Operation not permitted. Verify full published CI, including retained
+  fictional-demo browser approval, providers/scanner and container build; no skips.
+
+Operational grants, optional mode-0600 OMNIXAT_CORRECTION_{READ,WRITE}_DSN_FILE,
+strict contracts, official PostgreSQL references and limits: commercial/CORRECTION_REASONS.md.
+No live configuration/deployment, billing activation, paid contract, private-record
+publication or statutory submission occurred. No dependencies/legal rules changed.
+Public fixtures are fictional. Pages are live reads, not a frozen manifest: refresh
+for earlier inserted reviewer IDs or new clarifications. Recorded clarification is
+not proof of an applied/validated correction. Pending state is tab-only; reconcile
+retained requests after reload or uncertain outcomes. Current source eligibility can
+withhold retained history; these are not exactly-once ledger guarantees.
+
+Next: qualify published full CI, then clarification answer/supporting-evidence inspection
+and submission through narrow snapshot-bound capabilities. Actual corrected amount/
+replacement execution, posting/final human package approval, production identity/
+security/restore, operator settings, complete accounting, document/image AI, billing
+and qualified bank/statutory adapters remain unfinished. No competing writer observed;
+fetch/checkpoint/diff before resuming.

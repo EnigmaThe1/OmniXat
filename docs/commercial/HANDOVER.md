@@ -2156,3 +2156,41 @@ generic conflict guidance. Storage/permission gates held; lost-receipt/account-s
 and pending-expiry cases passed. Added only bookkeeping_observation_conflict and
 journal_snapshot_changed to the existing code allowlist. Assertions/guards/timeouts
 unchanged; verify successor full CI and container before claiming full green.
+
+## Customer correction reasons and focused inspection — 11 November 2026
+
+Recovered d9e5dbc clean/zero divergence; CI 42994552228 passed 696 tests and build.
+Added migration 0079, separate correction reader/writer, shared API and customer
+reason/inspection journey. A reason attaches only to the current human reviewer's
+prior changes_requested observation for the exact saved snapshot; that observation
+is locked before reusing the strong current observation gate as an existing no-op
+retry. Existing correction store preserves receipts/conflicts. No implicit observation,
+figure correction, posting or statutory approval is added. Internal guards remain.
+
+Inspection binds current eligible journal/source/snapshot, own prerequisite and
+20-item page consistently. Shared focused questions are deduplicated by reason and
+suppressed when clarification is already recorded for that snapshot. Only a recorded
+flag is shown, not answer bodies or evidence links. UI has no default reason, preserves
+exact pending reason/snapshot/actor across uncertain outcomes/sign-in recovery, clears
+source panels on expiry and rejects switched-actor reattribution. Own reason and
+reviewer/time remain inspectable under current eligibility; viewer has no write choices.
+
+Local: core 71, identity 21, seven focused PostgreSQL cases passed (3.624s). Full
+521 integration first found an existing text-only timestamp equality failure (JSON
+trims fractional trailing zeros); assertion now compares exact parsed instants with
+microsecond/timezone precision, while exact retry-string and other field checks stay.
+Full rerun 521 passed (83.659s); JS syntax/compileall/diff checks passed. Four new
+Chromium cases remain mandatory; local socket restrictions block launch before page
+creation. Verify the published full CI/provider/scanner/browser/demo approval/container
+result before claiming green. No tests removed/skipped, timeout/guard/precision relaxed,
+dependencies or legal rules changed.
+
+See commercial/CORRECTION_REASONS.md for separate grants/private DSNs, contracts,
+verified official PostgreSQL references and limits. Pages are live reads, not frozen
+manifests; refresh to discover new earlier IDs/clarifications. Recorded clarification
+is not applied/validated correction. Pending memory is tab-only; inspect retained
+requests after reload/uncertainty. Next: snapshot-bound clarification answers and
+supporting evidence inspection/submission. Actual correction execution, final-package
+approval and broad production/commercial/AI/qualified-adapter work remain unfinished.
+No deployment/billing/contract/private-record publication/statutory submission occurred.
+No active writer after publication; fetch/checkpoint/diff before resuming.
