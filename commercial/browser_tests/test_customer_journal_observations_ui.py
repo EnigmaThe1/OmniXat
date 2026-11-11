@@ -50,7 +50,16 @@ class JournalObservationBrowserTests(JournalObservationFixture):
         expect(page.locator('#content')).to_be_hidden()
         draft_panel=page.get_by_role('region',name='Saved expense drafts '+self.evidence,exact=True,include_hidden=True)
         self.assertEqual(draft_panel.text_content(),'')
-        self.gateway_token=self.token(scope=SCOPES);page.locator('#retry').click()
+        expect(page.locator('#retry')).to_be_hidden()  # No pending write to retry.
+        link=page.locator('#reauth');expect(link).to_be_visible()
+        expect(link).to_have_attribute('href','/oauth2/start?rd=/app/reauthenticated')
+        page.context.route('**/oauth2/start?rd=/app/reauthenticated',lambda route:route.fulfill(
+            status=200,content_type='text/html',body='Fictional gateway sign-in'))
+        self.gateway_token=self.token(scope=SCOPES)
+        with page.expect_popup() as opened:link.click()
+        recovery=opened.value;recovery.goto(self.origin+'/app/reauthenticated')
+        expect(recovery.locator('#recovery-ready')).to_be_visible();recovery.close()
+        page.reload()  # Refetch read-only context under the refreshed gateway session.
         page.get_by_role('button',name='Inspect saved expense drafts',exact=True).click()
         page.get_by_role('button',name='Inspect expense draft '+str(self.saved.id),exact=True).click()
         page.get_by_role('button',name='Inspect journal draft',exact=True).click()

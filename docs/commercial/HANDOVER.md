@@ -2106,3 +2106,11 @@ reasons/answers and replaced-journal selection remain unwired. Next: qualify CI 
 separately authorised human bookkeeping observation writes/corrections with exact
 snapshot binding, never statutory approval. Broad SaaS work remains unfinished.
 No active writer recorded after publication; fetch/checkpoint/diff before resuming.
+
+Chromium follow-up: 8039e83 / CI 42984266005 passed every service/provider/scanner and
+retained prototype suite, but one of 49 customer browser cases failed: the new expiry
+test tried the deliberately hidden no-pending-write retry button. Pagination/mobile/
+viewer and stale-snapshot cases passed. Test now asserts retry is hidden, follows the
+visible sign-in/new-tab recovery check and reloads read-only context before inspection.
+No app guard, assertions, skip or timeout relaxed. Verify successor full CI including
+container build; do not describe the first run as fully green.

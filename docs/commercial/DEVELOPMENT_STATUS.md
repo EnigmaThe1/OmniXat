@@ -4557,3 +4557,16 @@ complete accounting, document/image AI workflows, posting, billing and qualified
 bank/statutory adapters remain unfinished. No active competing writer observed;
 fetch/checkpoint/diff before continuing. No deployment, paid contract, billing activation,
 private-record publication or statutory submission occurred.
+
+### Chromium qualification follow-up — 11 November 2026
+
+First published 8039e83 CI 42984266005 passed core 71, identity 21, PostgreSQL 507,
+provider 5, provider-browser 2, gateway 5, scanner 5 and retained prototype 20.
+Customer browser suite ran 49 cases with one error: the new read-only expiry test
+incorrectly clicked the hidden Try again button, which is deliberately only available
+on access denial when a write is pending. Pagination/viewer/mobile and changed-snapshot
+browser cases passed. Corrected the test to assert no pending-write retry, use the
+visible sign-in link/new-tab recovery check, then reload and inspect fresh read-only
+context. No application guard, test assertion, skip or timeout was relaxed. Full
+successor CI must qualify the corrected test and container build; earlier run is not
+a green full suite. Local Chromium remains blocked before launch by socket restrictions.
