@@ -27,7 +27,7 @@ def read_observations(connection,verifier,token,tenant,organisation,evidence,dra
                   OR has_schema_privilege('omnixat_extraction','USAGE,CREATE')
                   OR has_schema_privilege('omnixat_customer_journal_reviews','CREATE')
                   OR EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                    WHERE n.nspname='omnixat_customer_journals' AND has_function_privilege(p.oid,'EXECUTE')) AS mixed""")
+                    WHERE n.nspname IN ('omnixat_customer_journals','omnixat_customer_journal_decisions') AND has_function_privilege(p.oid,'EXECUTE')) AS mixed""")
                 if cursor.fetchone()['mixed']: raise PermissionError('Dedicated observation reader required')
                 cursor.execute('SELECT omnixat_customer_journal_reviews.read_observations(%s,%s,%s,%s,%s,%s,%s,%s) AS result',
                     (identity.issuer,identity.subject,identity.issued_at,organisation,evidence,draft,bytes.fromhex(snapshot_sha256),after_reviewer))

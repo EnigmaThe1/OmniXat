@@ -54,6 +54,8 @@ def create_configured_app():
     draft_dsn = _file(draft_path,secret=True) if draft_path else None
     preparation_path = os.environ.get('OMNIXAT_EXPENSE_PREPARATION_DSN_FILE')
     preparation_dsn = _file(preparation_path,secret=True) if preparation_path else None
+    bookkeeping_path=os.environ.get('OMNIXAT_BOOKKEEPING_OBSERVATION_DSN_FILE')
+    bookkeeping_dsn=_file(bookkeeping_path,secret=True) if bookkeeping_path else None
     observation_path=os.environ.get('OMNIXAT_JOURNAL_OBSERVATION_DSN_FILE')
     observation_dsn=_file(observation_path,secret=True) if observation_path else None
     journal_dsns = {}
@@ -90,6 +92,7 @@ def create_configured_app():
                       expense_preparation_connection_factory=factory(preparation_dsn) if preparation_dsn else None,
                       expense_funding_read_connection_factory=factory(funding_read_dsn) if funding_read_dsn else None,
                       expense_funding_write_connection_factory=factory(funding_write_dsn) if funding_write_dsn else None,
+                      bookkeeping_observation_connection_factory=factory(bookkeeping_dsn) if bookkeeping_dsn else None,
                       journal_observation_connection_factory=factory(observation_dsn) if observation_dsn else None,
                       **{"expense_journal_"+operation+"_connection_factory":factory(dsn) if dsn else None
                          for operation,dsn in journal_dsns.items()})

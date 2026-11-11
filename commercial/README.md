@@ -182,3 +182,7 @@ through separate read/preview/write capabilities. It records no posting or appro
 [Journal review observation inspection](JOURNAL_OBSERVATIONS.md) adds optional
 read-only, snapshot-bound historical bookkeeping observations, with bounded pagination
 in the API and website. It creates no decisions, corrections or approval authority.
+
+[Explicit bookkeeping observations](BOOKKEEPING_OBSERVATIONS.md) connect human
+Reviewed/Changes requested choices to exact saved journal snapshots, immutable
+receipts and history through a separate writer. They do not post or approve filings.

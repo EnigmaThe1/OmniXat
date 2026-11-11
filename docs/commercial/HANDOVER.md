@@ -2114,3 +2114,37 @@ viewer and stale-snapshot cases passed. Test now asserts retry is hidden, follow
 visible sign-in/new-tab recovery check and reloads read-only context before inspection.
 No app guard, assertions, skip or timeout relaxed. Verify successor full CI including
 container build; do not describe the first run as fully green.
+
+## Explicit customer bookkeeping observations — 11 November 2026
+
+Recovered e55be1d clean/zero divergence; verified CI 42985664285 passed 685 tests and
+container build including corrected expiry recovery/retained approval. Added migration
+0078, separate optional writer and shared API/customer form for explicit reviewed or
+changes_requested historical bookkeeping observations. Exact saved snapshot and fresh
+human owner/editor membership/scopes/actor are required. Identity/source/scan/funding/
+accounting/saved-journal gates are locked through commit. Shared validated decision
+storage returns stable same-attempt receipts; different choice conflicts, stale
+snapshot/ineligible source cannot record. Reader/writer capabilities remain separate.
+
+Local: 71 core + 21 identity passed; full disposable PostgreSQL 16.2 integration suite
+514 passed (129.465s), seven focused cases passed (4.288s); JS syntax/compileall/diff
+checks passed. Four new real Chromium cases remain mandatory (explicit choice/mobile/
+viewer/conflict, lost receipt/account switch, pending expiry recovery, stale snapshot).
+Local launch blocked by socket() Operation not permitted; inspect the published full
+CI, including retained demo approval and container build, before claiming green.
+No tests removed/skipped, guard relaxed, dependencies or legal rules changed.
+
+See commercial/BOOKKEEPING_OBSERVATIONS.md for private DSN/grants/strict API/locks and
+limits. UI choice has no default and is bound to the displayed saved fingerprint.
+Pending save keeps exact snapshot/payload/initiating actor in the tab, clears source
+panels on expiry and can recover/retry after sign-in. Switched actors cannot reattribute
+it; definite rejection requires fresh inspection. Reload loses pending state: inspect
+retained records before replacement. Bookkeeping observations never correct figures,
+post entries or approve statutory accounts/filings; internal interactive guards and
+all final-package approval requirements remain unchanged. No deployment, billing,
+paid contract, private-record publication or statutory submission occurred.
+
+Next: qualify CI then focused correction reasons/questions and retained correction
+inspection, exact-snapshot-bound through separate grants. Broad commercial/production/
+OCR-model/accounting/operator/billing/qualified-adapter work remains unfinished.
+No active writer after publication; fetch/checkpoint/diff before resuming.

@@ -52,7 +52,7 @@ function errorMessage(error) {
 function fail(error) {
   $('error-message').textContent = errorMessage(error); show('error', true);
   const denied = error.status === 401 || error.status === 403;
-  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer || state.pending.csvRequest || state.pending.csvCancellation || state.pending.expenseDraft || state.pending.expenseFunding || state.pending.expenseJournal));
+  show('reauth', denied); show('retry', !denied || Boolean(state.pending.csvAnswer || state.pending.csvRequest || state.pending.csvCancellation || state.pending.expenseDraft || state.pending.expenseFunding || state.pending.expenseJournal || state.pending.bookkeepingObservation));
   if (denied) { show('content', false); $('organisation-dialog').close(); state.context = null; }
 }
 function dateText(value) {
@@ -79,7 +79,7 @@ function navigate(path) {
   if (state.saving || Object.keys(state.pending).length) {
     tell('Please confirm the pending save before changing records.'); workspaceOptions(); return;
   }
-  if (document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
+  if (document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"], .bookkeeping-observation[data-dirty="true"]')) { tell('Save or clear the answer before leaving this organisation.'); workspaceOptions(); return; }
   if (state.org && ($('note-body').value.trim() || $('evidence-file').files.length)) {
     tell('Save or clear the note, selected file or answer before leaving this organisation.'); workspaceOptions(); return;
   }
@@ -201,7 +201,7 @@ function renderEvidence() {
       inspect.setAttribute('aria-controls', panel.id); inspect.setAttribute('aria-expanded', 'false');
       inspect.addEventListener('click', () => viewExpenseDrafts(item, inspect, panel));
       row.append(inspect, panel);
-      for (const pending of [state.pending.expenseFunding,state.pending.expenseJournal]) {
+      for (const pending of [state.pending.expenseFunding,state.pending.expenseJournal,state.pending.bookkeepingObservation]) {
         if (pending?.evidence === item.id) queueMicrotask(() => viewExpenseDrafts(item,inspect,panel,pending.draft));
       }
     }
@@ -358,7 +358,7 @@ function csvRequestForm(item) {
   return form;
 }
 async function viewCSVCandidates(item, button, panel) {
-  if (panel.querySelector('.csv-answer[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') && !state.pending.csvAnswer && !state.pending.expenseDraft) { tell('Save or clear the answer before refreshing candidates.'); return; }
+  if (panel.querySelector('.csv-answer[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"], .bookkeeping-observation[data-dirty="true"]') && !state.pending.csvAnswer && !state.pending.expenseDraft) { tell('Save or clear the answer before refreshing candidates.'); return; }
   const epoch = state.epoch;
   panel.hidden = false; panel.replaceChildren(element('p', 'Loading CSV candidates…'));
   panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
@@ -543,7 +543,7 @@ function expensePreparationForm(item, options, pending = null) {
   return form;
 }
 async function viewExpenseDrafts(item, button, panel, draft = null) {
-  if (panel.querySelector('.funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') && !state.pending.expenseFunding && !state.pending.expenseJournal) { tell('Save or clear the funding selection before refreshing.'); return; }
+  if (panel.querySelector('.funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"], .bookkeeping-observation[data-dirty="true"]') && !state.pending.expenseFunding && !state.pending.expenseJournal && !state.pending.bookkeepingObservation) { tell('Save or clear the funding selection before refreshing.'); return; }
   const epoch = state.epoch;
   panel.hidden = false; panel.replaceChildren(element('p', 'Checking saved expense drafts…'));
   panel.setAttribute('aria-busy', 'true'); button.setAttribute('aria-expanded', 'true'); button.disabled = true;
@@ -584,7 +584,7 @@ async function viewExpenseDrafts(item, button, panel, draft = null) {
           inspect.setAttribute('aria-controls',journal.id);inspect.setAttribute('aria-expanded','false');
           inspect.addEventListener('click',()=>viewExpenseJournal(item,value.id,inspect,journal,panel));
           article.append(inspect,journal);
-          if(state.pending.expenseJournal?.draft===value.id) queueMicrotask(()=>viewExpenseJournal(item,value.id,inspect,journal,panel));
+          if(state.pending.expenseJournal?.draft===value.id || state.pending.bookkeepingObservation?.draft===value.id) queueMicrotask(()=>viewExpenseJournal(item,value.id,inspect,journal,panel));
         }
       } else {
         const open = element('button', `Inspect expense draft ${value.id}`, 'button secondary'); open.type = 'button';
@@ -600,7 +600,7 @@ async function viewExpenseDrafts(item, button, panel, draft = null) {
   } finally { panel.setAttribute('aria-busy', 'false'); button.disabled = false; button.textContent = 'Refresh saved expense drafts'; }
 }
 async function viewExpenseFunding(item, draft, button, panel, container) {
-  if (panel.querySelector('.funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') && !state.pending.expenseFunding && !state.pending.expenseJournal) { tell('Save or clear the funding selection before refreshing.'); return; }
+  if (panel.querySelector('.funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"], .bookkeeping-observation[data-dirty="true"]') && !state.pending.expenseFunding && !state.pending.expenseJournal && !state.pending.bookkeepingObservation) { tell('Save or clear the funding selection before refreshing.'); return; }
   const epoch = state.epoch;
   panel.hidden = false; panel.replaceChildren(element('p','Checking expense funding…'));
   button.disabled = true; button.setAttribute('aria-expanded','true'); panel.setAttribute('aria-busy','true');
@@ -686,7 +686,7 @@ function journalDetails(value) {
   box.append(lines);return box;
 }
 async function viewExpenseJournal(item,draft,button,panel,container) {
-  if(panel.querySelector('.journal-preparation[data-dirty="true"]')&&!state.pending.expenseJournal) { tell('Save or clear the journal preview before refreshing.');return; }
+  if(panel.querySelector('.journal-preparation[data-dirty="true"], .bookkeeping-observation[data-dirty="true"]')&&!state.pending.expenseJournal&&!state.pending.bookkeepingObservation) { tell('Save or clear the journal preview before refreshing.');return; }
   const epoch=state.epoch;button.disabled=true;button.setAttribute('aria-expanded','true');panel.hidden=false;panel.setAttribute('aria-busy','true');
   panel.replaceChildren(element('p','Checking journal draft…'));
   try {
@@ -704,6 +704,10 @@ async function viewExpenseJournal(item,draft,button,panel,container) {
         inspect.setAttribute('aria-controls',history.id);inspect.setAttribute('aria-expanded','false');
         inspect.addEventListener('click',()=>viewJournalObservations(item,draft,value,inspect,history,panel,container));
         panel.append(inspect,history);
+        const pending=state.pending.bookkeepingObservation;
+        if(pending?.draft===draft || state.context?.can_record_observation&&!Object.keys(state.pending).length) {
+          panel.append(bookkeepingObservationForm(item,draft,value,inspect,history,panel,container,pending?.draft===draft?pending:null));
+        }
       }
     } else if(result.saved_unavailable) panel.append(element('p','A saved journal exists but its current source or accounting eligibility prevents inspection. Ask your workspace operator to reconcile retained records.'));
     else panel.append(element('p','No saved journal draft. Record funding first, then explicitly select a configured counterpart account to preview.'));
@@ -745,6 +749,45 @@ async function viewJournalObservations(item,draft,journal,button,panel,journalPa
     else if([404,409].includes(error.status)) {journalPanel.replaceChildren(element('p','The saved journal or its snapshot is no longer available for this inspection. Refresh the journal draft before reading review observations.'));}
     else {if(!after)panel.replaceChildren();panel.append(element('p',errorMessage(error)));}
   } finally {button.disabled=false;if(generation===panel.dataset.reviewGeneration)panel.setAttribute('aria-busy','false');}
+}
+function bookkeepingObservationForm(item,draft,journal,historyButton,history,journalPanel,container,pending=null) {
+  const form=element('form',undefined,'form-panel bookkeeping-observation');form.setAttribute('aria-label',`Record bookkeeping observation ${journal.id}`);
+  form.append(element('h5','Record a bookkeeping observation'),element('p','One observation per reviewer and saved snapshot. A different later choice conflicts. This does not correct figures, post entries or approve statutory filings.'));
+  const snapshot=pending?.payload.snapshot_sha256||journal.snapshot_sha256;
+  form.append(element('p',`${pending?'Previously initiated':'Displayed saved'} snapshot fingerprint ${snapshot}`));
+  const label=element('label','Bookkeeping observation');label.htmlFor=`bookkeeping-choice-${draft}`;
+  const select=element('select');select.id=label.htmlFor;select.required=true;
+  for(const [value,text] of [['','Choose explicitly'],['reviewed','Reviewed'],['changes_requested','Changes requested']]) {const option=element('option',text);option.value=value;select.append(option);}
+  if(pending)select.value=pending.payload.decision;
+  select.addEventListener('input',()=>{form.dataset.dirty='true';});
+  const save=element('button',pending?'Retry bookkeeping observation':'Record bookkeeping observation','button secondary');save.type='submit';
+  const clear=element('button','Clear bookkeeping observation','button secondary');clear.type='button';clear.addEventListener('click',()=>{select.value='';delete form.dataset.dirty;});
+  const status=element('p');status.setAttribute('role','status');
+  function controls(locked){select.disabled=locked;clear.disabled=locked;}
+  controls(Boolean(pending));form.append(label,select,save,clear,status);
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();if(state.saving||Object.keys(state.pending).some(key=>key!=='bookkeepingObservation'))return;
+    const operation=state.pending.bookkeepingObservation||{evidence:item.id,draft,actor:state.context.actor_id,
+      url:`${apiBase()}/organisations/${state.org}/evidence/${item.id}/expense-drafts/${draft}/journal-observations`,
+      payload:{snapshot_sha256:snapshot,decision:select.value}};
+    state.pending.bookkeepingObservation=operation;state.saving=true;controls(true);save.disabled=true;const epoch=state.epoch;
+    try {
+      const receipt=await request(operation.url,{method:'POST',headers:{'Content-Type':'application/json','X-OmniXat-Expected-Actor':operation.actor},body:JSON.stringify(operation.payload)});
+      delete state.pending.bookkeepingObservation;delete form.dataset.dirty;
+      if(epoch!==state.epoch||!form.isConnected)return;
+      form.replaceChildren(element('p',`Bookkeeping observation recorded: ${receipt.decision==='reviewed'?'Reviewed':'Changes requested'} · ${dateText(receipt.recorded_at)} by ${receipt.reviewer_id}`),
+        element('p','No correction, posting or statutory approval was recorded.'));
+      await viewJournalObservations(item,draft,journal,historyButton,history,journalPanel,container);
+    } catch(error) {
+      if(epoch!==state.epoch||!form.isConnected)return;
+      const rejected=error.code!=='session_changed'&&[400,403,404,409,413,415,422].includes(error.status);
+      if(rejected){delete state.pending.bookkeepingObservation;delete form.dataset.dirty;}
+      status.textContent=error.code==='bookkeeping_observation_conflict'?'A different observation is already recorded for this reviewer and snapshot. Inspect history; it cannot be overwritten here.':error.code==='journal_snapshot_changed'?'The saved snapshot changed. Refresh journal inspection before recording another observation.':errorMessage(error)+(rejected?' Refresh the journal and inspect retained history.':' Retry the same observation to confirm its receipt.');
+      controls(true);save.disabled=rejected;save.textContent='Retry bookkeeping observation';
+      if([401,403].includes(error.status)){container.replaceChildren();fail(error);}
+      else if(error.code==='session_changed'){fail(error);show('reauth',true);}
+    } finally {state.saving=false;$('workspace-select').disabled=Boolean(Object.keys(state.pending).length);}
+  });return form;
 }
 function expenseJournalForm(item,draft,choices,button,panel,container,pending=null) {
   const form=element('form',undefined,'form-panel journal-preparation');form.setAttribute('aria-label',`Prepare expense journal ${draft}`);
@@ -994,12 +1037,12 @@ document.addEventListener('click', event => {
   if (link && !event.ctrlKey && !event.metaKey && event.button === 0) { event.preventDefault(); navigate(link.getAttribute('href')); }
 });
 window.addEventListener('popstate', () => {
-  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
+  if (state.tenant && (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"], .bookkeeping-observation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length)) {
     history.pushState({}, '', tenantPath(state.tenant) + (state.org ? `/organisations/${state.org}` : ''));
     tell('Save or clear the note, selected file or answer before leaving this organisation.');
   } else loadRoute();
 });
-window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (state.saving || Object.keys(state.pending).length || document.querySelector('.csv-answer[data-dirty="true"], .csv-request[data-dirty="true"], .expense-preparation[data-dirty="true"], .funding-selection[data-dirty="true"], .journal-preparation[data-dirty="true"], .bookkeeping-observation[data-dirty="true"]') || $('note-body').value.trim() || $('evidence-file').files.length) { event.preventDefault(); event.returnValue = ''; } });
 async function boot() {
   clearMessage(); show('loading', true); show('content', false);
   try { await directory(); await loadRoute(); }

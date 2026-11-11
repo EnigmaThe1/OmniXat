@@ -33,7 +33,7 @@ No server/configuration/grants are activated by this change.
 GET `/v1/workspaces/{tenant}/organisations/{organisation}/evidence/{evidence}/expense-drafts/{draft}/journal-observations`
 requires a verified bearer with `records:read` and `evidence:read`, and fresh persisted
 human identity/membership. Viewer membership is sufficient. Token claims cannot grant
-a role; agent identities are denied. There is no POST/approval route.
+a role; agent identities are denied. This reader grants no POST or approval authority; the optional [bookkeeping writer](BOOKKEEPING_OBSERVATIONS.md) is a separate capability.
 
 Required query: `snapshot_sha256`, the lowercase 64-character saved snapshot
 fingerprint shown by journal inspection. Optional `after_reviewer` is the exact
@@ -60,7 +60,7 @@ older pending page response; refresh resets pagination. Changed/unavailable snap
 clears the old journal display and requires fresh journal inspection. Expiry or access
 denial clears the containing source panel; sign-in recovery fetches fresh context.
 No review observations are cached in browser storage. The UI performs no financial
-calculation and provides no decision-writing or statutory approval controls.
+calculation and grants no decision-writing or statutory approval controls. An independently configured bookkeeping writer can add its explicit observation form beside the saved journal.
 
 ## Qualification and next step
 
@@ -71,7 +71,7 @@ real Chromium tests cover pagination/mobile/viewer inspection, changed-snapshot
 clearing/refresh, and expiry/recovery. They remain mandatory in full CI, along with
 the retained fictional-demo browser approval test.
 
-Next: separately authorised human bookkeeping observations and correction journeys,
+The optional [bookkeeping writer](BOOKKEEPING_OBSERVATIONS.md) now records explicit human observations through separate grants. Next: correction journeys,
 with exact saved-snapshot binding. These cannot substitute for interactive human
 approval of each final statutory package. Production security/restore qualification,
 operator settings/labels, complete accounting, posting, billing and qualified adapters

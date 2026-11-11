@@ -4570,3 +4570,65 @@ visible sign-in link/new-tab recovery check, then reload and inspect fresh read-
 context. No application guard, test assertion, skip or timeout was relaxed. Full
 successor CI must qualify the corrected test and container build; earlier run is not
 a green full suite. Local Chromium remains blocked before launch by socket restrictions.
+
+## In progress — customer bookkeeping observation recording — 11 November 2026
+
+Recovered e55be1d clean/zero divergence; no active recorded writer. Latest full CI
+42985664285 passed 685 tests/build including corrected read-only expiry recovery.
+Scope: a separate human editor/owner capability to record explicit reviewed or
+changes_requested historical bookkeeping observations against the exact saved journal
+snapshot shown. Share existing validated observation storage; lock identity/source/
+scan/funding/accounting gates through commit, preserve receipt/actor on retries and
+connect web/API/history inspection. No correction, posting or statutory approval route.
+Next: focused correction reasons/questions and correction inspection.
+
+## Explicit customer bookkeeping observations implemented — 11 November 2026
+
+Migration 0078 and customer_bookkeeping_observations add a separate optional human
+owner/editor writer. The API and website record explicit reviewed/changes_requested
+historical observations for the exact saved journal snapshot displayed. Existing
+validated snapshot/decision SQL is reused under identity, policy, saved-journal,
+accounting/funding, quarantine/registration, scan-claim and source locks through
+commit. Current membership/scopes/actor and tenant/org/evidence/draft are independently
+checked. Same-attempt concurrent retries retain one immutable receipt/time; a different
+choice for that reviewer/snapshot conflicts. Stale snapshot returns 409 without insert;
+ineligible context returns 404. Reader/writer services reject mixed capabilities.
+
+The UI has no default choice; it displays the saved fingerprint, explains the
+bookkeeping-only boundary, confirms attribution/time and refreshes history. Unknown
+receipt keeps exact payload/snapshot/actor in this tab and locks selection. Expiry
+clears containing source panels; sign-in recovery can retry that same attempt.
+Account switches cannot reattribute it. Known rejection requires fresh journal
+inspection. Viewer membership hides writing while preserving authorised inspection.
+No scope stripping, approval principal, correction, posting or statutory filing route.
+
+Verification:
+- PYTHONPATH=commercial python -m unittest discover -s commercial/tests -q: 71 passed.
+- PYTHONPATH=commercial python -m unittest discover -s commercial/identity_tests -q: 21 passed.
+- Disposable PostgreSQL 16.2, PYTHONPATH=commercial:commercial/integration_tests,
+  python -m unittest test_customer_bookkeeping_observations -v: seven passed (4.288s).
+- Same cluster, python -m unittest discover -s commercial/integration_tests -q:
+  full **514 passed** (129.465s), including existing interactive guards and read-only APIs.
+- node --check commercial/web/app.js, Python compileall and git diff --check passed.
+- Four new real Chromium tests included; no test removed/skipped or timeout relaxed.
+  Local Chromium fails before page creation: socket() Operation not permitted.
+  Published full CI must qualify explicit choice/mobile/viewer/conflict, committed
+  lost receipt/account switch, pending expiry recovery, changed-snapshot fresh
+  inspection, all prior provider/scanner tests, retained demo approval and container.
+
+Configuration/grants/strict contracts/official references/limits are in
+commercial/BOOKKEEPING_OBSERVATIONS.md. Optional mode-0600
+OMNIXAT_BOOKKEEPING_OBSERVATION_DSN_FILE shares the existing 16-lease bound. No live
+configuration, deployment, billing activation, paid contract, private record or
+statutory submission occurred. No dependencies/legal rules changed. Public data is
+fictional. Bookkeeping observations do not approve accounts or filings and cannot
+unlock submission. Pending state is tab-only; reconcile retained records after reload
+or uncertain outcomes. Retained observations can be unavailable under current source
+eligibility. These are bounded observation effects, not exactly-once ledger guarantees.
+
+Next: qualify published full CI, then connect focused correction reasons/questions
+and retained correction inspection using separate narrow capabilities and exact
+saved-snapshot binding. Final package approval, production security/restore/provider
+qualification, operator settings/labels, full accounting, image/document AI workflows,
+posting, billing and qualified bank/statutory adapters remain unfinished. No active
+competing writer observed; fetch/checkpoint/diff before resuming.

@@ -137,7 +137,7 @@ class Boundary:
             await self.app(scope, receive, safe_send)
 
 
-def create_app(*, verifier, connection_factory, allowed_hosts, directory_connection_factory=None, evidence_quarantine_dir=None, scan_status_connection_factory=None, scan_request_connection_factory=None, csv_review_connection_factory=None, csv_answer_connection_factory=None, csv_request_connection_factory=None, csv_request_status_connection_factory=None, expense_draft_connection_factory=None, expense_preparation_connection_factory=None, expense_funding_read_connection_factory=None, expense_funding_write_connection_factory=None, expense_journal_read_connection_factory=None, expense_journal_preview_connection_factory=None, expense_journal_write_connection_factory=None, journal_observation_connection_factory=None):
+def create_app(*, verifier, connection_factory, allowed_hosts, directory_connection_factory=None, evidence_quarantine_dir=None, scan_status_connection_factory=None, scan_request_connection_factory=None, csv_review_connection_factory=None, csv_answer_connection_factory=None, csv_request_connection_factory=None, csv_request_status_connection_factory=None, expense_draft_connection_factory=None, expense_preparation_connection_factory=None, expense_funding_read_connection_factory=None, expense_funding_write_connection_factory=None, expense_journal_read_connection_factory=None, expense_journal_preview_connection_factory=None, expense_journal_write_connection_factory=None, journal_observation_connection_factory=None, bookkeeping_observation_connection_factory=None):
     """Return ASGI app only. Factory must bound acquisition and lease exclusively."""
     if (not isinstance(allowed_hosts, (list, tuple)) or not allowed_hosts
             or any(not isinstance(h, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]{0,252}', h)
@@ -169,6 +169,8 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
                         context['expense_draft_access'] = (context['evidence_access'] and expense_draft_connection_factory is not None
                             and records._actor.actor_kind == 'human')
                         context['journal_observation_access'] = context['expense_draft_access'] and journal_observation_connection_factory is not None
+                        context['can_record_observation'] = (context['journal_observation_access'] and bookkeeping_observation_connection_factory is not None
+                            and context['can_write'] and 'records:write' in scopes)
                         context['journal_access'] = context['expense_draft_access'] and expense_journal_read_connection_factory is not None
                         context['can_prepare_journal'] = (context['journal_access'] and expense_journal_preview_connection_factory is not None
                             and expense_journal_write_connection_factory is not None and context['can_write'] and 'records:write' in scopes)
@@ -326,6 +328,7 @@ def create_app(*, verifier, connection_factory, allowed_hosts, directory_connect
                                        expense_journal_read_connections=expense_journal_read_connection_factory,
                                        expense_journal_preview_connections=expense_journal_preview_connection_factory,
                                        expense_journal_write_connections=expense_journal_write_connection_factory,
-                                       journal_observation_connections=journal_observation_connection_factory).routes())
+                                       journal_observation_connections=journal_observation_connection_factory,
+                                       bookkeeping_observation_connections=bookkeeping_observation_connection_factory).routes())
     app = Starlette(debug=False,routes=routes,exception_handlers={HTTPException:http_error})
     return Boundary(app, allowed_hosts)
